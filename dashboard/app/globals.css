@@ -31,6 +31,7 @@
     --danger-border: rgba(239, 68, 68, 0.2);
     --warning: #f59e0b;
     --warning-bg: rgba(245, 158, 11, 0.12);
+    --warning-border: rgba(245, 158, 11, 0.3);
     --info: #38bdf8;
     --info-bg: rgba(56, 189, 248, 0.12);
     --info-border: rgba(56, 189, 248, 0.2);
@@ -299,7 +300,7 @@ body::after {
 /* ─── Stats Grid ─── */
 .stats-grid {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(4, 1fr);
     gap: 1rem;
     margin-bottom: 2rem;
 }
@@ -394,7 +395,7 @@ body::after {
     letter-spacing: -0.02em;
 }
 
-.stat-card:not(.running):not(.stopped) .stat-value {
+.stat-card:not(.running):not(.stopped):not(.memory) .stat-value {
     background: var(--accent-gradient);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
@@ -407,6 +408,23 @@ body::after {
 
 .stat-card.stopped .stat-value {
     color: var(--danger);
+}
+
+.stat-card.memory {
+    border-left: 3px solid var(--info);
+}
+
+.stat-card.memory::before {
+    background: var(--info);
+    opacity: 0.08;
+}
+
+.stat-card.memory:hover::before {
+    opacity: 0.12;
+}
+
+.stat-card.memory .stat-value {
+    color: var(--info);
 }
 
 /* ─── Toolbar ─── */
@@ -717,26 +735,7 @@ tr.animate-in:nth-child(10) {
     font-size: 0.875rem;
 }
 
-.process-icon {
-    width: 34px;
-    height: 34px;
-    background: var(--accent-gradient);
-    border-radius: 10px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.75rem;
-    color: white;
-    font-weight: 700;
-    flex-shrink: 0;
-    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.2);
-    transition: transform var(--transition-fast), box-shadow var(--transition-fast);
-}
 
-tr[data-process-name]:hover .process-icon {
-    transform: scale(1.05);
-    box-shadow: 0 4px 16px rgba(99, 102, 241, 0.3);
-}
 
 /* ─── Status Badge ─── */
 .status-badge {
@@ -888,6 +887,12 @@ tr[data-process-name]:hover .process-icon {
     background: var(--info-bg);
     color: var(--info);
     border-color: var(--info-border);
+}
+
+.action-btn.warning:hover {
+    background: var(--warning-bg);
+    color: var(--warning);
+    border-color: var(--warning-border);
 }
 
 /* ─── Empty State ─── */
@@ -1062,12 +1067,7 @@ tr[data-process-name]:hover .process-icon {
     gap: 0.75rem;
 }
 
-.drawer-header .process-icon {
-    width: 32px;
-    height: 32px;
-    font-size: 0.7rem;
-    border-radius: var(--radius-sm);
-}
+
 
 .drawer-close {
     width: 30px;
@@ -1294,6 +1294,60 @@ tr[data-process-name]:hover .process-icon {
     background: rgba(255, 255, 255, 0.12);
 }
 
+/* ─── Log Viewer Toolbar ─── */
+.drawer-log-toolbar {
+    display: flex;
+    gap: 0.5rem;
+    padding: 0 0 0.5rem 0;
+}
+
+.log-search {
+    flex: 1;
+    background: var(--bg-deeper);
+    border: 1px solid var(--border-glass);
+    border-radius: var(--radius-sm);
+    padding: 0.35rem 0.6rem;
+    color: var(--text-primary);
+    font-size: 0.75rem;
+    font-family: var(--font-mono);
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.log-search:focus {
+    border-color: var(--accent);
+}
+
+.log-search::placeholder {
+    color: var(--text-muted);
+}
+
+.log-autoscroll {
+    background: var(--bg-deeper);
+    border: 1px solid var(--border-glass);
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: all 0.2s;
+}
+
+.log-autoscroll.active {
+    color: var(--accent);
+    border-color: var(--accent);
+}
+
+.log-autoscroll:hover {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+
+
 /* ─── Legacy logs panel (kept for backwards compat) ─── */
 .logs-panel {
     margin-top: 2rem;
@@ -1327,6 +1381,15 @@ tr[data-process-name]:hover .process-icon {
         width: 100%;
         max-width: 420px;
     }
+
+    .command {
+        max-width: 160px;
+    }
+}
+
+/* ─── Mobile Cards (hidden by default, shown on ≤768px) ─── */
+.mobile-cards {
+    display: none;
 }
 
 @media (max-width: 768px) {
@@ -1341,7 +1404,7 @@ tr[data-process-name]:hover .process-icon {
     }
 
     .stats-grid {
-        grid-template-columns: 1fr;
+        grid-template-columns: repeat(2, 1fr);
     }
 
     .toolbar {
@@ -1357,16 +1420,98 @@ tr[data-process-name]:hover .process-icon {
         max-width: 100%;
     }
 
+    /* Hide table, show cards */
     .table-container {
-        overflow-x: auto;
+        display: none;
     }
 
-    table {
-        min-width: 700px;
+    .mobile-cards {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
     }
 
     .detail-drawer {
         width: 100%;
         max-width: 100%;
+    }
+
+    /* ─── Process Card ─── */
+    .process-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border-glass);
+        border-radius: var(--radius-lg);
+        padding: 1rem;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .process-card:hover {
+        border-color: var(--accent-primary);
+        box-shadow: 0 0 20px rgba(168, 85, 247, 0.15);
+        transform: translateY(-1px);
+    }
+
+    .card-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 0.75rem;
+    }
+
+    .card-header .process-name {
+        font-size: 0.95rem;
+        font-weight: 600;
+    }
+
+    .card-details {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.4rem 1rem;
+        margin-bottom: 0.6rem;
+    }
+
+    .card-detail {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.78rem;
+        color: var(--text-secondary);
+    }
+
+    .card-label {
+        color: var(--text-muted);
+        text-transform: uppercase;
+        font-size: 0.65rem;
+        letter-spacing: 0.05em;
+        font-weight: 500;
+    }
+
+    .card-command {
+        font-family: var(--font-mono);
+        font-size: 0.72rem;
+        color: var(--text-muted);
+        background: rgba(255, 255, 255, 0.03);
+        border-radius: var(--radius-sm);
+        padding: 0.35rem 0.5rem;
+        margin-bottom: 0.75rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .card-actions {
+        display: flex;
+        gap: 0.5rem;
+    }
+
+    .card-actions .action-btn {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.35rem;
+        padding: 0.5rem;
+        font-size: 0.75rem;
+        border-radius: var(--radius-md);
     }
 }

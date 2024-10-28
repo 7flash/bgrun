@@ -3,7 +3,6 @@
  */
 import { getProcess } from '../../../../../src/db';
 import { readFileTail } from '../../../../../src/platform';
-import { measure } from 'measure-fn';
 
 export async function GET(req: Request, { params }: { params: { name: string } }) {
     const name = decodeURIComponent(params.name);
@@ -13,10 +12,10 @@ export async function GET(req: Request, { params }: { params: { name: string } }
         return Response.json({ error: 'Process not found' }, { status: 404 });
     }
 
-    const result = await measure(`Read logs "${name}"`, async (m) => ({
-        stdout: await m('stdout', () => readFileTail(proc.stdout_path, 100)) ?? '',
-        stderr: await m('stderr', () => readFileTail(proc.stderr_path, 100)) ?? '',
-    }));
+    const [stdout, stderr] = await Promise.all([
+        readFileTail(proc.stdout_path, 100).catch(() => ''),
+        readFileTail(proc.stderr_path, 100).catch(() => ''),
+    ]);
 
-    return Response.json(result);
+    return Response.json({ stdout, stderr });
 }

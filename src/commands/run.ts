@@ -1,4 +1,4 @@
-import { CommandOptions } from "../types";
+import type { CommandOptions } from "../types";
 import { getProcess, removeProcessByName, retryDatabaseOperation, insertProcess } from "../db";
 import { isProcessRunning, terminateProcess, getHomeDir, getShellCommand, killProcessOnPort, findChildPid, getProcessPorts, waitForPortFree } from "../platform";
 import { error, announce } from "../logger";
@@ -7,8 +7,10 @@ import { parseConfigFile } from "../config";
 import { $ } from "bun";
 import { sleep } from "bun";
 import { join } from "path";
+import { createMeasure } from "measure-fn";
 
 const homePath = getHomeDir();
+const run = createMeasure('run');
 
 export async function handleRun(options: CommandOptions) {
     const { command, directory, env, name, configPath, force, fetch, stdout, stderr } = options;
@@ -24,18 +26,20 @@ export async function handleRun(options: CommandOptions) {
             if (!require('fs').existsSync(require('path').join(finalDirectory, '.git'))) {
                 error(`Cannot --fetch: '${finalDirectory}' is not a Git repository.`);
             }
-            try {
-                await $`git fetch origin`;
-                const localHash = (await $`git rev-parse HEAD`.text()).trim();
-                const remoteHash = (await $`git rev-parse origin/$(git rev-parse --abbrev-ref HEAD)`.text()).trim();
+            await run.measure(`Git fetch "${name}"`, async () => {
+                try {
+                    await $`git fetch origin`;
+                    const localHash = (await $`git rev-parse HEAD`.text()).trim();
+                    const remoteHash = (await $`git rev-parse origin/$(git rev-parse --abbrev-ref HEAD)`.text()).trim();
 
-                if (localHash !== remoteHash) {
-                    await $`git pull origin $(git rev-parse --abbrev-ref HEAD)`;
-                    announce("📥 Pulled latest changes", "Git Update");
+                    if (localHash !== remoteHash) {
+                        await $`git pull origin $(git rev-parse --abbrev-ref HEAD)`;
+                        announce("📥 Pulled latest changes", "Git Update");
+                    }
+                } catch (err) {
+                    error(`Failed to pull latest changes: ${err}`);
                 }
-            } catch (err) {
-                error(`Failed to pull latest changes: ${err}`);
-            }
+            });
         }
 
         const isRunning = await isProcessRunning(existingProcess.pid);
@@ -50,23 +54,26 @@ export async function handleRun(options: CommandOptions) {
         }
 
         if (isRunning) {
-            await terminateProcess(existingProcess.pid);
-            announce(`🔥 Terminated existing process '${name}'`, "Process Terminated");
+            await run.measure(`Terminate "${name}" (PID ${existingProcess.pid})`, async () => {
+                await terminateProcess(existingProcess.pid);
+                announce(`🔥 Terminated existing process '${name}'`, "Process Terminated");
+            });
         }
 
         // Kill anything still on the ports the old process was using
-        for (const port of detectedPorts) {
-            await killProcessOnPort(port);
-        }
-
-        // Wait for all detected ports to free up
-        for (const port of detectedPorts) {
-            const freed = await waitForPortFree(port, 5000);
-            if (!freed) {
-                // Retry kill and wait once more
-                await killProcessOnPort(port);
-                await waitForPortFree(port, 3000);
-            }
+        if (detectedPorts.length > 0) {
+            await run.measure(`Port cleanup [${detectedPorts.join(', ')}]`, async () => {
+                for (const port of detectedPorts) {
+                    await killProcessOnPort(port);
+                }
+                for (const port of detectedPorts) {
+                    const freed = await waitForPortFree(port, 5000);
+                    if (!freed) {
+                        await killProcessOnPort(port);
+                        await waitForPortFree(port, 3000);
+                    }
+                }
+            });
         }
 
         await retryDatabaseOperation(() =>
@@ -97,12 +104,17 @@ export async function handleRun(options: CommandOptions) {
         const fullConfigPath = join(finalDirectory, finalConfigPath);
 
         if (await Bun.file(fullConfigPath).exists()) {
-            try {
-                const newConfigEnv = await parseConfigFile(fullConfigPath);
-                finalEnv = { ...finalEnv, ...newConfigEnv };
+            const configEnv = await run.measure(`Parse config "${finalConfigPath}"`, async () => {
+                try {
+                    return await parseConfigFile(fullConfigPath);
+                } catch (err: any) {
+                    console.warn(`Warning: Failed to parse config file ${finalConfigPath}: ${err.message}`);
+                    return null;
+                }
+            });
+            if (configEnv) {
+                finalEnv = { ...finalEnv, ...configEnv };
                 console.log(`Loaded config from ${finalConfigPath}`);
-            } catch (err: any) {
-                console.warn(`Warning: Failed to parse config file ${finalConfigPath}: ${err.message}`);
             }
         } else {
             console.log(`Config file '${finalConfigPath}' not found, continuing without it.`);
@@ -114,20 +126,23 @@ export async function handleRun(options: CommandOptions) {
     const stderrPath = stderr || existingProcess?.stderr_path || join(homePath, ".bgr", `${name}-err.txt`);
     Bun.write(stderrPath, '');
 
-    const newProcess = Bun.spawn(getShellCommand(finalCommand!), {
-        env: { ...Bun.env, ...finalEnv },
-        cwd: finalDirectory,
-        stdout: Bun.file(stdoutPath),
-        stderr: Bun.file(stderrPath),
-    });
+    const actualPid = await run.measure(`Spawn "${name}" → ${finalCommand}`, async () => {
+        const newProcess = Bun.spawn(getShellCommand(finalCommand!), {
+            env: { ...Bun.env, ...finalEnv },
+            cwd: finalDirectory,
+            stdout: Bun.file(stdoutPath),
+            stderr: Bun.file(stderrPath),
+        });
 
-    newProcess.unref();
-    // Give shell a moment to spawn child, then find PID before shell exits
-    await sleep(100);
-    // Find the actual child PID (shell wrapper exits immediately after spawning)
-    const actualPid = await findChildPid(newProcess.pid);
-    // Wait more for subprocess to initialize
-    await sleep(400);
+        newProcess.unref();
+        // Give shell a moment to spawn child, then find PID before shell exits
+        await sleep(100);
+        // Find the actual child PID (shell wrapper exits immediately after spawning)
+        const pid = await findChildPid(newProcess.pid);
+        // Wait more for subprocess to initialize
+        await sleep(400);
+        return pid;
+    }) ?? 0;
 
     await retryDatabaseOperation(() =>
         insertProcess({
@@ -147,5 +162,3 @@ export async function handleRun(options: CommandOptions) {
         "Process Started"
     );
 }
-
-

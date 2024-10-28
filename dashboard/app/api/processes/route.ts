@@ -144,11 +144,13 @@ async function fetchProcesses(): Promise<any[]> {
     }) ?? [];
 }
 
-export async function GET() {
+export async function GET(req: Request) {
+    const url = new URL(req.url);
+    const bustCache = url.searchParams.has('t');
     const now = Date.now();
 
-    // Return cached data if still fresh
-    if (cache.data && (now - cache.timestamp) < CACHE_TTL_MS) {
+    // Return cached data if still fresh and no bust param
+    if (!bustCache && cache.data && (now - cache.timestamp) < CACHE_TTL_MS) {
         return Response.json(cache.data);
     }
 
@@ -165,6 +167,11 @@ export async function GET() {
         });
     }
 
-    const result = await cache.inflight;
-    return Response.json(result);
+    try {
+        const result = await cache.inflight;
+        return Response.json(result);
+    } catch (err) {
+        console.error('[api/processes] Error fetching processes:', err);
+        return Response.json(cache.data ?? []);
+    }
 }

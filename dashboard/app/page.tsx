@@ -25,6 +25,10 @@ export default function DashboardPage() {
                     <div className="stat-label">Stopped</div>
                     <div className="stat-value" id="stopped-count">–</div>
                 </div>
+                <div className="stat-card memory">
+                    <div className="stat-label">Total Memory</div>
+                    <div className="stat-value" id="memory-count">–</div>
+                </div>
             </div>
 
             {/* Toolbar */}
@@ -90,6 +94,9 @@ export default function DashboardPage() {
                 </table>
             </div>
 
+            {/* Mobile Cards (shown on small screens, hidden on desktop) */}
+            <div className="mobile-cards" id="mobile-cards"></div>
+
             {/* Detail Drawer Backdrop */}
             <div className="drawer-backdrop" id="drawer-backdrop"></div>
 
@@ -97,7 +104,6 @@ export default function DashboardPage() {
             <div className="detail-drawer" id="detail-drawer">
                 <div className="drawer-header">
                     <h3>
-                        <div className="process-icon" id="drawer-icon">?</div>
                         <span id="drawer-process-name">Process</span>
                     </h3>
                     <button className="drawer-close" id="drawer-close-btn">✕</button>
@@ -108,6 +114,10 @@ export default function DashboardPage() {
                     <button className="drawer-tab" data-tab="stderr">Stderr</button>
                 </div>
                 <div className="drawer-content">
+                    <div className="drawer-log-toolbar">
+                        <input type="text" id="log-search" className="log-search" placeholder="Filter logs..." />
+                        <button id="log-autoscroll-btn" className="log-autoscroll active" title="Auto-scroll">↓</button>
+                    </div>
                     <div className="drawer-logs" id="drawer-logs">No logs loaded</div>
                 </div>
             </div>

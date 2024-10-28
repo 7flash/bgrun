@@ -9,10 +9,10 @@ const isWindows = process.platform === "win32";
 // --- Test Configuration ---
 const testDir = join(import.meta.dir, "test_env");
 const appDir = join(testDir, "my-app");
-// We use DB_NAME env var to point to a test DB instead of --db flag
-const testDbName = "test_bgr";
+// We use BGRUN_DB env var to point to a test DB
+const testDbName = "test_bgr.sqlite";
 const homePath = process.env.USERPROFILE || process.env.HOME || "";
-const dbPath = join(homePath, ".bgr", `${testDbName}_v2.sqlite`);
+const dbPath = join(homePath, ".bgr", testDbName);
 // Corrected path: Go up one level from `tests` to the project root, then into `src`.
 const scriptPath = join(import.meta.dir, "..", "src", "index.ts");
 
@@ -27,7 +27,7 @@ const runBgr = async (args: string[]) => {
             stderr: "pipe",
             env: {
                 ...Bun.env,
-                DB_NAME: testDbName // Use test database
+                BGRUN_DB: testDbName // Use test database
             }
         }
     );

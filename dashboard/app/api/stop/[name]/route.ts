@@ -7,16 +7,17 @@ import { measure } from 'measure-fn';
 
 export async function POST(req: Request, { params }: { params: { name: string } }) {
     const name = decodeURIComponent(params.name);
+    const proc = getProcess(name);
 
-    return await measure(`Stop process "${name}"`, async (m) => {
-        const proc = getProcess(name);
-        const running = proc ? await m('Check running', () => isProcessRunning(proc.pid)) : false;
+    if (!proc) {
+        return Response.json({ error: 'Process not found' }, { status: 404 });
+    }
 
-        if (!proc || !running) {
-            return Response.json({ error: 'Process not found or not running' }, { status: 404 });
-        }
+    const running = await isProcessRunning(proc.pid);
+    if (!running) {
+        return Response.json({ error: 'Process not running' }, { status: 404 });
+    }
 
-        await m('Terminate', () => terminateProcess(proc.pid));
-        return Response.json({ success: true });
-    });
+    await measure(`Stop "${name}" (PID ${proc.pid})`, () => terminateProcess(proc.pid));
+    return Response.json({ success: true });
 }

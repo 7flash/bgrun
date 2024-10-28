@@ -8,7 +8,7 @@ export async function POST(req: Request, { params }: { params: { name: string } 
     const name = decodeURIComponent(params.name);
 
     try {
-        await measure(`Restart process "${name}"`, () => handleRun({
+        await measure(`Restart "${name}"`, () => handleRun({
             action: 'run',
             name,
             force: true,

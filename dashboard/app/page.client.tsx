@@ -111,7 +111,6 @@ function ProcessRow({ p, animate }: { p: ProcessData; animate?: boolean }) {
         <tr data-process-name={p.name} className={animate ? 'animate-in' : ''} style={animate ? { opacity: '0' } : undefined}>
             <td>
                 <div className="process-name">
-                    <div className="process-icon">{p.name.charAt(0).toUpperCase()}</div>
                     <span>{p.name}</span>
                 </div>
             </td>
@@ -148,6 +147,9 @@ function ProcessRow({ p, animate }: { p: ProcessData; animate?: boolean }) {
                         <PlayIcon />
                     </button>
                 }
+                <button className="action-btn warning" data-action="restart" data-name={p.name} title="Restart">
+                    <RestartIcon />
+                </button>
                 <button className="action-btn danger" data-action="delete" data-name={p.name} title="Delete">
                     <TrashIcon />
                 </button>
@@ -183,8 +185,95 @@ function EmptyState() {
     );
 }
 
-function LogLine({ text }: { text: string }) {
-    return <div className="log-line">{text}</div>;
+function ProcessCard({ p }: { p: ProcessData }) {
+    return (
+        <div className="process-card" data-process-name={p.name}>
+            <div className="card-header">
+                <div className="process-name">
+                    <span>{p.name}</span>
+                </div>
+                <span className={`status-badge ${p.running ? 'running' : 'stopped'}`}>
+                    <span className="status-dot"></span>
+                    {p.running ? 'Running' : 'Stopped'}
+                </span>
+            </div>
+            <div className="card-details">
+                <div className="card-detail"><span className="card-label">PID</span><span>{p.pid}</span></div>
+                <div className="card-detail"><span className="card-label">Port</span><span>{p.port ? `:${p.port}` : '–'}</span></div>
+                <div className="card-detail"><span className="card-label">Memory</span><span>{p.memory > 0 ? formatMemory(p.memory) : '–'}</span></div>
+                <div className="card-detail"><span className="card-label">Runtime</span><span>{formatRuntime(p.runtime)}</span></div>
+            </div>
+            <div className="card-command" title={p.command}>{p.command}</div>
+            <div className="card-actions">
+                <button className="action-btn info" data-action="logs" data-name={p.name} title="View Logs">
+                    <LogsIcon /> Logs
+                </button>
+                {p.running
+                    ? <button className="action-btn danger" data-action="stop" data-name={p.name} title="Stop">
+                        <StopIcon /> Stop
+                    </button>
+                    : <button className="action-btn success" data-action="restart" data-name={p.name} title="Start">
+                        <PlayIcon /> Start
+                    </button>
+                }
+                <button className="action-btn warning" data-action="restart" data-name={p.name} title="Restart">
+                    <RestartIcon /> Restart
+                </button>
+                <button className="action-btn danger" data-action="delete" data-name={p.name} title="Delete">
+                    <TrashIcon /> Delete
+                </button>
+            </div>
+        </div>
+    );
+}
+
+// ─── ANSI to HTML converter ───
+const ANSI_COLORS: Record<number, string> = {
+    30: '#6e7681', 31: '#ff7b72', 32: '#7ee787', 33: '#d2a458',
+    34: '#79c0ff', 35: '#d2a8ff', 36: '#a5d6ff', 37: '#c9d1d9',
+    90: '#8b949e', 91: '#ffa198', 92: '#aff5b4', 93: '#f8e3a1',
+    94: '#a5d6ff', 95: '#e2c5ff', 96: '#b6e3ff', 97: '#f0f6fc',
+};
+const ANSI_BG: Record<number, string> = {
+    40: '#6e7681', 41: '#ff7b72', 42: '#7ee787', 43: '#d2a458',
+    44: '#79c0ff', 45: '#d2a8ff', 46: '#a5d6ff', 47: '#c9d1d9',
+};
+
+function ansiToHtml(text: string): string {
+    let result = '';
+    let openSpans = 0;
+    const parts = text.split(/(\x1b\[[0-9;]*m)/);
+
+    for (const part of parts) {
+        const match = part.match(/^\x1b\[([0-9;]*)m$/);
+        if (!match) {
+            // Escape HTML entities
+            result += part.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            continue;
+        }
+
+        const codes = match[1].split(';').map(Number);
+        for (const code of codes) {
+            if (code === 0) {
+                // Reset
+                while (openSpans > 0) { result += '</span>'; openSpans--; }
+            } else if (code === 1) {
+                result += '<span style="font-weight:bold">'; openSpans++;
+            } else if (code === 2) {
+                result += '<span style="opacity:0.6">'; openSpans++;
+            } else if (code === 3) {
+                result += '<span style="font-style:italic">'; openSpans++;
+            } else if (code === 4) {
+                result += '<span style="text-decoration:underline">'; openSpans++;
+            } else if (ANSI_COLORS[code]) {
+                result += `<span style="color:${ANSI_COLORS[code]}">`; openSpans++;
+            } else if (ANSI_BG[code]) {
+                result += `<span style="background:${ANSI_BG[code]}">`; openSpans++;
+            }
+        }
+    }
+    while (openSpans > 0) { result += '</span>'; openSpans--; }
+    return result;
 }
 
 // ─── Toast System ───
@@ -215,7 +304,6 @@ function showToast(message: string, type: 'success' | 'error' | 'info' = 'info')
 export default function mount(): () => void {
     const $ = (id: string) => document.getElementById(id);
     let selectedProcess: string | null = null;
-    let refreshTimer: ReturnType<typeof setInterval> | null = null;
     let isFetching = false;
     let isFirstLoad = true;
     let allProcesses: ProcessData[] = [];
@@ -223,6 +311,8 @@ export default function mount(): () => void {
     let isGrouped = localStorage.getItem('bgr_grouped') === 'true'; // Persist preference
     let drawerProcess: string | null = null;
     let drawerTab: 'stdout' | 'stderr' = 'stdout';
+    let logAutoScroll = true;
+    let logSearch = '';
 
     // ─── Version Badge ───
     const versionBadge = $('version-badge');
@@ -270,21 +360,32 @@ export default function mount(): () => void {
         const total = processes.length;
         const running = processes.filter(p => p.running).length;
         const stopped = total - running;
+        const totalMemory = processes.reduce((sum, p) => sum + (p.memory || 0), 0);
 
         const tc = $('total-count');
         const rc = $('running-count');
         const sc = $('stopped-count');
+        const mc = $('memory-count');
         if (tc) tc.textContent = String(total);
         if (rc) rc.textContent = String(running);
         if (sc) sc.textContent = String(stopped);
+        if (mc) mc.textContent = formatMemory(totalMemory) || '0 MB';
     }
 
     function renderProcesses(processes: ProcessData[]) {
         const tbody = $('processes-table');
+        const cardsEl = $('mobile-cards');
         if (!tbody) return;
 
         if (processes.length === 0) {
             tbody.replaceChildren(<EmptyState /> as unknown as Node);
+            if (cardsEl) cardsEl.replaceChildren(
+                <div className="empty-state">
+                    <div className="empty-icon">📦</div>
+                    <h3>No processes found</h3>
+                    <p>Start a new process to see it here</p>
+                </div> as unknown as Node
+            );
             return;
         }
 
@@ -331,6 +432,12 @@ export default function mount(): () => void {
             tbody.replaceChildren(...rows);
         }
 
+        // Render mobile cards
+        if (cardsEl) {
+            const cards = processes.map(p => <ProcessCard p={p} /> as unknown as Node);
+            cardsEl.replaceChildren(...cards);
+        }
+
         if (isFirstLoad) isFirstLoad = false;
 
         // Highlight selected row
@@ -348,7 +455,17 @@ export default function mount(): () => void {
         renderFilteredProcesses();
     });
 
-    // ─── Action Handlers ───
+    /** Fetch with cache-bust to force fresh data after mutations */
+    async function loadProcessesFresh() {
+        isFetching = true;
+        try {
+            const res = await fetch(`/api/processes?t=${Date.now()}`);
+            allProcesses = await res.json();
+            renderFilteredProcesses();
+            updateStats(allProcesses);
+        } catch { /* retry on next tick */ }
+        finally { isFetching = false; }
+    }
 
     async function handleAction(e: Event) {
         const btn = (e.target as Element).closest('[data-action]') as HTMLElement;
@@ -359,36 +476,73 @@ export default function mount(): () => void {
         if (!name) return;
 
         switch (action) {
-            case 'stop':
+            case 'stop': {
+                // Optimistic: mark stopped immediately
+                const proc = allProcesses.find(p => p.name === name);
+                if (proc) {
+                    proc.running = false;
+                    proc.memory = 0;
+                    renderFilteredProcesses();
+                    updateStats(allProcesses);
+                }
                 try {
-                    await fetch(`/api/stop/${encodeURIComponent(name)}`, { method: 'POST' });
-                    showToast(`Stopped "${name}"`, 'success');
-                    await loadProcesses();
-                } catch (err: any) {
+                    const res = await fetch(`/api/stop/${encodeURIComponent(name)}`, { method: 'POST' });
+                    if (res.ok) {
+                        showToast(`Stopped "${name}"`, 'success');
+                    } else {
+                        const data = await res.json();
+                        showToast(data.error || `Failed to stop "${name}"`, 'error');
+                    }
+                } catch {
                     showToast(`Failed to stop "${name}"`, 'error');
                 }
+                await loadProcessesFresh();
                 break;
+            }
 
-            case 'restart':
+            case 'restart': {
+                // Optimistic: mark running immediately
+                const proc = allProcesses.find(p => p.name === name);
+                if (proc) {
+                    proc.running = true;
+                    renderFilteredProcesses();
+                    updateStats(allProcesses);
+                }
                 try {
-                    await fetch(`/api/restart/${encodeURIComponent(name)}`, { method: 'POST' });
-                    showToast(`Restarted "${name}"`, 'success');
-                    await loadProcesses();
-                } catch (err: any) {
+                    const res = await fetch(`/api/restart/${encodeURIComponent(name)}`, { method: 'POST' });
+                    if (res.ok) {
+                        showToast(`Restarted "${name}"`, 'success');
+                    } else {
+                        const data = await res.json();
+                        showToast(data.error || `Failed to restart "${name}"`, 'error');
+                    }
+                } catch {
                     showToast(`Failed to restart "${name}"`, 'error');
                 }
+                await loadProcessesFresh();
                 break;
+            }
 
-            case 'delete':
+            case 'delete': {
+                // Optimistic: remove from array immediately
+                allProcesses = allProcesses.filter(p => p.name !== name);
+                renderFilteredProcesses();
+                updateStats(allProcesses);
+                if (drawerProcess === name) closeDrawer();
                 try {
-                    await fetch(`/api/processes/${encodeURIComponent(name)}`, { method: 'DELETE' });
-                    showToast(`Deleted "${name}"`, 'success');
-                    if (drawerProcess === name) closeDrawer();
-                    await loadProcesses();
-                } catch (err: any) {
+                    const res = await fetch(`/api/processes/${encodeURIComponent(name)}`, { method: 'DELETE' });
+                    if (res.ok) {
+                        showToast(`Deleted "${name}"`, 'success');
+                    } else {
+                        const data = await res.json();
+                        showToast(data.error || `Failed to delete "${name}"`, 'error');
+                    }
+                } catch {
                     showToast(`Failed to delete "${name}"`, 'error');
                 }
+                await loadProcessesFresh();
                 break;
+            }
 
             case 'logs':
                 openDrawer(name);
@@ -411,6 +565,20 @@ export default function mount(): () => void {
         }
     });
 
+    // Mobile cards click → same delegation
+    const mobileCards = $('mobile-cards');
+    mobileCards?.addEventListener('click', (e: Event) => {
+        const btn = (e.target as Element).closest('[data-action]');
+        if (btn) {
+            handleAction(e);
+            return;
+        }
+        const card = (e.target as Element).closest('.process-card[data-process-name]') as HTMLElement;
+        if (card && card.dataset.processName) {
+            openDrawer(card.dataset.processName);
+        }
+    });
+
     // ─── Detail Drawer ───
 
     const drawer = $('detail-drawer');
@@ -422,9 +590,7 @@ export default function mount(): () => void {
 
         // Update header
         const nameEl = $('drawer-process-name');
-        const iconEl = $('drawer-icon');
         if (nameEl) nameEl.textContent = name;
-        if (iconEl) iconEl.textContent = name.charAt(0).toUpperCase();
 
         // Update meta info
         const proc = allProcesses.find(p => p.name === name);
@@ -486,23 +652,50 @@ export default function mount(): () => void {
             const lines = text.split('\n');
 
             if (lines.length === 0 || (lines.length === 1 && !lines[0])) {
-                logsEl.replaceChildren(
-                    <em style={{ color: 'var(--text-muted)' }}>No logs available</em> as unknown as Node
-                );
+                logsEl.innerHTML = '<em style="color: var(--text-muted)">No logs available</em>';
             } else {
-                const logElements = lines.map((line: string) => <LogLine text={line} /> as unknown as Node);
-                logsEl.replaceChildren(...logElements);
+                const search = logSearch.toLowerCase();
+                const html = lines.filter((line: string) => {
+                    if (!search) return true;
+                    return line.toLowerCase().includes(search);
+                }).map((line: string) => {
+                    return `<div class="log-line">${ansiToHtml(line)}</div>`;
+                }).join('');
+                logsEl.innerHTML = html;
             }
-            logsEl.scrollTop = logsEl.scrollHeight;
+            if (logAutoScroll) {
+                logsEl.scrollTop = logsEl.scrollHeight;
+            }
         } catch {
-            logsEl.replaceChildren(
-                <em style={{ color: 'var(--text-muted)' }}>Failed to load logs</em> as unknown as Node
-            );
+            logsEl.innerHTML = '<em style="color: var(--text-muted)">Failed to load logs</em>';
         }
     }
 
     $('drawer-close-btn')?.addEventListener('click', closeDrawer);
     backdrop?.addEventListener('click', closeDrawer);
+
+    // Auto-scroll toggle
+    const autoScrollBtn = $('log-autoscroll-btn');
+    autoScrollBtn?.addEventListener('click', () => {
+        logAutoScroll = !logAutoScroll;
+        autoScrollBtn.classList.toggle('active', logAutoScroll);
+        autoScrollBtn.textContent = logAutoScroll ? '↓' : '║';
+        autoScrollBtn.title = logAutoScroll ? 'Auto-scroll ON' : 'Auto-scroll OFF';
+        if (logAutoScroll) {
+            const logsEl = $('drawer-logs');
+            if (logsEl) logsEl.scrollTop = logsEl.scrollHeight;
+        }
+    });
+
+    // Log search/filter with debounce
+    let logSearchTimeout: ReturnType<typeof setTimeout> | null = null;
+    $('log-search')?.addEventListener('input', (e) => {
+        if (logSearchTimeout) clearTimeout(logSearchTimeout);
+        logSearchTimeout = setTimeout(() => {
+            logSearch = (e.target as HTMLInputElement).value;
+            refreshDrawerLogs();
+        }, 200);
+    });
 
     // Tab switching
     drawer?.querySelectorAll('.drawer-tab').forEach(tab => {
@@ -619,10 +812,30 @@ export default function mount(): () => void {
     }
     document.addEventListener('keydown', handleKeydown);
 
-    // ─── Auto-Refresh (5s polling, matching server cache TTL) ───
-    loadProcesses();
-    refreshTimer = setInterval(() => {
-        loadProcesses();
+    // ─── SSE Live Updates (replaces polling) ───
+    let eventSource: EventSource | null = null;
+    let logRefreshTimer: ReturnType<typeof setInterval> | null = null;
+
+    function connectSSE() {
+        eventSource = new EventSource('/api/events');
+        eventSource.onmessage = (event) => {
+            try {
+                allProcesses = JSON.parse(event.data);
+                renderFilteredProcesses();
+                updateStats(allProcesses);
+            } catch { /* invalid data, skip */ }
+        };
+        eventSource.onerror = () => {
+            // SSE disconnected, reconnect after 5s
+            eventSource?.close();
+            eventSource = null;
+            setTimeout(connectSSE, 5000);
+        };
+    }
+    connectSSE();
+
+    // Log drawer still needs periodic refresh (not part of SSE)
+    logRefreshTimer = setInterval(() => {
         if (drawerProcess) refreshDrawerLogs();
     }, 5000);
 
@@ -636,6 +849,7 @@ export default function mount(): () => void {
         $('modal-create-btn')?.removeEventListener('click', createProcess);
         $('refresh-btn')?.removeEventListener('click', loadProcesses);
         document.removeEventListener('keydown', handleKeydown);
-        if (refreshTimer) clearInterval(refreshTimer);
+        if (eventSource) eventSource.close();
+        if (logRefreshTimer) clearInterval(logRefreshTimer);
     };
 }
