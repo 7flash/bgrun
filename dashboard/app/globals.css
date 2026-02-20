@@ -1,6 +1,11 @@
 /* BGR Dashboard — Design System v3 */
 /* Inspired by agent-interface premium dark theme */
 
+.antialiased {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
 /* ─── Design Tokens ─── */
 :root {
     --bg-primary: #07070d;

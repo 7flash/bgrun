@@ -3,10 +3,11 @@
  * 
  * Returns DB path, BGR home dir, platform info for diagnostics.
  */
-import { getDbInfo } from 'bgrun';
+import { getDbInfo } from '../../../../src/db';
+import { measureSync } from 'measure-fn';
 
 export async function GET() {
-    const info = getDbInfo();
+    const info = measureSync('DB info', () => getDbInfo());
     return Response.json({
         ...info,
         platform: process.platform,

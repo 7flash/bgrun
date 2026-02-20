@@ -1,3 +1,4 @@
+/** @jsxImportSource react */
 /**
  * bgrun Dashboard — Page Client Interactivity
  *

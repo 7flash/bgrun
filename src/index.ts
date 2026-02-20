@@ -244,7 +244,7 @@ async function run() {
       Version:   ${chalk.cyan(version)}
       BGR Home:  ${chalk.yellow(info.bgrHome)}
       DB Path:   ${chalk.yellow(info.dbPath)}
-      DB Name:   ${info.dbName}
+      DB File:   ${info.dbFilename}
       DB Exists: ${info.exists ? chalk.green('✓') : chalk.red('✗')}
       Platform:  ${process.platform}
       Bun:       ${Bun.version}

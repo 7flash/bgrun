@@ -2,6 +2,7 @@ import { Database, z } from "sqlite-zod-orm";
 import { getHomeDir, ensureDir } from "./platform";
 import { join } from "path";
 import { sleep } from "bun";
+import { existsSync, copyFileSync } from "fs";
 
 // =============================================================================
 // SCHEMA (inline — single table, no need for a separate file)
@@ -27,10 +28,23 @@ export type Process = z.infer<typeof ProcessSchema> & { id: number };
 
 const homePath = getHomeDir();
 const bgrDir = join(homePath, ".bgr");
-const dbName = process.env.DB_NAME ?? "bgr";
-export const dbPath = join(bgrDir, `${dbName}_v2.sqlite`);
-export const bgrHome = bgrDir;
 ensureDir(bgrDir);
+
+// DB filename: configurable via BGRUN_DB env, default "bgrun.sqlite"
+const dbFilename = process.env.BGRUN_DB ?? "bgrun.sqlite";
+export const dbPath = join(bgrDir, dbFilename);
+export const bgrHome = bgrDir;
+
+// Auto-migration: if new DB doesn't exist but old one does, copy it over
+const legacyDbPath = join(bgrDir, "bgr_v2.sqlite");
+if (!existsSync(dbPath) && existsSync(legacyDbPath)) {
+    try {
+        copyFileSync(legacyDbPath, dbPath);
+        console.log(`[bgrun] Migrated database: ${legacyDbPath} → ${dbPath}`);
+    } catch (e) {
+        // Migration failed — start fresh
+    }
+}
 
 export const db = new Database(dbPath, {
     process: ProcessSchema,
@@ -105,8 +119,8 @@ export function getDbInfo() {
     return {
         dbPath,
         bgrHome,
-        dbName,
-        exists: require('fs').existsSync(dbPath),
+        dbFilename,
+        exists: existsSync(dbPath),
     };
 }
 

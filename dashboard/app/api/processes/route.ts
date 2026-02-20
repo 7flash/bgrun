@@ -5,8 +5,13 @@
  * instead of per-process calls to avoid subprocess pile-up on Windows.
  * Results are cached for 5 seconds via globalThis.
  */
-import { getAllProcesses, calculateRuntime, getProcessBatchMemory, getDbInfo } from 'bgrun';
+import { getAllProcesses } from '../../../../src/db';
+import { calculateRuntime } from '../../../../src/utils';
+import { getProcessBatchMemory } from '../../../../src/platform';
+import { measure, createMeasure } from 'measure-fn';
 import { $ } from 'bun';
+
+const api = createMeasure('api');
 
 const CACHE_TTL_MS = 5_000;
 const SUBPROCESS_TIMEOUT_MS = 4_000;
@@ -105,39 +110,38 @@ function getProcessGroup(envStr: string): string | null {
     return match ? match[1] : null;
 }
 
-// ... existing code ...
-
 async function fetchProcesses(): Promise<any[]> {
-    const procs = getAllProcesses();
-    const pids = procs.map((p: any) => p.pid);
+    return await api.measure('Fetch processes', async (m) => {
+        const procs = getAllProcesses();
+        const pids = procs.map((p: any) => p.pid);
 
-    // Three subprocess calls total (not 3×N)
-    const [runningPids, portMap, memoryMap] = await Promise.all([
-        withTimeout(getRunningPids(pids), new Set<number>()),
-        withTimeout(getPortsByPid(pids), new Map<number, number[]>()),
-        // Use the new batch memory fetcher
-        withTimeout(getProcessBatchMemory(pids), new Map<number, number>()),
-    ]);
+        // Three subprocess calls total (not 3×N)
+        const [runningPids, portMap, memoryMap] = await Promise.all([
+            m('Running PIDs', () => withTimeout(getRunningPids(pids), new Set<number>())),
+            m('Port map', () => withTimeout(getPortsByPid(pids), new Map<number, number[]>())),
+            m('Memory map', () => withTimeout(getProcessBatchMemory(pids), new Map<number, number>())),
+        ]);
 
-    return procs.map((p: any) => {
-        const running = runningPids.has(p.pid);
-        const ports = running ? (portMap.get(p.pid) || []) : [];
-        const memory = running ? (memoryMap.get(p.pid) || 0) : 0;
+        return procs.map((p: any) => {
+            const running = runningPids?.has(p.pid) ?? false;
+            const ports = running ? (portMap?.get(p.pid) || []) : [];
+            const memory = running ? (memoryMap?.get(p.pid) || 0) : 0;
 
-        return {
-            name: p.name,
-            command: p.command,
-            directory: p.workdir,
-            pid: p.pid,
-            running,
-            port: ports.length > 0 ? ports[0] : null,
-            ports,
-            memory, // Bytes
-            group: getProcessGroup(p.env),
-            runtime: calculateRuntime(p.timestamp),
-            timestamp: p.timestamp,
-        };
-    });
+            return {
+                name: p.name,
+                command: p.command,
+                directory: p.workdir,
+                pid: p.pid,
+                running,
+                port: ports.length > 0 ? ports[0] : null,
+                ports,
+                memory, // Bytes
+                group: getProcessGroup(p.env),
+                runtime: calculateRuntime(p.timestamp),
+                timestamp: p.timestamp,
+            };
+        });
+    }) ?? [];
 }
 
 export async function GET() {

@@ -5,6 +5,7 @@ import { getAllProcesses } from "../db";
 import { announce } from "../logger";
 import { isProcessRunning, calculateRuntime, parseEnvString } from "../utils";
 import { getProcessPorts, getProcessBatchMemory } from "../platform";
+import { measure } from "measure-fn";
 
 function formatMemory(bytes: number): string {
     if (bytes === 0) return '-';

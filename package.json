@@ -1,6 +1,6 @@
 {
   "name": "bgrun",
-  "version": "3.4.0",
+  "version": "3.5.0",
   "description": "bgrun — A lightweight process manager for Bun",
   "type": "module",
   "main": "./src/api.ts",
@@ -47,7 +47,8 @@
     "boxen": "^8.0.1",
     "chalk": "^5.4.1",
     "dedent": "^1.5.3",
-    "melina": "^1.3.2",
+    "measure-fn": "^3.2.1",
+    "melina": "^2.2.1",
     "sqlite-zod-orm": "^3.8.0"
   },
   "engines": {

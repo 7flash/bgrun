@@ -1,7 +1,9 @@
 /**
  * GET /api/logs/:name — Read last 100 lines of process stdout/stderr
  */
-import { getProcess, readFileTail } from 'bgrun';
+import { getProcess } from '../../../../../src/db';
+import { readFileTail } from '../../../../../src/platform';
+import { measure } from 'measure-fn';
 
 export async function GET(req: Request, { params }: { params: { name: string } }) {
     const name = decodeURIComponent(params.name);
@@ -11,7 +13,10 @@ export async function GET(req: Request, { params }: { params: { name: string } }
         return Response.json({ error: 'Process not found' }, { status: 404 });
     }
 
-    const stdout = await readFileTail(proc.stdout_path, 100);
-    const stderr = await readFileTail(proc.stderr_path, 100);
-    return Response.json({ stdout, stderr });
+    const result = await measure(`Read logs "${name}"`, async (m) => ({
+        stdout: await m('stdout', () => readFileTail(proc.stdout_path, 100)) ?? '',
+        stderr: await m('stderr', () => readFileTail(proc.stderr_path, 100)) ?? '',
+    }));
+
+    return Response.json(result);
 }

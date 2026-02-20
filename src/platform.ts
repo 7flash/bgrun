@@ -6,6 +6,9 @@
 import * as fs from "fs";
 import * as os from "os";
 import { $ } from "bun";
+import { measure, createMeasure } from "measure-fn";
+
+const plat = createMeasure('platform');
 
 /** Detect if running on Windows - use function to prevent bundler tree-shaking */
 export function isWindows(): boolean {
@@ -24,24 +27,24 @@ export function getHomeDir(): string {
  * For Docker containers, checks container status instead of PID
  */
 export async function isProcessRunning(pid: number, command?: string): Promise<boolean> {
-  try {
-    // Docker container detection
-    if (command && (command.includes('docker run') || command.includes('docker-compose up') || command.includes('docker compose up'))) {
-      return await isDockerContainerRunning(command);
-    }
+  return plat.measure(`PID ${pid} alive?`, async () => {
+    try {
+      // Docker container detection
+      if (command && (command.includes('docker run') || command.includes('docker-compose up') || command.includes('docker compose up'))) {
+        return await isDockerContainerRunning(command);
+      }
 
-    if (isWindows()) {
-      // On Windows, use tasklist to check for PID
-      const result = await $`tasklist /FI "PID eq ${pid}" /NH`.nothrow().text();
-      return result.includes(`${pid}`);
-    } else {
-      // On Unix, use ps -p
-      const result = await $`ps -p ${pid}`.nothrow().text();
-      return result.includes(`${pid}`);
+      if (isWindows()) {
+        const result = await $`tasklist /FI "PID eq ${pid}" /NH`.nothrow().text();
+        return result.includes(`${pid}`);
+      } else {
+        const result = await $`ps -p ${pid}`.nothrow().text();
+        return result.includes(`${pid}`);
+      }
+    } catch {
+      return false;
     }
-  } catch {
-    return false;
-  }
+  });
 }
 
 /**
@@ -104,46 +107,48 @@ async function getChildPids(pid: number): Promise<number[]> {
  * Terminate a process and its children
  */
 export async function terminateProcess(pid: number, force: boolean = false): Promise<void> {
-  // First, kill children
-  const children = await getChildPids(pid);
+  await plat.measure(`Terminate PID ${pid}`, async (m) => {
+    // First, kill children
+    const children = await m('Get children', () => getChildPids(pid)) ?? [];
 
-  for (const childPid of children) {
-    try {
-      if (isWindows()) {
-        if (force) {
-          await $`taskkill /F /PID ${childPid}`.nothrow().quiet();
+    for (const childPid of children) {
+      try {
+        if (isWindows()) {
+          if (force) {
+            await $`taskkill /F /PID ${childPid}`.nothrow().quiet();
+          } else {
+            await $`taskkill /PID ${childPid}`.nothrow().quiet();
+          }
         } else {
-          await $`taskkill /PID ${childPid}`.nothrow().quiet();
+          const signal = force ? 'KILL' : 'TERM';
+          await $`kill -${signal} ${childPid}`.nothrow();
         }
-      } else {
-        const signal = force ? 'KILL' : 'TERM';
-        await $`kill -${signal} ${childPid}`.nothrow();
+      } catch {
+        // Ignore errors for already-dead processes
       }
-    } catch {
-      // Ignore errors for already-dead processes
     }
-  }
 
-  // Wait a bit for graceful shutdown
-  await Bun.sleep(500);
+    // Wait a bit for graceful shutdown
+    await Bun.sleep(500);
 
-  // Then kill the parent if still running
-  if (await isProcessRunning(pid)) {
-    try {
-      if (isWindows()) {
-        if (force) {
-          await $`taskkill /F /PID ${pid}`.nothrow().quiet();
+    // Then kill the parent if still running
+    if (await isProcessRunning(pid)) {
+      try {
+        if (isWindows()) {
+          if (force) {
+            await $`taskkill /F /PID ${pid}`.nothrow().quiet();
+          } else {
+            await $`taskkill /PID ${pid}`.nothrow().quiet();
+          }
         } else {
-          await $`taskkill /PID ${pid}`.nothrow().quiet();
+          const signal = force ? 'KILL' : 'TERM';
+          await $`kill -${signal} ${pid}`.nothrow();
         }
-      } else {
-        const signal = force ? 'KILL' : 'TERM';
-        await $`kill -${signal} ${pid}`.nothrow();
+      } catch {
+        // Ignore errors
       }
-    } catch {
-      // Ignore errors
     }
-  }
+  });
 }
 
 /**
@@ -341,19 +346,21 @@ export async function findPidByPort(port: number, maxWaitMs = 8000): Promise<num
 }
 
 export async function readFileTail(filePath: string, lines?: number): Promise<string> {
-  try {
-    const content = await Bun.file(filePath).text();
+  return plat.measure(`Read tail ${lines ?? 'all'}L`, async () => {
+    try {
+      const content = await Bun.file(filePath).text();
 
-    if (!lines) {
-      return content;
+      if (!lines) {
+        return content;
+      }
+
+      const allLines = content.split(/\r?\n/);
+      const tailLines = allLines.slice(-lines);
+      return tailLines.join('\n');
+    } catch (error) {
+      throw new Error(`Error reading file: ${error}`);
     }
-
-    const allLines = content.split(/\r?\n/);
-    const tailLines = allLines.slice(-lines);
-    return tailLines.join('\n');
-  } catch (error) {
-    throw new Error(`Error reading file: ${error}`);
-  }
+  });
 }
 
 /**
@@ -379,57 +386,53 @@ export async function getProcessMemory(pid: number): Promise<number> {
  * to avoid spawning N subprocesses.
  */
 export async function getProcessBatchMemory(pids: number[]): Promise<Map<number, number>> {
-  const memoryMap = new Map<number, number>();
-  if (pids.length === 0) return memoryMap;
+  if (pids.length === 0) return new Map();
 
-  // Create a quick lookup set
-  const pidSet = new Set(pids);
+  return await plat.measure(`Batch memory (${pids.length} PIDs)`, async () => {
+    const memoryMap = new Map<number, number>();
+    const pidSet = new Set(pids);
 
-  try {
-    if (isWindows()) {
-      // Get-Process | Select-Object Id, WorkingSet
-      const result = await $`powershell -Command "Get-Process | Select-Object Id, WorkingSet"`.nothrow().quiet().text();
-      const lines = result.trim().split('\n');
+    try {
+      if (isWindows()) {
+        const result = await $`powershell -Command "Get-Process | Select-Object Id, WorkingSet"`.nothrow().quiet().text();
+        const lines = result.trim().split('\n');
 
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith('Id') || trimmed.startsWith('--')) continue;
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed.startsWith('Id') || trimmed.startsWith('--')) continue;
 
-        const parts = trimmed.split(/\s+/);
-        if (parts.length >= 2) {
-          const val1 = parseInt(parts[0]);
-          const val2 = parseInt(parts[parts.length - 1]);
+          const parts = trimmed.split(/\s+/);
+          if (parts.length >= 2) {
+            const val1 = parseInt(parts[0]);
+            const val2 = parseInt(parts[parts.length - 1]);
 
-          if (!isNaN(val1) && !isNaN(val2)) {
-            if (pidSet.has(val1)) memoryMap.set(val1, val2);
+            if (!isNaN(val1) && !isNaN(val2)) {
+              if (pidSet.has(val1)) memoryMap.set(val1, val2);
+            }
+          }
+        }
+      } else {
+        const result = await $`ps -eo pid,rss`.nothrow().quiet().text();
+        const lines = result.trim().split('\n');
+
+        for (let i = 1; i < lines.length; i++) {
+          const line = lines[i].trim();
+          if (!line) continue;
+          const [pidStr, rssStr] = line.split(/\s+/);
+          const pid = parseInt(pidStr);
+          const rss = parseInt(rssStr);
+
+          if (pidSet.has(pid)) {
+            memoryMap.set(pid, rss * 1024);
           }
         }
       }
-    } else {
-      // Unix: ps -o pid,rss
-      // PID   RSS
-      // 123   456
-      const result = await $`ps -eo pid,rss`.nothrow().quiet().text();
-      const lines = result.trim().split('\n');
-
-      // Skip header
-      for (let i = 1; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (!line) continue;
-        const [pidStr, rssStr] = line.split(/\s+/);
-        const pid = parseInt(pidStr);
-        const rss = parseInt(rssStr); // KB
-
-        if (pidSet.has(pid)) {
-          memoryMap.set(pid, rss * 1024); // Convert KB to Bytes
-        }
-      }
+    } catch (e) {
+      // silently fail
     }
-  } catch (e) {
-    // console.error("Error fetching batch memory:", e);
-  }
 
-  return memoryMap;
+    return memoryMap;
+  }) ?? new Map();
 }
 
 /**
