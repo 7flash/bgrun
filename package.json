@@ -49,6 +49,8 @@
     "dedent": "^1.5.3",
     "measure-fn": "^3.2.1",
     "melina": "^2.2.1",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
     "sqlite-zod-orm": "^3.8.0"
   },
   "engines": {
