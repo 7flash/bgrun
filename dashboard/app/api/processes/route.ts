@@ -1,13 +1,6 @@
-/**
- * GET /api/processes — Enriched process list
- * 
- * Uses batch subprocess calls (single tasklist + single netstat)
- * instead of per-process calls to avoid subprocess pile-up on Windows.
- * Results are cached for 5 seconds via globalThis.
- */
-import { getAllProcesses } from '../../../../src/db';
+import { getAllProcesses, updateProcessPid } from '../../../../src/db';
 import { calculateRuntime } from '../../../../src/utils';
-import { getProcessBatchMemory } from '../../../../src/platform';
+import { getProcessBatchMemory, reconcileProcessPids } from '../../../../src/platform';
 import { measure, createMeasure } from 'measure-fn';
 import { $ } from 'bun';
 
@@ -116,11 +109,47 @@ async function fetchProcesses(): Promise<any[]> {
         const pids = procs.map((p: any) => p.pid);
 
         // Three subprocess calls total (not 3×N)
-        const [runningPids, portMap, memoryMap] = await Promise.all([
+        let [runningPids, portMap, memoryMap] = await Promise.all([
             m('Running PIDs', () => withTimeout(getRunningPids(pids), new Set<number>())),
             m('Port map', () => withTimeout(getPortsByPid(pids), new Map<number, number[]>())),
             m('Memory map', () => withTimeout(getProcessBatchMemory(pids), new Map<number, number>())),
         ]);
+
+        // PID reconciliation: if stored PIDs are dead, try to find the real process
+        const allPids = new Set(pids);
+        const deadPids = new Set(pids.filter((pid: number) => !runningPids?.has(pid)));
+
+        if (deadPids.size > 0) {
+            const reconciled = await m('Reconcile dead PIDs', () =>
+                withTimeout(reconcileProcessPids(procs, deadPids), new Map<string, number>())
+            );
+
+            if (reconciled && reconciled.size > 0) {
+                // Update stored PIDs in DB and refresh running status
+                const newPids: number[] = [];
+                for (const [name, newPid] of reconciled) {
+                    updateProcessPid(name, newPid);
+                    newPids.push(newPid);
+                    // Update the proc object in-place so the response uses the new PID
+                    const proc = procs.find((p: any) => p.name === name);
+                    if (proc) proc.pid = newPid;
+                }
+
+                // Mark reconciled PIDs as running
+                if (!runningPids) runningPids = new Set();
+                for (const pid of newPids) runningPids.add(pid);
+
+                // Re-fetch ports and memory for the new PIDs
+                const [newPorts, newMem] = await Promise.all([
+                    withTimeout(getPortsByPid(newPids), new Map<number, number[]>()),
+                    withTimeout(getProcessBatchMemory(newPids), new Map<number, number>()),
+                ]);
+                if (!portMap) portMap = new Map();
+                if (!memoryMap) memoryMap = new Map();
+                for (const [pid, ports] of newPorts) portMap.set(pid, ports);
+                for (const [pid, mem] of newMem) memoryMap.set(pid, mem);
+            }
+        }
 
         return procs.map((p: any) => {
             const running = runningPids?.has(p.pid) ?? false;

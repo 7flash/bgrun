@@ -5,6 +5,7 @@
 
 import * as fs from "fs";
 import * as os from "os";
+import { join } from "path";
 import { $ } from "bun";
 import { measure, createMeasure } from "measure-fn";
 
@@ -300,6 +301,80 @@ export async function findChildPid(parentPid: number): Promise<number> {
   }
 
   return currentPid;
+}
+
+/**
+ * Reconcile stale PIDs: when a stored PID is dead, search for a live process
+ * matching the same command line and update the DB with the correct PID.
+ * 
+ * This handles the case where cmd.exe wrapper PIDs die after spawning the
+ * actual bun.exe child process, or after a system reboot where PIDs change.
+ * 
+ * Returns a map of process name → reconciled PID for all matched processes.
+ */
+export async function reconcileProcessPids(
+  processes: Array<{ name: string; pid: number; command: string; workdir: string }>,
+  deadPids: Set<number>,
+): Promise<Map<string, number>> {
+  return await plat.measure('Reconcile PIDs', async () => {
+    const result = new Map<string, number>();
+    const needsReconciliation = processes.filter(p => deadPids.has(p.pid));
+    if (needsReconciliation.length === 0) return result;
+
+    try {
+      // Get all running processes with their command lines
+      let runningProcs: Array<{ pid: number; cmdLine: string }> = [];
+
+      if (isWindows()) {
+        // Write a temp PS1 script to avoid quoting issues with $() in Bun's shell
+        const tmpScript = join(os.tmpdir(), 'bgr-reconcile.ps1');
+        const psCode = `Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'bun.exe' } | ForEach-Object { Write-Output "$($_.ProcessId)|$($_.CommandLine)" }`;
+        await Bun.write(tmpScript, psCode);
+
+        const ps = Bun.spawnSync(['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', tmpScript]);
+        const output = ps.stdout.toString();
+
+        for (const line of output.split('\n')) {
+          const sepIdx = line.indexOf('|');
+          if (sepIdx === -1) continue;
+          const pid = parseInt(line.substring(0, sepIdx).trim());
+          const cmdLine = line.substring(sepIdx + 1).trim();
+          if (!isNaN(pid) && pid > 0 && cmdLine) {
+            runningProcs.push({ pid, cmdLine });
+          }
+        }
+      } else {
+        const psOutput = await $`ps -eo pid,args --no-headers`.nothrow().quiet().text();
+        for (const line of psOutput.trim().split('\n')) {
+          const match = line.trim().match(/^(\d+)\s+(.+)/);
+          if (match) {
+            runningProcs.push({ pid: parseInt(match[1]), cmdLine: match[2] });
+          }
+        }
+      }
+
+      // For each dead process, try to find a matching live process
+      for (const proc of needsReconciliation) {
+        // Extract the key part of the command (e.g., "server.ts", "dev", etc.)
+        const cmdParts = proc.command.split(/\s+/);
+        const keyArg = cmdParts[cmdParts.length - 1]; // Last arg is usually the script/command
+
+        for (const running of runningProcs) {
+          // Match if the running process command line contains the key argument
+          if (running.cmdLine.includes(keyArg) && running.cmdLine.includes('bun')) {
+            result.set(proc.name, running.pid);
+            // Remove from available pool so it can't double-match
+            runningProcs = runningProcs.filter(p => p.pid !== running.pid);
+            break;
+          }
+        }
+      }
+    } catch {
+      // Reconciliation is best-effort — return partial results
+    }
+
+    return result;
+  }) ?? new Map();
 }
 
 /**

@@ -104,6 +104,14 @@ export function removeProcessByName(name: string) {
     }
 }
 
+/** Update the stored PID for a process (used by PID reconciliation) */
+export function updateProcessPid(name: string, newPid: number) {
+    const proc = db.process.select().where({ name }).limit(1).get();
+    if (proc) {
+        db.process.update(proc.id, { pid: newPid });
+    }
+}
+
 export function removeAllProcesses() {
     const all = db.process.select().all();
     for (const p of all) {
