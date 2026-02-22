@@ -71,14 +71,14 @@ export default function DashboardPage() {
                 <table>
                     <thead>
                         <tr>
-                            <th>Process</th>
-                            <th>Status</th>
-                            <th>PID</th>
-                            <th>Port</th>
-                            <th>Memory</th>
+                            <th style={{ width: '18%' }}>Process</th>
+                            <th style={{ width: '90px' }}>Status</th>
+                            <th style={{ width: '70px' }}>PID</th>
+                            <th style={{ width: '70px' }}>Port</th>
+                            <th style={{ width: '70px' }}>Memory</th>
                             <th>Command</th>
-                            <th>Runtime</th>
-                            <th style={{ width: '120px' }}>Actions</th>
+                            <th style={{ width: '80px' }}>Runtime</th>
+                            <th style={{ width: '150px' }}>Actions</th>
                         </tr>
                     </thead>
                     <tbody id="processes-table">
@@ -118,6 +118,7 @@ export default function DashboardPage() {
                         <input type="text" id="log-search" className="log-search" placeholder="Filter logs..." />
                         <button id="log-autoscroll-btn" className="log-autoscroll active" title="Auto-scroll">↓</button>
                     </div>
+                    <div className="log-file-info" id="log-file-info"></div>
                     <div className="drawer-logs" id="drawer-logs">No logs loaded</div>
                 </div>
             </div>

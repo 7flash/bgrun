@@ -354,19 +354,47 @@ export async function reconcileProcessPids(
       }
 
       // For each dead process, try to find a matching live process
+      // Uses multi-criteria scoring to avoid false matches when multiple
+      // processes share similar commands (e.g. "bun run server.ts")
       for (const proc of needsReconciliation) {
-        // Extract the key part of the command (e.g., "server.ts", "dev", etc.)
         const cmdParts = proc.command.split(/\s+/);
-        const keyArg = cmdParts[cmdParts.length - 1]; // Last arg is usually the script/command
+        // Extract meaningful parts: full command and workdir path segments
+        const workdirParts = proc.workdir.replace(/\\/g, '/').split('/').filter(Boolean);
+        const workdirLast = workdirParts[workdirParts.length - 1]?.toLowerCase() || '';
+
+        let bestMatch: { pid: number; score: number } | null = null;
+        let ambiguous = false;
 
         for (const running of runningProcs) {
-          // Match if the running process command line contains the key argument
-          if (running.cmdLine.includes(keyArg) && running.cmdLine.includes('bun')) {
-            result.set(proc.name, running.pid);
-            // Remove from available pool so it can't double-match
-            runningProcs = runningProcs.filter(p => p.pid !== running.pid);
-            break;
+          const cmdLower = running.cmdLine.toLowerCase();
+          let score = 0;
+
+          // Score 1: command parts match (e.g. "run", "server.ts")
+          for (const part of cmdParts) {
+            if (part.length > 2 && cmdLower.includes(part.toLowerCase())) score++;
           }
+
+          // Score 2: workdir folder name appears in command line path
+          // This distinguishes "bun run server.ts" in different directories
+          if (workdirLast && cmdLower.includes(workdirLast)) score += 3;
+
+          // Score 3: full workdir path match (strongest signal)
+          if (cmdLower.includes(proc.workdir.toLowerCase().replace(/\\/g, '/'))) score += 5;
+          if (cmdLower.includes(proc.workdir.toLowerCase())) score += 5;
+
+          if (score < 4) continue; // Require workdir evidence — generic cmd matches alone aren't enough
+
+          if (!bestMatch || score > bestMatch.score) {
+            ambiguous = false;
+            bestMatch = { pid: running.pid, score };
+          } else if (score === bestMatch.score) {
+            ambiguous = true; // Multiple equally good matches — skip
+          }
+        }
+
+        if (bestMatch && !ambiguous) {
+          result.set(proc.name, bestMatch.pid);
+          runningProcs = runningProcs.filter(p => p.pid !== bestMatch!.pid);
         }
       }
     } catch {

@@ -104,6 +104,18 @@ function formatMemory(bytes: number): string {
     return `${(mb / 1024).toFixed(1)} GB`;
 }
 
+function formatTimeAgo(date: Date): string {
+    const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+    if (seconds < 10) return 'just now';
+    if (seconds < 60) return `${seconds}s ago`;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
+}
+
 // ─── JSX Components ───
 
 function ProcessRow({ p, animate }: { p: ProcessData; animate?: boolean }) {
@@ -649,7 +661,19 @@ export default function mount(): () => void {
             const res = await fetch(`/api/logs/${encodeURIComponent(drawerProcess)}`);
             const data = await res.json();
             const text = drawerTab === 'stdout' ? (data.stdout || '') : (data.stderr || '');
+            const mtime = drawerTab === 'stdout' ? data.stdoutModified : data.stderrModified;
             const lines = text.split('\n');
+
+            // Update file info bar with last-modified timestamp
+            const infoEl = $('log-file-info');
+            if (infoEl) {
+                if (mtime) {
+                    const ago = formatTimeAgo(new Date(mtime));
+                    infoEl.innerHTML = `<span style="color:var(--text-muted)">Last updated:</span> <span style="color:var(--text-secondary)">${ago}</span>`;
+                } else {
+                    infoEl.textContent = '';
+                }
+            }
 
             if (lines.length === 0 || (lines.length === 1 && !lines[0])) {
                 logsEl.innerHTML = '<em style="color: var(--text-muted)">No logs available</em>';
