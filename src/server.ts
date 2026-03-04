@@ -44,15 +44,15 @@ export async function startServer() {
  * Built-in Process Guard
  * 
  * Runs as a background loop inside the dashboard process.
- * Every GUARD_INTERVAL_MS, it checks all registered bgrun processes.
- * If any process is dead (PID not running), it auto-restarts it using
- * handleRun with force=true (same as `bgrun --restart <name>`).
+ * Every GUARD_INTERVAL_MS, checks processes with BGR_KEEP_ALIVE=true
+ * in their env and auto-restarts any that died.
  * 
- * Why here and not as a separate process?
- * - No external dependency — the dashboard IS the guardian
- * - If the dashboard is running, all processes are monitored
- * - If the dashboard dies, `bgrun --dashboard` will restart everything
- * - Zero configuration — just works
+ * Only guarded processes (opted-in via dashboard toggle or env var) are
+ * monitored. Other processes are left alone even if they crash.
+ * 
+ * Toggle guard per-process:
+ *   - Dashboard UI: click the shield icon on any process row
+ *   - CLI: set BGR_KEEP_ALIVE=true in the process env/config
  */
 function startGuard() {
     console.log(`[guard] ✓ Built-in process guard started (checking every ${GUARD_INTERVAL_MS / 1000}s)`);
@@ -66,9 +66,13 @@ function startGuard() {
                 // Skip the dashboard itself
                 if (GUARD_SKIP_NAMES.has(proc.name)) continue;
 
+                // Only guard processes with BGR_KEEP_ALIVE=true
+                const env = proc.env ? (typeof proc.env === 'string' ? (() => { try { return JSON.parse(proc.env); } catch { return {}; } })() : proc.env) : {};
+                if (env.BGR_KEEP_ALIVE !== 'true') continue;
+
                 const alive = await isProcessRunning(proc.pid, proc.command);
                 if (!alive) {
-                    console.log(`[guard] ⚠ Process "${proc.name}" (PID ${proc.pid}) is dead, restarting...`);
+                    console.log(`[guard] ⚠ Guarded process "${proc.name}" (PID ${proc.pid}) is dead, restarting...`);
                     try {
                         await handleRun({
                             action: 'run',

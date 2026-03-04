@@ -119,6 +119,14 @@ export function removeAllProcesses() {
     }
 }
 
+/** Update the stored env JSON for a process (used by guard toggle) */
+export function updateProcessEnv(name: string, envJson: string) {
+    const proc = db.process.select().where({ name }).limit(1).get();
+    if (proc) {
+        db.process.update(proc.id, { env: envJson });
+    }
+}
+
 // =============================================================================
 // DEBUG / INFO
 // =============================================================================
