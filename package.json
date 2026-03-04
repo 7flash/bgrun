@@ -1,6 +1,6 @@
 {
   "name": "bgrun",
-  "version": "3.10.0",
+  "version": "3.10.1",
   "description": "bgrun — A lightweight process manager for Bun",
   "type": "module",
   "main": "./src/api.ts",
