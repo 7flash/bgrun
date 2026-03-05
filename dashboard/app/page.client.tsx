@@ -94,6 +94,27 @@ function DeployIcon() {
     );
 }
 
+function ShieldIcon() {
+    return (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+        </svg>
+    );
+}
+
+// ─── Guard Helper ───
+
+function isGuarded(p: ProcessData): boolean {
+    if (!p.env) return false;
+    // env is comma-separated "KEY=VAL,KEY2=VAL2" or JSON string
+    try {
+        const parsed = JSON.parse(p.env);
+        return parsed.BGR_KEEP_ALIVE === 'true';
+    } catch {
+        return p.env.includes('BGR_KEEP_ALIVE=true');
+    }
+}
+
 // ─── Utility: Format Runtime ───
 
 function formatRuntime(raw: string): string {
@@ -148,11 +169,22 @@ function shortenPath(dir: string): string {
 // ─── JSX Components ───
 
 function ProcessRow({ p, animate }: { p: ProcessData; animate?: boolean }) {
+    const guarded = isGuarded(p);
     return (
         <tr data-process-name={p.name} className={animate ? 'animate-in' : ''} style={animate ? { opacity: '0' } : undefined}>
             <td>
                 <div className="process-name">
                     <span>{p.name}</span>
+                    <button
+                        className={`guard-toggle ${guarded ? 'guarded' : ''}`}
+                        data-action="guard"
+                        data-name={p.name}
+                        data-guarded={guarded ? 'true' : 'false'}
+                        title={guarded ? 'Process is guarded — click to disable auto-restart' : 'Click to enable auto-restart guard'}
+                        onClick={(e: Event) => e.stopPropagation()}
+                    >
+                        <ShieldIcon />
+                    </button>
                 </div>
             </td>
             <td>
@@ -215,11 +247,13 @@ function EmptyState() {
 }
 
 function ProcessCard({ p }: { p: ProcessData }) {
+    const guarded = isGuarded(p);
     return (
         <div className="process-card" data-process-name={p.name}>
             <div className="card-header">
                 <div className="process-name">
                     <span>{p.name}</span>
+                    {guarded && <span className="guard-badge" title="Auto-restart enabled">🛡️</span>}
                 </div>
                 <span className={`status-badge ${p.running ? 'running' : 'stopped'}`}>
                     <span className="status-dot"></span>
@@ -234,6 +268,9 @@ function ProcessCard({ p }: { p: ProcessData }) {
             </div>
             <div className="card-command" title={p.command}>{p.command}</div>
             <div className="card-actions">
+                <button className={`action-btn guard ${guarded ? 'active' : ''}`} data-action="guard" data-name={p.name} data-guarded={guarded ? 'true' : 'false'} title={guarded ? 'Disable auto-restart' : 'Enable auto-restart'}>
+                    <ShieldIcon /> {guarded ? 'Unguard' : 'Guard'}
+                </button>
                 <button className="action-btn info" data-action="logs" data-name={p.name} title="View Logs">
                     <LogsIcon /> Logs
                 </button>
@@ -401,15 +438,18 @@ export default function mount(): () => void {
         const total = processes.length;
         const running = processes.filter(p => p.running).length;
         const stopped = total - running;
+        const guarded = processes.filter(p => isGuarded(p)).length;
         const totalMemory = processes.reduce((sum, p) => sum + (p.memory || 0), 0);
 
         const tc = $('total-count');
         const rc = $('running-count');
         const sc = $('stopped-count');
+        const gc = $('guarded-count');
         const mc = $('memory-count');
         if (tc) tc.textContent = String(total);
         if (rc) rc.textContent = String(running);
         if (sc) sc.textContent = String(stopped);
+        if (gc) gc.textContent = String(guarded);
         if (mc) mc.textContent = formatMemory(totalMemory) || '0 MB';
     }
 
@@ -608,6 +648,29 @@ export default function mount(): () => void {
                 break;
             }
 
+            case 'guard': {
+                const currentlyGuarded = btn.dataset.guarded === 'true';
+                const newState = !currentlyGuarded;
+                try {
+                    const res = await fetch('/api/guard', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name, enabled: newState }),
+                    });
+                    if (res.ok) {
+                        showToast(`${newState ? 'Guarded' : 'Unguarded'} "${name}"`, 'success');
+                    } else {
+                        const data = await res.json();
+                        showToast(data.error || `Failed to toggle guard for "${name}"`, 'error');
+                    }
+                } catch {
+                    showToast(`Failed to toggle guard for "${name}"`, 'error');
+                }
+                await loadProcessesFresh();
+                mutationUntil = Date.now() + 3000;
+                break;
+            }
+
             case 'logs':
                 openDrawer(name);
                 break;
@@ -631,10 +694,15 @@ export default function mount(): () => void {
         const proc = allProcesses.find(p => p.name === name);
         if (!proc) return;
 
+        const guarded = isGuarded(proc);
         const menu = (
             <div className="context-menu" style={{ left: `${x}px`, top: `${y}px` }}>
                 <button className="context-item" data-action="logs" data-name={name}>
                     <LogsIcon /> View Logs
+                </button>
+                <div className="context-divider"></div>
+                <button className={`context-item ${guarded ? 'guard-active' : 'guard'}`} data-action="guard" data-name={name} data-guarded={guarded ? 'true' : 'false'}>
+                    <ShieldIcon /> {guarded ? 'Disable Guard' : 'Enable Guard'}
                 </button>
                 <div className="context-divider"></div>
                 {proc.running

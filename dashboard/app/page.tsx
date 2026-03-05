@@ -25,6 +25,10 @@ export default function DashboardPage() {
                     <div className="stat-label">Stopped</div>
                     <div className="stat-value" id="stopped-count">–</div>
                 </div>
+                <div className="stat-card guarded">
+                    <div className="stat-label">Guarded</div>
+                    <div className="stat-value" id="guarded-count">–</div>
+                </div>
                 <div className="stat-card memory">
                     <div className="stat-label">Total Memory</div>
                     <div className="stat-value" id="memory-count">–</div>

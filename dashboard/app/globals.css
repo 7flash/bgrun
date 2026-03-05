@@ -427,6 +427,126 @@ body::after {
     color: var(--info);
 }
 
+/* ─── Guard Stat Card ─── */
+.stat-card.guarded {
+    border-left: 3px solid #14b8a6;
+}
+
+.stat-card.guarded::before {
+    background: #14b8a6;
+    opacity: 0.08;
+}
+
+.stat-card.guarded:hover::before {
+    opacity: 0.12;
+}
+
+.stat-card.guarded .stat-value {
+    color: #14b8a6;
+}
+
+/* ─── Guard Toggle (inline shield icon in process name) ─── */
+.guard-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    flex-shrink: 0;
+    opacity: 0.35;
+}
+
+.guard-toggle svg {
+    width: 14px;
+    height: 14px;
+}
+
+.guard-toggle:hover {
+    opacity: 1;
+    color: var(--text-muted);
+    background: var(--bg-hover);
+    transform: scale(1.15);
+}
+
+.guard-toggle.guarded {
+    opacity: 1;
+    color: #14b8a6;
+    filter: drop-shadow(0 0 6px rgba(20, 184, 166, 0.5));
+}
+
+.guard-toggle.guarded svg {
+    fill: rgba(20, 184, 166, 0.15);
+}
+
+.guard-toggle.guarded:hover {
+    color: #99f6e4;
+    filter: drop-shadow(0 0 10px rgba(20, 184, 166, 0.7));
+    background: rgba(20, 184, 166, 0.1);
+}
+
+/* Guard badge for mobile cards */
+.guard-badge {
+    font-size: 0.75rem;
+    margin-left: 0.25rem;
+}
+
+/* Guard action button styling */
+.action-btn.guard {
+    color: var(--text-muted);
+}
+
+.action-btn.guard:hover {
+    background: rgba(20, 184, 166, 0.1);
+    color: #14b8a6;
+    border-color: rgba(20, 184, 166, 0.3);
+}
+
+.action-btn.guard.active {
+    color: #14b8a6;
+    background: rgba(20, 184, 166, 0.08);
+    border-color: rgba(20, 184, 166, 0.2);
+}
+
+.action-btn.guard.active:hover {
+    background: rgba(20, 184, 166, 0.15);
+    color: #99f6e4;
+}
+
+/* Context menu guard item */
+.context-item.guard:hover {
+    background: rgba(20, 184, 166, 0.1);
+    color: #14b8a6;
+}
+
+.context-item.guard:hover svg {
+    color: #14b8a6;
+}
+
+.context-item.guard-active {
+    color: #14b8a6;
+}
+
+.context-item.guard-active svg {
+    color: #14b8a6;
+    fill: rgba(20, 184, 166, 0.15);
+}
+
+.context-item.guard-active:hover {
+    background: rgba(20, 184, 166, 0.1);
+    color: #99f6e4;
+}
+
+.context-item.guard-active:hover svg {
+    color: #99f6e4;
+}
+
 .toolbar {
     display: flex;
     justify-content: space-between;
