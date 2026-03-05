@@ -21,6 +21,11 @@ import { handleRun } from './commands/run';
 const GUARD_INTERVAL_MS = 30_000; // Check every 30 seconds
 const GUARD_SKIP_NAMES = new Set(['bgr-dashboard']); // Don't try to restart ourselves
 
+// In-memory guard restart counter (persists across module re-evaluations)
+const _g = globalThis as any;
+if (!_g.__bgrGuardRestartCounts) _g.__bgrGuardRestartCounts = new Map<string, number>();
+export const guardRestartCounts: Map<string, number> = _g.__bgrGuardRestartCounts;
+
 export async function startServer() {
     // Dynamic import to avoid melina's side-effect console.log at bundle load time
     const { start } = await import('melina');
@@ -80,7 +85,10 @@ function startGuard() {
                             force: true,
                             remoteName: '',
                         });
-                        console.log(`[guard] ✓ Restarted "${proc.name}"`);
+                        // Track restart count
+                        const prev = guardRestartCounts.get(proc.name) || 0;
+                        guardRestartCounts.set(proc.name, prev + 1);
+                        console.log(`[guard] ✓ Restarted "${proc.name}" (restart #${prev + 1})`);
                     } catch (err: any) {
                         console.error(`[guard] ✗ Failed to restart "${proc.name}": ${err.message}`);
                     }

@@ -1,6 +1,7 @@
 import { getAllProcesses, updateProcessPid } from '../../../../src/db';
 import { calculateRuntime } from '../../../../src/utils';
 import { getProcessBatchMemory, reconcileProcessPids } from '../../../../src/platform';
+import { guardRestartCounts } from '../../../../src/server';
 import { measure, createMeasure } from 'measure-fn';
 import { $ } from 'bun';
 
@@ -172,6 +173,7 @@ async function fetchProcesses(): Promise<any[]> {
                 configPath: p.configPath || '',
                 stdoutPath: p.stdout_path || '',
                 stderrPath: p.stderr_path || '',
+                guardRestarts: guardRestartCounts.get(p.name) || 0,
             };
         });
     }) ?? [];

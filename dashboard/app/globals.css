@@ -731,6 +731,57 @@ body::after {
     transform: scale(0.98);
 }
 
+/* Guard All button */
+.btn-guard-all {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    transition: all 0.25s ease;
+}
+
+.btn-guard-all svg {
+    width: 16px;
+    height: 16px;
+    transition: all 0.25s ease;
+}
+
+.btn-guard-all:hover svg {
+    stroke: #14b8a6;
+    filter: drop-shadow(0 0 4px rgba(20, 184, 166, 0.4));
+}
+
+.btn-guard-all.all-guarded {
+    background: rgba(20, 184, 166, 0.1);
+    border-color: rgba(20, 184, 166, 0.3);
+    color: #14b8a6;
+}
+
+.btn-guard-all.all-guarded svg {
+    stroke: #14b8a6;
+    fill: rgba(20, 184, 166, 0.15);
+    filter: drop-shadow(0 0 6px rgba(20, 184, 166, 0.5));
+}
+
+.btn-guard-all.all-guarded:hover {
+    background: rgba(239, 68, 68, 0.08);
+    border-color: rgba(239, 68, 68, 0.3);
+    color: #ef4444;
+}
+
+.btn-guard-all.all-guarded:hover svg {
+    stroke: #ef4444;
+    fill: rgba(239, 68, 68, 0.15);
+    filter: drop-shadow(0 0 4px rgba(239, 68, 68, 0.4));
+}
+
+.btn-guard-all:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
 .btn-danger {
     background: var(--danger-bg);
     color: var(--danger);
@@ -1614,6 +1665,137 @@ a.port-link:hover {
     font-size: 0.78rem;
     color: var(--text-primary);
     font-family: var(--font-mono);
+}
+
+/* ─── Guard Toggle (inside drawer meta) ─── */
+.meta-guard {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.625rem 0.75rem;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--border-glass);
+    border-radius: var(--radius-sm);
+    transition: all 0.25s ease;
+}
+
+.meta-guard .meta-label {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.meta-guard .meta-label svg {
+    width: 14px;
+    height: 14px;
+    stroke: var(--text-dim);
+    transition: all 0.25s ease;
+}
+
+.meta-guard.guarded {
+    background: rgba(20, 184, 166, 0.06);
+    border-color: rgba(20, 184, 166, 0.2);
+}
+
+.meta-guard.guarded .meta-label svg {
+    stroke: #14b8a6;
+    filter: drop-shadow(0 0 4px rgba(20, 184, 166, 0.4));
+}
+
+.guard-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    user-select: none;
+}
+
+.guard-toggle-input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.guard-toggle-track {
+    position: relative;
+    width: 32px;
+    height: 18px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 9px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    transition: all 0.25s ease;
+    flex-shrink: 0;
+}
+
+.guard-toggle-thumb {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    transition: all 0.25s ease;
+}
+
+.guard-toggle-input:checked~.guard-toggle-track {
+    background: rgba(20, 184, 166, 0.2);
+    border-color: rgba(20, 184, 166, 0.4);
+}
+
+.guard-toggle-input:checked~.guard-toggle-track .guard-toggle-thumb {
+    left: 16px;
+    background: #14b8a6;
+    box-shadow: 0 0 6px rgba(20, 184, 166, 0.5);
+}
+
+.guard-toggle-label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    transition: color 0.25s ease;
+    min-width: 60px;
+}
+
+.meta-guard.guarded .guard-toggle-label {
+    color: #14b8a6;
+}
+
+/* Guard restart counter */
+.meta-restarts {
+    grid-column: 1 / -1;
+    border-top: 1px solid var(--border-glass);
+    padding-top: 0.6rem;
+}
+
+.meta-restarts .meta-value {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.restart-count-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 22px;
+    height: 22px;
+    padding: 0 6px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    background: rgba(245, 158, 11, 0.15);
+    color: #f59e0b;
+    border: 1px solid rgba(245, 158, 11, 0.25);
+}
+
+.restart-count-text {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    font-style: italic;
 }
 
 .drawer-logs {

@@ -26,6 +26,7 @@ interface ProcessData {
     configPath: string;
     stdoutPath: string;
     stderrPath: string;
+    guardRestarts: number;
 }
 
 // ─── SVG Icon Helpers ───
@@ -439,6 +440,7 @@ export default function mount(): () => void {
         const running = processes.filter(p => p.running).length;
         const stopped = total - running;
         const guarded = processes.filter(p => isGuarded(p)).length;
+        const guardable = processes.filter(p => p.name !== 'bgr-dashboard').length;
         const totalMemory = processes.reduce((sum, p) => sum + (p.memory || 0), 0);
 
         const tc = $('total-count');
@@ -451,6 +453,16 @@ export default function mount(): () => void {
         if (sc) sc.textContent = String(stopped);
         if (gc) gc.textContent = String(guarded);
         if (mc) mc.textContent = formatMemory(totalMemory) || '0 MB';
+
+        // Update Guard All button state
+        const guardAllBtn = $('guard-all-btn');
+        const guardAllLabel = $('guard-all-label');
+        if (guardAllBtn && guardAllLabel) {
+            const allGuarded = guardable > 0 && guarded >= guardable;
+            guardAllBtn.classList.toggle('all-guarded', allGuarded);
+            guardAllLabel.textContent = allGuarded ? 'Unguard All' : 'Guard All';
+            guardAllBtn.title = allGuarded ? 'Remove guard from all processes' : 'Guard all processes (auto-restart on crash)';
+        }
     }
 
     function renderProcesses(processes: ProcessData[]) {
@@ -910,6 +922,7 @@ export default function mount(): () => void {
         const proc = allProcesses.find(p => p.name === name);
         const meta = $('drawer-meta');
         if (meta && proc) {
+            const guarded = isGuarded(proc);
             const metaItems = [
                 { label: 'Status', value: proc.running ? '● Running' : '○ Stopped' },
                 { label: 'PID', value: String(proc.pid) },
@@ -930,7 +943,74 @@ export default function mount(): () => void {
                     }
                 </div>
             ) as unknown as Node);
-            meta.replaceChildren(...items);
+
+            // Guard toggle row with inline switch
+            const guardRow = (
+                <div className={`meta-item meta-guard ${guarded ? 'guarded' : ''}`}>
+                    <span className="meta-label">
+                        <ShieldIcon /> Guard
+                    </span>
+                    <label className="guard-toggle" title={guarded ? 'Auto-restart is ON — click to disable' : 'Auto-restart is OFF — click to enable'}>
+                        <input type="checkbox" checked={guarded} className="guard-toggle-input" />
+                        <span className="guard-toggle-track">
+                            <span className="guard-toggle-thumb"></span>
+                        </span>
+                        <span className="guard-toggle-label">{guarded ? 'Protected' : 'Off'}</span>
+                    </label>
+                </div>
+            ) as unknown as HTMLElement;
+
+            // Wire toggle click
+            const checkbox = guardRow.querySelector('.guard-toggle-input') as HTMLInputElement;
+            checkbox?.addEventListener('change', async () => {
+                const newState = checkbox.checked;
+                const labelEl = guardRow.querySelector('.guard-toggle-label');
+                const trackEl = guardRow.querySelector('.guard-toggle-track');
+                // Optimistic UI update
+                if (labelEl) labelEl.textContent = newState ? 'Protected' : 'Off';
+                guardRow.classList.toggle('guarded', newState);
+                try {
+                    const res = await fetch('/api/guard', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name, enabled: newState }),
+                    });
+                    if (res.ok) {
+                        showToast(`${newState ? 'Guard enabled' : 'Guard disabled'} for "${name}"`, 'success');
+                    } else {
+                        // Rollback
+                        checkbox.checked = !newState;
+                        if (labelEl) labelEl.textContent = !newState ? 'Protected' : 'Off';
+                        guardRow.classList.toggle('guarded', !newState);
+                        showToast('Failed to toggle guard', 'error');
+                    }
+                } catch {
+                    checkbox.checked = !newState;
+                    if (labelEl) labelEl.textContent = !newState ? 'Protected' : 'Off';
+                    guardRow.classList.toggle('guarded', !newState);
+                    showToast('Failed to toggle guard', 'error');
+                }
+                await loadProcessesFresh();
+                mutationUntil = Date.now() + 3000;
+            });
+
+            // Guard restart counter (only shown when > 0)
+            const extraRows: Node[] = [];
+            if (proc.guardRestarts > 0) {
+                extraRows.push((
+                    <div className="meta-item meta-restarts">
+                        <span className="meta-label">Guard Restarts</span>
+                        <span className="meta-value">
+                            <span className="restart-count-badge">{proc.guardRestarts}</span>
+                            <span className="restart-count-text">
+                                {proc.guardRestarts === 1 ? 'auto-restart this session' : 'auto-restarts this session'}
+                            </span>
+                        </span>
+                    </div>
+                ) as unknown as Node);
+            }
+
+            meta.replaceChildren(...items, guardRow, ...extraRows);
         }
 
         // Reset log subtab to stdout (skip auto-refresh, we call it once below)
@@ -1327,6 +1407,46 @@ export default function mount(): () => void {
     $('refresh-btn')?.addEventListener('click', () => {
         loadProcesses();
         if (drawerProcess) refreshDrawerLogs();
+    });
+
+    // ─── Guard All Button ───
+    $('guard-all-btn')?.addEventListener('click', async () => {
+        const guardAllBtn = $('guard-all-btn') as HTMLButtonElement;
+        if (!guardAllBtn) return;
+
+        const guardable = allProcesses.filter(p => p.name !== 'bgr-dashboard');
+        const guarded = guardable.filter(p => isGuarded(p)).length;
+        const allGuarded = guardable.length > 0 && guarded >= guardable.length;
+        const newState = !allGuarded;
+
+        // Disable button during operation
+        guardAllBtn.disabled = true;
+        guardAllBtn.style.opacity = '0.5';
+
+        try {
+            const res = await fetch('/api/guard-all', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enabled: newState }),
+            });
+            if (res.ok) {
+                const data = await res.json();
+                showToast(
+                    `${newState ? 'Guarded' : 'Unguarded'} ${data.count} process${data.count !== 1 ? 'es' : ''}`,
+                    'success'
+                );
+            } else {
+                const data = await res.json();
+                showToast(data.error || 'Failed to toggle guard for all processes', 'error');
+            }
+        } catch {
+            showToast('Failed to toggle guard for all processes', 'error');
+        }
+
+        guardAllBtn.disabled = false;
+        guardAllBtn.style.opacity = '';
+        await loadProcessesFresh();
+        mutationUntil = Date.now() + 3000;
     });
 
     // Group toggle removed — always-on directory grouping
