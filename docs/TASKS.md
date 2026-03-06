@@ -14,3 +14,11 @@
 - [x] ~~**Built-in process guard**~~ — ✅ DONE (v3.10.2). Guard loop runs inside dashboard server, checks every 30s for dead processes with `BGR_KEEP_ALIVE=true`, auto-restarts them.
 - [x] ~~**Guard scope**~~ — ✅ DONE (v3.10.2). Guard only restarts processes with `BGR_KEEP_ALIVE=true` in their env (not all processes). Per user feedback.
 - [x] ~~**updateProcessEnv()**~~ — ✅ DONE. Added to `db.ts` for updating a process's env JSON by name.
+
+## 🟢 Priority: Features
+- [ ] **Live log streaming** — Stream process `stdout`/`stderr` via WebSocket to the dashboard drawer directly, so users don't have to `cat` logs manually.
+- [ ] **Resource charts** — Add CPU/Memory historical usage charts in the dashboard using small sparklines.
+
+## 🟡 Priority: Improve
+- [ ] **Mobile responsive tables** — Improve the process list view on mobile devices so action buttons don't overflow the screen.
+- [x] ~~**Crash loop backoff**~~ — ✅ DONE. Add exponential backoff for the guard restarter if a process crashes immediately upon startup over 5 times.

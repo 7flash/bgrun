@@ -21,10 +21,12 @@ import { handleRun } from './commands/run';
 const GUARD_INTERVAL_MS = 30_000; // Check every 30 seconds
 const GUARD_SKIP_NAMES = new Set(['bgr-dashboard']); // Don't try to restart ourselves
 
-// In-memory guard restart counter (persists across module re-evaluations)
+// In-memory guard restart counter and timestamps (persists across module re-evaluations)
 const _g = globalThis as any;
 if (!_g.__bgrGuardRestartCounts) _g.__bgrGuardRestartCounts = new Map<string, number>();
+if (!_g.__bgrGuardNextRestartTime) _g.__bgrGuardNextRestartTime = new Map<string, number>();
 export const guardRestartCounts: Map<string, number> = _g.__bgrGuardRestartCounts;
+const guardNextRestartTime: Map<string, number> = _g.__bgrGuardNextRestartTime;
 
 export async function startServer() {
     // Dynamic import to avoid melina's side-effect console.log at bundle load time
@@ -77,6 +79,10 @@ function startGuard() {
 
                 const alive = await isProcessRunning(proc.pid, proc.command);
                 if (!alive) {
+                    const now = Date.now();
+                    const nextRestart = guardNextRestartTime.get(proc.name) || 0;
+                    if (now < nextRestart) continue; // Still in backoff period
+
                     console.log(`[guard] ⚠ Guarded process "${proc.name}" (PID ${proc.pid}) is dead, restarting...`);
                     try {
                         await handleRun({
@@ -85,12 +91,33 @@ function startGuard() {
                             force: true,
                             remoteName: '',
                         });
+
                         // Track restart count
-                        const prev = guardRestartCounts.get(proc.name) || 0;
-                        guardRestartCounts.set(proc.name, prev + 1);
-                        console.log(`[guard] ✓ Restarted "${proc.name}" (restart #${prev + 1})`);
+                        const prevCount = guardRestartCounts.get(proc.name) || 0;
+                        const newCount = prevCount + 1;
+                        guardRestartCounts.set(proc.name, newCount);
+
+                        // Exponential backoff if it crashes repeatedly (more than 5 times)
+                        if (newCount > 5) {
+                            const backoffSeconds = Math.min(30 * Math.pow(2, newCount - 6), 300); // 30s, 60s, 120s, up to 5 mins
+                            guardNextRestartTime.set(proc.name, Date.now() + (backoffSeconds * 1000));
+                            console.log(`[guard] ✓ Restarted "${proc.name}" (restart #${newCount}). Crash loop detected: next check delayed by ${backoffSeconds}s.`);
+                        } else {
+                            console.log(`[guard] ✓ Restarted "${proc.name}" (restart #${newCount})`);
+                        }
                     } catch (err: any) {
                         console.error(`[guard] ✗ Failed to restart "${proc.name}": ${err.message}`);
+                    }
+                } else {
+                    // Reset counter if process has been stable (alive at least once during check)
+                    const prevCount = guardRestartCounts.get(proc.name) || 0;
+                    if (prevCount > 0) {
+                        const nextRestart = guardNextRestartTime.get(proc.name) || 0;
+                        if (Date.now() > nextRestart + 60_000) {
+                            // If it lived over 60s past its backoff threshold, consider it stable
+                            guardRestartCounts.delete(proc.name);
+                            guardNextRestartTime.delete(proc.name);
+                        }
                     }
                 }
             }
