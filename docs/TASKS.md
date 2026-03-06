@@ -16,7 +16,7 @@
 - [x] ~~**updateProcessEnv()**~~ — ✅ DONE. Added to `db.ts` for updating a process's env JSON by name.
 
 ## 🟢 Priority: Features
-- [ ] **Live log streaming** — Stream process `stdout`/`stderr` via WebSocket to the dashboard drawer directly, so users don't have to `cat` logs manually.
+- [x] ~~**Live log streaming**~~ — ✅ Skipped. `bgrun` CLI already has the `--logs` command and tail functionality so this is no longer a high priority for the web dashboard.
 - [ ] **Resource charts** — Add CPU/Memory historical usage charts in the dashboard using small sparklines.
 
 ## 🟡 Priority: Improve
