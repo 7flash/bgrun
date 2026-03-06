@@ -20,5 +20,5 @@
 - [ ] **Resource charts** — Add CPU/Memory historical usage charts in the dashboard using small sparklines.
 
 ## 🟡 Priority: Improve
-- [ ] **Mobile responsive tables** — Improve the process list view on mobile devices so action buttons don't overflow the screen.
+- [x] ~~**Mobile responsive tables**~~ — ✅ DONE. Fixed the issue where action buttons overflowed on mobile screens by updating `.card-actions` CSS to use a 3-column grid layout, ensuring buttons wrap gracefully without squashing.
 - [x] ~~**Crash loop backoff**~~ — ✅ DONE. Add exponential backoff for the guard restarter if a process crashes immediately upon startup over 5 times.
