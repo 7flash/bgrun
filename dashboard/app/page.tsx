@@ -84,7 +84,8 @@ export default function DashboardPage() {
                             <th style={{ width: '90px' }}>Status</th>
                             <th style={{ width: '70px' }}>PID</th>
                             <th style={{ width: '70px' }}>Port</th>
-                            <th style={{ width: '70px' }}>Memory</th>
+                            <th style={{ width: '80px' }}>CPU</th>
+                            <th style={{ width: '120px' }}>Memory</th>
                             <th>Command</th>
                             <th style={{ width: '100px' }}>Runtime</th>
                         </tr>

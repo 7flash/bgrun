@@ -1,6 +1,6 @@
 import { getAllProcesses, updateProcessPid } from '../../../../src/db';
 import { calculateRuntime } from '../../../../src/utils';
-import { getProcessBatchMemory, reconcileProcessPids } from '../../../../src/platform';
+import { getProcessBatchResources, reconcileProcessPids } from '../../../../src/platform';
 import { guardRestartCounts } from '../../../../src/server';
 import { measure, createMeasure } from 'measure-fn';
 import { $ } from 'bun';
@@ -15,7 +15,12 @@ const g = globalThis as any;
 if (!g.__bgrProcessCache) {
     g.__bgrProcessCache = { data: null, timestamp: 0, inflight: null };
 }
+if (!g.__bgrResourceHistory) {
+    // Map of process name -> { memory: number[], cpu: number[], lastCpuTime: number, lastCheck: number }
+    g.__bgrResourceHistory = new Map<string, { memory: number[], cpu: number[], lastCpuTime: number, lastCheck: number }>();
+}
 const cache = g.__bgrProcessCache;
+const history = g.__bgrResourceHistory;
 
 function withTimeout<T>(promise: Promise<T>, fallback: T): Promise<T> {
     return Promise.race([
@@ -110,10 +115,10 @@ async function fetchProcesses(): Promise<any[]> {
         const pids = procs.map((p: any) => p.pid);
 
         // Three subprocess calls total (not 3×N)
-        let [runningPids, portMap, memoryMap] = await Promise.all([
+        let [runningPids, portMap, resourceMap] = await Promise.all([
             m('Running PIDs', () => withTimeout(getRunningPids(pids), new Set<number>())),
             m('Port map', () => withTimeout(getPortsByPid(pids), new Map<number, number[]>())),
-            m('Memory map', () => withTimeout(getProcessBatchMemory(pids), new Map<number, number>())),
+            m('Resource map', () => withTimeout(getProcessBatchResources(pids), new Map<number, { memory: number, cpu: number }>())),
         ]);
 
         // PID reconciliation: if stored PIDs are dead, try to find the real process
@@ -140,22 +145,69 @@ async function fetchProcesses(): Promise<any[]> {
                 if (!runningPids) runningPids = new Set();
                 for (const pid of newPids) runningPids.add(pid);
 
-                // Re-fetch ports and memory for the new PIDs
-                const [newPorts, newMem] = await Promise.all([
+                // Re-fetch ports and resources for the new PIDs
+                const [newPorts, newResources] = await Promise.all([
                     withTimeout(getPortsByPid(newPids), new Map<number, number[]>()),
-                    withTimeout(getProcessBatchMemory(newPids), new Map<number, number>()),
+                    withTimeout(getProcessBatchResources(newPids), new Map<number, { memory: number, cpu: number }>()),
                 ]);
                 if (!portMap) portMap = new Map();
-                if (!memoryMap) memoryMap = new Map();
+                if (!resourceMap) resourceMap = new Map();
                 for (const [pid, ports] of newPorts) portMap.set(pid, ports);
-                for (const [pid, mem] of newMem) memoryMap.set(pid, mem);
+                for (const [pid, res] of newResources) resourceMap.set(pid, res);
             }
         }
+
+        const now = Date.now();
+        const isWin = process.platform === 'win32';
 
         return procs.map((p: any) => {
             const running = runningPids?.has(p.pid) ?? false;
             const ports = running ? (portMap?.get(p.pid) || []) : [];
-            const memory = running ? (memoryMap?.get(p.pid) || 0) : 0;
+            const res = running ? (resourceMap?.get(p.pid) || { memory: 0, cpu: 0 }) : { memory: 0, cpu: 0 };
+
+            // Manage history tracking for sparklines (up to 60 points = 5 minutes at 5s polling)
+            let h = history.get(p.name);
+            if (!h) {
+                h = { memory: [], cpu: [], lastCpuTime: 0, lastCheck: 0 };
+                history.set(p.name, h);
+            }
+
+            let cpuPercent = 0;
+            if (running) {
+                if (isWin) {
+                    // Windows: cpu is cumulative seconds. Calculate delta percentage across time.
+                    if (h.lastCheck > 0 && h.lastCpuTime > 0) {
+                        const timeDeltaSec = (now - h.lastCheck) / 1000;
+                        const cpuDeltaSec = res.cpu - h.lastCpuTime;
+                        if (timeDeltaSec > 0 && cpuDeltaSec >= 0) {
+                            // Max it at 100% per core? We'll just display the total usage
+                            cpuPercent = (cpuDeltaSec / timeDeltaSec) * 100;
+                        }
+                    }
+                    h.lastCpuTime = res.cpu;
+                } else {
+                    // Unix: it's already a percentage from \`ps\`
+                    cpuPercent = res.cpu;
+                }
+
+                // Add points
+                h.memory.push(res.memory);
+                h.cpu.push(cpuPercent);
+                if (h.memory.length > 60) h.memory.shift();
+                if (h.cpu.length > 60) h.cpu.shift();
+            } else {
+                // Not running, push zeros if not already zeroed out to bring graphs down
+                if (h.memory.length > 0 && h.memory[h.memory.length - 1] !== 0) {
+                    h.memory.push(0);
+                    h.cpu.push(0);
+                    if (h.memory.length > 60) h.memory.shift();
+                    if (h.cpu.length > 60) h.cpu.shift();
+                }
+                h.lastCheck = 0;
+                h.lastCpuTime = 0;
+            }
+
+            if (running) h.lastCheck = now;
 
             return {
                 name: p.name,
@@ -165,7 +217,10 @@ async function fetchProcesses(): Promise<any[]> {
                 running,
                 port: ports.length > 0 ? ports[0] : null,
                 ports,
-                memory, // Bytes
+                memory: res.memory, // Bytes
+                cpu: cpuPercent, // Percentage
+                memoryHistory: [...h.memory],
+                cpuHistory: [...h.cpu],
                 group: getProcessGroup(p.env),
                 runtime: calculateRuntime(p.timestamp),
                 timestamp: p.timestamp,

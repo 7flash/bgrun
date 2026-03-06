@@ -484,56 +484,70 @@ export function copyFile(src: string, dest: string): void {
  * Get memory usage of a process in bytes
  */
 export async function getProcessMemory(pid: number): Promise<number> {
-  const map = await getProcessBatchMemory([pid]);
-  return map.get(pid) || 0;
+  const map = await getProcessBatchResources([pid]);
+  return map.get(pid)?.memory || 0;
 }
 
 /**
- * Get memory usage for a batch of PIDs in bytes.
- * Returns a Map of PID -> Memory (bytes).
+ * Get memory and CPU usage for a batch of PIDs.
+ * Returns a Map of PID -> { memory: bytes, cpu: number }.
+ * On Windows, CPU is cumulative time in seconds.
+ * On Unix, CPU is instantaneous percentage.
  * 
  * Optimization: Fetches ALL processes in one go and filters in-memory
  * to avoid spawning N subprocesses.
  */
-export async function getProcessBatchMemory(pids: number[]): Promise<Map<number, number>> {
+export async function getProcessBatchResources(pids: number[]): Promise<Map<number, { memory: number, cpu: number }>> {
   if (pids.length === 0) return new Map();
 
-  return await plat.measure(`Batch memory (${pids.length} PIDs)`, async () => {
-    const memoryMap = new Map<number, number>();
+  return await plat.measure(`Batch resources (${pids.length} PIDs)`, async () => {
+    const resourceMap = new Map<number, { memory: number, cpu: number }>();
     const pidSet = new Set(pids);
 
     try {
       if (isWindows()) {
-        const result = await $`powershell -Command "Get-Process | Select-Object Id, WorkingSet"`.nothrow().quiet().text();
+        const result = await $`powershell -Command "Get-Process | Select-Object Id, CPU, WorkingSet"`.nothrow().quiet().text();
         const lines = result.trim().split('\n');
 
         for (const line of lines) {
           const trimmed = line.trim();
           if (!trimmed || trimmed.startsWith('Id') || trimmed.startsWith('--')) continue;
 
-          const parts = trimmed.split(/\s+/);
-          if (parts.length >= 2) {
-            const val1 = parseInt(parts[0]);
-            const val2 = parseInt(parts[parts.length - 1]);
+          // Replace multiple spaces with a single space to parse correctly
+          const parts = trimmed.split(/\\s+/);
+          if (parts.length >= 3) {
+            const pid = parseInt(parts[0]);
+            // CPU can sometimes be blank if process is just starting, handle that
+            let cpuStr = parts[1];
+            let memStr = parts[2];
+            if (parts.length === 2) {
+              // If CPU is missing, powershell might omit it and give just ID and WorkingSet
+              cpuStr = "0";
+              memStr = parts[1];
+            }
 
-            if (!isNaN(val1) && !isNaN(val2)) {
-              if (pidSet.has(val1)) memoryMap.set(val1, val2);
+            const cpu = parseFloat(cpuStr) || 0;
+            const memory = parseInt(memStr) || 0;
+
+            if (!isNaN(pid) && !isNaN(memory)) {
+              if (pidSet.has(pid)) resourceMap.set(pid, { memory, cpu });
             }
           }
         }
       } else {
-        const result = await $`ps -eo pid,rss`.nothrow().quiet().text();
+        const result = await $`ps -eo pid,pcpu,rss`.nothrow().quiet().text();
         const lines = result.trim().split('\n');
 
         for (let i = 1; i < lines.length; i++) {
           const line = lines[i].trim();
           if (!line) continue;
-          const [pidStr, rssStr] = line.split(/\s+/);
+          const [pidStr, cpuStr, rssStr] = line.split(/\\s+/);
           const pid = parseInt(pidStr);
-          const rss = parseInt(rssStr);
+          const cpu = parseFloat(cpuStr) || 0;
+          const rss = parseInt(rssStr) || 0;
 
           if (pidSet.has(pid)) {
-            memoryMap.set(pid, rss * 1024);
+            resourceMap.set(pid, { memory: rss * 1024, cpu });
           }
         }
       }
@@ -541,7 +555,7 @@ export async function getProcessBatchMemory(pids: number[]): Promise<Map<number,
       // silently fail
     }
 
-    return memoryMap;
+    return resourceMap;
   }) ?? new Map();
 }
 

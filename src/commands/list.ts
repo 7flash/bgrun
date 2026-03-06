@@ -4,7 +4,7 @@ import type { ProcessTableRow } from "../table";
 import { getAllProcesses } from "../db";
 import { announce } from "../logger";
 import { isProcessRunning, calculateRuntime, parseEnvString } from "../utils";
-import { getProcessPorts, getProcessBatchMemory } from "../platform";
+import { getProcessPorts, getProcessBatchResources } from "../platform";
 import { measure } from "measure-fn";
 
 function formatMemory(bytes: number): string {
@@ -51,12 +51,12 @@ export async function showAll(opts?: { json?: boolean; filter?: string }) {
 
     // Batch fetch memory for all PIDs
     const allPids = filtered.map(p => p.pid);
-    const memoryMap = await getProcessBatchMemory(allPids);
+    const resourceMap = await getProcessBatchResources(allPids);
 
     for (const proc of filtered) {
         const isRunning = await isProcessRunning(proc.pid, proc.command);
         const runtime = calculateRuntime(proc.timestamp);
-        const mem = isRunning ? (memoryMap.get(proc.pid) || 0) : 0;
+        const mem = isRunning ? (resourceMap.get(proc.pid)?.memory || 0) : 0;
 
         const ports = isRunning ? await getProcessPorts(proc.pid) : [];
         tableData.push({

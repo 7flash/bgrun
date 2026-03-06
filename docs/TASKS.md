@@ -17,7 +17,7 @@
 
 ## 🟢 Priority: Features
 - [x] ~~**Live log streaming**~~ — ✅ Skipped. `bgrun` CLI already has the `--logs` command and tail functionality so this is no longer a high priority for the web dashboard.
-- [ ] **Resource charts** — Add CPU/Memory historical usage charts in the dashboard using small sparklines.
+- [x] ~~**Resource charts**~~ — ✅ DONE. Added CPU/Memory historical usage charts in the dashboard using SVG MiniSparklines, tracked over a 5-minute rolling window without heavy external libraries.
 
 ## 🟡 Priority: Improve
 - [x] ~~**Mobile responsive tables**~~ — ✅ DONE. Fixed the issue where action buttons overflowed on mobile screens by updating `.card-actions` CSS to use a 3-column grid layout, ensuring buttons wrap gracefully without squashing.

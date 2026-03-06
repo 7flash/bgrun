@@ -2371,3 +2371,6 @@ a.port-link:hover {
         border: 1px solid var(--border-glass);
     }
 }
+.metrics-cell { display: flex; align-items: center; justify-content: flex-start; gap: 4px; }
+.metrics-cell span { min-width: 48px; }
+

@@ -27,6 +27,9 @@ interface ProcessData {
     stdoutPath: string;
     stderrPath: string;
     guardRestarts: number;
+    cpu?: number;
+    cpuHistory?: number[];
+    memoryHistory?: number[];
 }
 
 // ─── SVG Icon Helpers ───
@@ -99,6 +102,30 @@ function ShieldIcon() {
     return (
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+        </svg>
+    );
+}
+
+// ─── Sparkline Component ───
+function MiniSparkline({ data, height = 24, stroke = "var(--text-accent)" }: { data: number[], height?: number, stroke?: string }) {
+    if (!data || data.length < 2) return <svg className="sparkline" viewBox="0 0 100 24" height={height} width="60" />;
+
+    const max = Math.max(...data, 1);
+    const min = Math.min(...data, 0); // anchor to 0 minimum
+    const range = max - min || 1;
+    const padding = 2; // top/bottom pixel padding
+
+    // Normalize path across 100 viewBox width
+    const path = data.map((val, i) => {
+        const x = (i / (data.length - 1)) * 100;
+        const normalizedY = ((val - min) / range);
+        const y = padding + (1 - normalizedY) * (24 - padding * 2);
+        return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
+    }).join(' ');
+
+    return (
+        <svg className="sparkline" viewBox="0 0 100 24" height={height} width="60" fill="none" stroke={stroke} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '6px', opacity: 0.8 }}>
+            <path d={path} />
         </svg>
     );
 }
@@ -201,9 +228,21 @@ function ProcessRow({ p, animate }: { p: ProcessData; animate?: boolean }) {
                     : <span style={{ color: 'var(--text-muted)' }}>–</span>
                 }
             </td>
+            <td className="cpu">
+                {p.running && (p.cpu !== undefined)
+                    ? <div className="metrics-cell">
+                        <span>{p.cpu > 0 ? `${p.cpu.toFixed(1)}%` : '<0.1%'}</span>
+                        <MiniSparkline data={p.cpuHistory || []} stroke="#7ee787" />
+                    </div>
+                    : <span style={{ color: 'var(--text-muted)' }}>–</span>
+                }
+            </td>
             <td className="memory">
-                {p.memory > 0
-                    ? <span className="memory-badge">{formatMemory(p.memory)}</span>
+                {p.running && p.memory > 0
+                    ? <div className="metrics-cell">
+                        <span className="memory-badge">{formatMemory(p.memory)}</span>
+                        <MiniSparkline data={p.memoryHistory || []} stroke="#a5d6ff" />
+                    </div>
                     : <span style={{ color: 'var(--text-muted)' }}>–</span>
                 }
             </td>
@@ -264,7 +303,8 @@ function ProcessCard({ p }: { p: ProcessData }) {
             <div className="card-details">
                 <div className="card-detail"><span className="card-label">PID</span><span>{p.pid}</span></div>
                 <div className="card-detail"><span className="card-label">Port</span>{p.port ? <a className="port-link" href={`http://localhost:${p.port}`} target="_blank" rel="noopener" onClick={(e: Event) => e.stopPropagation()}>:{p.port}</a> : <span>–</span>}</div>
-                <div className="card-detail"><span className="card-label">Memory</span><span>{p.memory > 0 ? formatMemory(p.memory) : '–'}</span></div>
+                <div className="card-detail"><span className="card-label">CPU</span>{p.running && (p.cpu !== undefined) ? <div style={{ display: 'flex', alignItems: 'center' }}><span>{p.cpu > 0 ? `${p.cpu.toFixed(1)}%` : '<0.1%'}</span><MiniSparkline data={p.cpuHistory || []} stroke="#7ee787" /></div> : <span>–</span>}</div>
+                <div className="card-detail"><span className="card-label">Memory</span>{p.running && p.memory > 0 ? <div style={{ display: 'flex', alignItems: 'center' }}><span>{formatMemory(p.memory)}</span><MiniSparkline data={p.memoryHistory || []} stroke="#a5d6ff" /></div> : <span>–</span>}</div>
                 <div className="card-detail"><span className="card-label">Runtime</span><span>{formatRuntime(p.runtime)}</span></div>
             </div>
             <div className="card-command" title={p.command}>{p.command}</div>
