@@ -66,14 +66,14 @@ if ($Install) {
 
     Register-ScheduledTask `
         -TaskName "bgrun-guard" `
-        -Description "bgrun process manager — auto-starts all guarded processes on login" `
+        -Description "bgrun process manager - auto-starts all guarded processes on login" `
         -Action $action `
         -Trigger $trigger `
         -Settings $settings `
         -RunLevel Highest `
         -Force
 
-    Write-Log "✓ Task 'bgrun-guard' registered. Will start on next login."
+    Write-Log "[OK] Task 'bgrun-guard' registered. Will start on next login."
     Write-Log "  Script: $scriptPath"
     exit 0
 }
@@ -115,4 +115,4 @@ $guardProc = Start-Process -FilePath $BunPath `
     -WorkingDirectory $BgrunPath
 
 Write-Log "Guard PID: $($guardProc.Id)"
-Write-Log "✓ bgrun startup complete. Dashboard: $($dashboardProc.Id), Guard: $($guardProc.Id)"
+Write-Log "[OK] bgrun startup complete. Dashboard: $($dashboardProc.Id), Guard: $($guardProc.Id)"
