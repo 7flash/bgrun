@@ -31,9 +31,11 @@
 - [x] ~~**Crash loop backoff**~~ — ✅ DONE. Exponential backoff after 5 rapid crashes.
 
 ## 🟡 Priority: Improve
-- [x] ~~**Dashboard process search persistence**~~ — ✅ DONE. Debounced 150ms input, DOM-to-variable sync on every render, keyboard focus-ring preserved across SSE rebuilds, result count badge (N/M) in search bar.
-- [x] ~~**Log line height calibration**~~ — ✅ DONE. Auto-measures actual `.log-line` height from DOM on first render via `calibrateLogLineHeight()` + rAF. Replaces hardcoded 22px with real measurement for pixel-perfect virtual scroll spacers.
-- [x] ~~**Dashboard keyboard shortcuts**~~ — ✅ DONE. Arrow ↑/↓ (or j/k) to navigate process rows with purple focus ring. Enter=open drawer, R=restart, S=stop, G=guard toggle, D=delete, N=new process, ?=help overlay. Glassmorphism shortcuts panel with 2-column grid. `?` button in toolbar for discoverability. All shortcuts suppressed in text inputs.
+- [x] ~~**Windows auto-start**~~ — ✅ DONE. `scripts/bgr-startup.ps1` — registers a Task Scheduler entry (`bgrun-guard`) that auto-starts dashboard + guard on login. Install: `powershell -ExecutionPolicy Bypass -File scripts/bgr-startup.ps1 -Install`. Starts dashboard first (port 3000), waits 5s, then launches `--guard` which monitors all guarded processes.
+- [ ] **npm publish latest** — Current npm version is behind. Dashboard guard, dep graph, log rotation, keyboard shortcuts — all unpublished. Bump version and `npm publish`.
+- [x] ~~**Dashboard process search persistence**~~ — ✅ DONE.
+- [x] ~~**Log line height calibration**~~ — ✅ DONE.
+- [x] ~~**Dashboard keyboard shortcuts**~~ — ✅ DONE.
 
 ## 📝 Architecture Notes
 - **Dashboard**: `bgrun --dashboard` (Port 3000 or `--port N`)

@@ -1,6 +1,6 @@
 {
   "name": "bgrun",
-  "version": "3.11.0",
+  "version": "3.12.0",
   "description": "bgrun — A lightweight process manager for Bun",
   "type": "module",
   "main": "./src/api.ts",
@@ -19,6 +19,7 @@
     "dist",
     "src",
     "dashboard/app",
+    "scripts",
     "README.md",
     "image.png",
     "examples/bgr-startup.sh"
