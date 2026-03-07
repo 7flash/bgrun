@@ -26,7 +26,12 @@ export async function GET(req: Request) {
                 controller.enqueue(encoder.encode(`data: []\n\n`));
             }
 
-            controller.enqueue(encoder.encode(`: keepalive\n\n`));
+            // Periodic keepalive to prevent proxy/browser timeouts
+            const keepaliveInterval = setInterval(() => {
+                try {
+                    controller.enqueue(encoder.encode(`: keepalive\n\n`));
+                } catch { /* stream closed */ }
+            }, 15_000);
 
             // Then send updates every INTERVAL_MS
             const interval = setInterval(async () => {
@@ -40,7 +45,10 @@ export async function GET(req: Request) {
             }, INTERVAL_MS);
 
             // Store cleanup for when the stream is cancelled
-            (stream as any).__cleanup = () => clearInterval(interval);
+            (stream as any).__cleanup = () => {
+                clearInterval(interval);
+                clearInterval(keepaliveInterval);
+            };
         },
         cancel() {
             if ((stream as any).__cleanup) {

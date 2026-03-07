@@ -1539,13 +1539,17 @@ export default function mount(): () => void {
     let eventSource: EventSource | null = null;
     let logRefreshTimer: ReturnType<typeof setInterval> | null = null;
     let sseThrottleTimer: ReturnType<typeof setTimeout> | null = null;
+    let sseRetryDelay = 2_000;       // exponential backoff start
+    const SSE_MAX_RETRY = 30_000;    // max 30s between retries
 
     // Initial data load — don't depend on SSE for first render
     loadProcesses();
 
     function connectSSE() {
+        if (eventSource) { eventSource.close(); eventSource = null; }
         eventSource = new EventSource('/api/events');
         eventSource.onmessage = (event) => {
+            sseRetryDelay = 2_000; // reset backoff on success
             // Skip SSE updates briefly after mutations to avoid flicker
             if (Date.now() < mutationUntil) return;
             try {
@@ -1561,13 +1565,28 @@ export default function mount(): () => void {
             } catch { /* invalid data, skip */ }
         };
         eventSource.onerror = () => {
-            // SSE disconnected, reconnect after 5s
+            // SSE disconnected — exponential backoff reconnect
             eventSource?.close();
             eventSource = null;
-            setTimeout(connectSSE, 5000);
+            setTimeout(connectSSE, sseRetryDelay);
+            sseRetryDelay = Math.min(sseRetryDelay * 2, SSE_MAX_RETRY);
         };
     }
     connectSSE();
+
+    // Pause SSE when tab is hidden, resume when visible
+    function handleVisibility() {
+        if (document.hidden) {
+            eventSource?.close();
+            eventSource = null;
+        } else {
+            if (!eventSource) {
+                sseRetryDelay = 2_000; // reset on manual re-focus
+                connectSSE();
+            }
+        }
+    }
+    document.addEventListener('visibilitychange', handleVisibility);
 
     // Log drawer still needs periodic refresh (not part of SSE)
     logRefreshTimer = setInterval(() => {
@@ -1584,6 +1603,7 @@ export default function mount(): () => void {
         $('modal-create-btn')?.removeEventListener('click', createProcess);
         $('refresh-btn')?.removeEventListener('click', loadProcesses);
         document.removeEventListener('keydown', handleKeydown);
+        document.removeEventListener('visibilitychange', handleVisibility);
         closeContextMenu();
         if (eventSource) eventSource.close();
         if (logRefreshTimer) clearInterval(logRefreshTimer);
