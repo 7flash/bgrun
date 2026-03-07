@@ -1,10 +1,14 @@
 # bgrun — Tasks
 
 ## 🔴 Priority: Fix
+- [x] ~~**Dashboard [object Object] rendering**~~ — ✅ DONE. Process table rendered `[object Object]` instead of rows. Triple-layered root cause: (1) duplicate `@jsxImportSource` pragma in docblock overrode real pragma with `resolves/jsx-dev-runtime`, (2) VDOM `render()` incompatible with dashboard's DOM manipulation (cleared `<thead>` when rendering `<tbody>`), (3) no initial `loadProcesses()` — relied solely on SSE for first render. Fixed by reverting to jsx-dom runtime + `replaceChildren()` + adding initial REST fetch.
 - [x] ~~**Standalone guard process**~~ — ✅ DONE. `bgrun --guard` spawns an independent `bgr-guard` process that monitors ALL guarded processes (BGR_KEEP_ALIVE=true) AND the dashboard itself. If the dashboard dies, the guard restarts it — solving the critical issue where the built-in guard (running inside the dashboard) would die with it, leaving all processes unprotected. Implementation: `src/guard.ts` with per-process error isolation, exponential backoff after 5 rapid restarts, 2-minute stability window for counter reset. CLI: `--guard` (spawns managed process), `--_guard-loop` (internal loop).
 - [x] ~~**bgr_list.json in git**~~ — ✅ DONE. `bgr_list.json` (CLI output containing env vars) was committed to repo. Fix: added to `.gitignore`. Keys already rotated so old history is fine.
 
 ## 🟡 Priority: Improve
+- [x] ~~**Dashboard SSE stability**~~ — ✅ DONE. Server: added 15s periodic keepalive comments to prevent proxy/browser timeouts. Client: exponential backoff reconnections (2s→30s max), visibility-based SSE pausing (disconnect on tab hide, reconnect on focus), backoff reset on successful message.
+- [x] ~~**Publish melina 2.3.7**~~ — ✅ DONE. Null guards added to render.ts (applyProps/patchProps/mountVNode). Published to npm, pushed to GitHub.
+- [ ] **Dashboard log viewer reconciliation** — The keyed reconciler for log lines was removed during jsx-dom revert. If log rendering perf degrades with many lines, need alternative optimization (e.g., virtual scrolling).
 - [x] ~~**Guard dashboard UI**~~ — ✅ DONE. Added guard sentinel pill to toolbar showing standalone bgr-guard process status (green pulsing dot when running, red when stopped, gray when absent). Shows restart count. CSS: `.guard-sentinel-pill`, `.guard-sentinel-dot`.
 - [x] ~~**Log rotation**~~ — ✅ DONE. `src/log-rotation.ts` — size-based rotation (10MB max, keeps last 5000 lines), periodic check every 60s, auto-starts with dashboard. API: `GET /api/logs/rotate` (sizes), `POST /api/logs/rotate` (trigger). Rotation header preserved in file for auditability.
 - [x] ~~**Process dependency graph**~~ — ✅ DONE. `src/deps.ts` — adjacency list graph with Kahn's topological sort, cycle detection, and unmet dependency checking. Dependencies stored in `BGR_DEPENDS_ON=name1,name2` env var. Auto-start: `run.ts` checks and starts unmet deps before launching requested process. API: `GET /api/deps` (graph+order), `POST /api/deps` (set deps for a process).
@@ -28,7 +32,13 @@
 
 ## 📝 Architecture Notes
 - **Dashboard**: `bgrun --dashboard` (Port 3000 or `--port N`)
+- **Client**: `dashboard/app/page.client.tsx` — uses **jsx-dom** runtime (NOT VDOM). JSX creates real DOM elements.
 - **Guard**: `bgrun --guard` (standalone process, monitors dashboard + guarded processes)
 - **Guard internals**: `src/guard.ts` — standalone loop, `src/server.ts` — built-in fallback
 - **Guard skip list**: `bgr-dashboard` and `bgr-guard` skip themselves in both guard implementations
 - **DB**: `~/.bgr/bgr_v2.sqlite` (sqlite-zod-orm)
+
+## ⚠️ Gotchas
+- **Never use `@jsxImportSource` as text inside ANY `/** */` comment block** — Bun parses it as a pragma from any JSDoc comment, not just the first one!
+- **Melina `render()` clears container children** — `render(vnode, container)` removes all children before mounting. Don't render into `<table>` if you want to keep `<thead>`.
+- **Build plugin mappings**: `react/jsx-runtime` → `jsx-dom.ts`, `melina/client/jsx-*-runtime` → VDOM, `melina/client` → barrel. `melina/client/render` has NO mapping — don't import it directly in client scripts.
