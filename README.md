@@ -75,11 +75,16 @@ bgrun.yourdomain.com {
 Features:
 - Real-time process status via SSE (no polling)
 - Start, stop, restart, and delete processes from the UI
-- Live stdout/stderr log viewer with search
+- Live stdout/stderr log viewer with search and virtual scrolling
 - Memory, PID, port, runtime, and guard restarts at a glance
 - Guard toggle per-process (auto-restart on crash)
-- Responsive mobile layout
+- Keyboard shortcuts — `↑/↓` or `j/k` navigate, `Enter` open, `R` restart, `S` stop, `G` guard, `D` delete, `N` new, `?` help
+- Search with debounce, result count badge, and persistence across SSE updates
+- Auto-calibrated virtual scroll for large log files (10K+ lines)
+- Dark / light theme toggle
+- Responsive mobile layout with cards view
 - Collapsible directory groups
+- Right-click context menu on process rows
 
 ---
 
