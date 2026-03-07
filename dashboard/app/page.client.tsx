@@ -430,12 +430,26 @@ export default function mount(): () => void {
     let logNeedsFullRebuild = true; // Full DOM rebuild flag (on tab switch, search change)
 
     // ─── Virtual Scrolling State ───
-    const LOG_LINE_HEIGHT = 22;     // px per log line (matches line-height 1.7 @ 0.75rem ≈ ~20px + 2px padding)
+    let LOG_LINE_HEIGHT = 22;       // default estimate, auto-calibrated on first render
+    let logLineHeightCalibrated = false;
     const LOG_OVERSCAN = 10;        // extra lines rendered above/below viewport
     const VIRTUAL_THRESHOLD = 200;  // switch to virtual mode above this many lines
     let logVirtualActive = false;   // whether virtual scrolling is engaged
     let logFilteredIndices: number[] = []; // indices into logLinesRaw that pass the search filter
     let logScrollRAF: number | null = null; // rAF handle for throttled scroll
+
+    /** Measure actual log line height from DOM on first render */
+    function calibrateLogLineHeight(logsEl: HTMLElement) {
+        if (logLineHeightCalibrated) return;
+        const firstLine = logsEl.querySelector('.log-line') as HTMLElement;
+        if (firstLine) {
+            const measured = firstLine.getBoundingClientRect().height;
+            if (measured > 0) {
+                LOG_LINE_HEIGHT = Math.round(measured);
+                logLineHeightCalibrated = true;
+            }
+        }
+    }
 
     // ─── Version Badge ───
     const versionBadge = $('version-badge');
@@ -1252,6 +1266,11 @@ export default function mount(): () => void {
             logsEl.innerHTML = chunks.join('');
         }
         logNeedsFullRebuild = false;
+
+        // Auto-calibrate line height from first rendered line
+        if (!logLineHeightCalibrated) {
+            requestAnimationFrame(() => calibrateLogLineHeight(logsEl));
+        }
     }
 
     function appendNewLogLines(logsEl: HTMLElement, startIndex: number) {

@@ -31,8 +31,8 @@
 - [x] ~~**Crash loop backoff**~~ — ✅ DONE. Exponential backoff after 5 rapid crashes.
 
 ## 🟡 Priority: Improve
-- [ ] **Dashboard process search persistence** — Search query resets on SSE update. Should debounce and preserve across re-renders.
-- [ ] **Log line height calibration** — Virtual scrolling uses fixed 22px line height estimate. Could measure actual line height on first render for pixel-perfect spacers.
+- [x] ~~**Dashboard process search persistence**~~ — ✅ DONE. Debounced 150ms input, DOM-to-variable sync on every render, keyboard focus-ring preserved across SSE rebuilds, result count badge (N/M) in search bar.
+- [x] ~~**Log line height calibration**~~ — ✅ DONE. Auto-measures actual `.log-line` height from DOM on first render via `calibrateLogLineHeight()` + rAF. Replaces hardcoded 22px with real measurement for pixel-perfect virtual scroll spacers.
 - [x] ~~**Dashboard keyboard shortcuts**~~ — ✅ DONE. Arrow ↑/↓ (or j/k) to navigate process rows with purple focus ring. Enter=open drawer, R=restart, S=stop, G=guard toggle, D=delete, N=new process, ?=help overlay. Glassmorphism shortcuts panel with 2-column grid. `?` button in toolbar for discoverability. All shortcuts suppressed in text inputs.
 
 ## 📝 Architecture Notes
