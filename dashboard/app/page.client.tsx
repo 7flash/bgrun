@@ -1,15 +1,10 @@
-/** @jsxImportSource melina/client */
 /**
  * bgrun Dashboard — Page Client Interactivity
  *
  * NOT a React component. A mount function that adds interactivity
- * to the server-rendered HTML. JSX here creates real DOM elements
- * (via Melina's jsx-dom runtime, not React virtual DOM).
- *
- * Log viewer uses Melina's VDOM render() with keyed reconciler
- * for efficient incremental DOM updates.
+ * to the server-rendered HTML. JSX creates real DOM elements via
+ * Melina's jsx-dom runtime (mapped from react/jsx-runtime).
  */
-import { render as melinaRender, createElement as h, setReconciler } from 'melina/client/render';
 
 interface ProcessData {
     name: string;
@@ -457,8 +452,8 @@ export default function mount(): () => void {
             allProcesses = await res.json();
             renderFilteredProcesses();
             updateStats(allProcesses);
-        } catch {
-            // silently retry on next tick
+        } catch (err) {
+            console.error('[bgr-dashboard] loadProcesses error:', err);
         } finally {
             isFetching = false;
         }
@@ -526,6 +521,16 @@ export default function mount(): () => void {
         }
     }
 
+    function toggleGroup(groupDir: string) {
+        if (collapsedGroups.has(groupDir)) {
+            collapsedGroups.delete(groupDir);
+        } else {
+            collapsedGroups.add(groupDir);
+        }
+        localStorage.setItem('bgr_collapsed_groups', JSON.stringify([...collapsedGroups]));
+        renderFilteredProcesses();
+    }
+
     function renderProcesses(processes: ProcessData[]) {
         const tbody = $('processes-table');
         const cardsEl = $('mobile-cards');
@@ -553,52 +558,46 @@ export default function mount(): () => void {
             groups[key].push(p);
         });
 
-        const nodes: Node[] = [];
         const sortedGroupKeys = Object.keys(groups).sort();
 
-        // Always show group headers for every directory
+        // Build DOM nodes for table rows
+        const rows: Node[] = [];
         sortedGroupKeys.forEach(groupDir => {
             const procs = groups[groupDir];
             const running = procs.filter(p => p.running).length;
             const collapsed = collapsedGroups.has(groupDir);
-            nodes.push(<GroupHeader name={groupDir} running={running} total={procs.length} collapsed={collapsed} /> as unknown as Node);
+            rows.push(<GroupHeader name={groupDir} running={running} total={procs.length} collapsed={collapsed} /> as unknown as Node);
             if (!collapsed) {
                 procs.forEach(p => {
-                    nodes.push(<ProcessRow p={p} animate={animate} /> as unknown as Node);
+                    rows.push(<ProcessRow p={p} animate={animate} /> as unknown as Node);
                 });
             }
         });
 
-        tbody.replaceChildren(...nodes);
+        // Replace tbody contents with new DOM nodes
+        tbody.replaceChildren(...rows);
 
         // Add click handlers for group headers (toggle collapse)
         tbody.querySelectorAll('.group-header').forEach(header => {
             header.addEventListener('click', (e: Event) => {
-                // Don't collapse if clicking action buttons
                 if ((e.target as Element).closest('[data-action]')) return;
                 const groupName = (header as HTMLElement).dataset.groupName;
                 if (!groupName) return;
-                if (collapsedGroups.has(groupName)) {
-                    collapsedGroups.delete(groupName);
-                } else {
-                    collapsedGroups.add(groupName);
-                }
-                localStorage.setItem('bgr_collapsed_groups', JSON.stringify([...collapsedGroups]));
-                renderFilteredProcesses();
+                toggleGroup(groupName);
             });
         });
 
         // Render mobile cards
         if (cardsEl) {
-            const cards = processes.map(p => <ProcessCard p={p} /> as unknown as Node);
-            cardsEl.replaceChildren(...cards);
+            cardsEl.replaceChildren(...processes.map(p => <ProcessCard p={p} /> as unknown as Node));
         }
 
         if (isFirstLoad) isFirstLoad = false;
 
         // Highlight selected row
         if (drawerProcess) {
-            const row = tbody.querySelector(`tr[data-process-name="${drawerProcess}"]`);
+            const finalTbody = $('processes-table') || tbody;
+            const row = finalTbody.querySelector(`tr[data-process-name="${drawerProcess}"]`);
             if (row) row.classList.add('selected');
         }
     }
@@ -1124,8 +1123,6 @@ export default function mount(): () => void {
         tbody?.querySelectorAll('tr.selected').forEach(r => r.classList.remove('selected'));
     }
 
-    // Use keyed reconciler for efficient log line diffing
-    setReconciler('keyed');
 
     function fullRebuildLogs(logsEl: HTMLElement) {
         const search = logSearch.toLowerCase();
@@ -1542,6 +1539,9 @@ export default function mount(): () => void {
     let eventSource: EventSource | null = null;
     let logRefreshTimer: ReturnType<typeof setInterval> | null = null;
     let sseThrottleTimer: ReturnType<typeof setTimeout> | null = null;
+
+    // Initial data load — don't depend on SSE for first render
+    loadProcesses();
 
     function connectSSE() {
         eventSource = new EventSource('/api/events');
