@@ -32,7 +32,7 @@
 
 ## 🟡 Priority: Improve
 - [x] ~~**Windows auto-start**~~ — ✅ DONE. `scripts/bgr-startup.ps1` — registers a Task Scheduler entry (`bgrun-guard`) that auto-starts dashboard + guard on login. Install: `powershell -ExecutionPolicy Bypass -File scripts/bgr-startup.ps1 -Install`. Starts dashboard first (port 3000), waits 5s, then launches `--guard` which monitors all guarded processes.
-- [ ] **npm publish latest** — Current npm version is behind. Dashboard guard, dep graph, log rotation, keyboard shortcuts — all unpublished. Bump version and `npm publish`.
+- [x] ~~**npm publish latest**~~ — ✅ DONE. Published `bgrun@3.12.0` to npm. Includes: standalone guard, dep graph, log rotation, keyboard shortcuts, Windows auto-start script, SSE stability fixes.
 - [x] ~~**Dashboard process search persistence**~~ — ✅ DONE.
 - [x] ~~**Log line height calibration**~~ — ✅ DONE.
 - [x] ~~**Dashboard keyboard shortcuts**~~ — ✅ DONE.
