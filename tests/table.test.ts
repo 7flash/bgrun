@@ -18,6 +18,7 @@ const sampleProcesses: ProcessTableRow[] = [
     workdir: "/var/www/api",
     status: chalk.green("Running"),
     runtime: "10m",
+    memory: "128 MB",
   },
   {
     id: 2,
@@ -28,6 +29,7 @@ const sampleProcesses: ProcessTableRow[] = [
     workdir: "/home/user/dev/projects/monorepo/packages/service-worker",
     status: chalk.red("Stopped"),
     runtime: "2h",
+    memory: "256 MB",
   },
 ];
 

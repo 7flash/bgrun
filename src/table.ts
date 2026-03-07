@@ -34,12 +34,12 @@ export function getTerminalWidth(): number {
 }
 
 // Strip ANSI color codes for accurate length calculation
-function stripAnsi(str: string): string {
+export function stripAnsi(str: string): string {
   return str.replace(/\u001b\[[0-9;]*m/g, "");
 }
 
 // Default truncator: trims the end of a string
-function truncateString(str: string, maxLength: number): string {
+export function truncateString(str: string, maxLength: number): string {
   const stripped = stripAnsi(str);
   if (stripped.length <= maxLength) return str;
   const ellipsis = "…";
@@ -52,7 +52,7 @@ function truncateString(str: string, maxLength: number): string {
 }
 
 // Path truncator: trims the middle of a string
-function truncatePath(str: string, maxLength: number): string {
+export function truncatePath(str: string, maxLength: number): string {
   const stripped = stripAnsi(str);
   if (stripped.length <= maxLength) return str;
   const ellipsis = "…";

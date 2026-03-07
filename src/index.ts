@@ -12,7 +12,7 @@ import type { CommandOptions } from "./types";
 import { error, announce } from "./logger";
 // startServer is dynamically imported only when --_serve is used
 // to avoid loading melina (which has side-effects) on every bgrun command
-import { getHomeDir, getShellCommand, findChildPid, isProcessRunning, terminateProcess, getProcessPorts, killProcessOnPort, waitForPortFree } from "./platform";
+import { getHomeDir, getShellCommand, findChildPid, isProcessRunning, terminateProcess, getProcessPorts, killProcessOnPort, waitForPortFree, isPortFree } from "./platform";
 import { insertProcess, removeProcessByName, getProcess, retryDatabaseOperation, getDbInfo } from "./db";
 import dedent from "dedent";
 import chalk from "chalk";
@@ -38,6 +38,7 @@ async function showHelp() {
       bgrun                     List all processes
       bgrun [name]             Show details for a process
       bgrun --dashboard        Launch web dashboard (managed by bgrun)
+      bgrun --guard            Launch standalone process guard
       bgrun --restart [name]   Restart a process
       bgrun --restart-all      Restart ALL registered processes
       bgrun --stop [name]      Stop a process (keep in registry)
@@ -105,8 +106,10 @@ async function run() {
       stdout: { type: 'string' },
       stderr: { type: 'string' },
       dashboard: { type: 'boolean' },
+      guard: { type: 'boolean' },
       debug: { type: 'boolean' },
       "_serve": { type: 'boolean' },
+      "_guard-loop": { type: 'boolean' },
       port: { type: 'string' },
     },
     strict: false,
@@ -119,6 +122,15 @@ async function run() {
   if (values['_serve']) {
     const { startServer } = await import("./server");
     await startServer();
+    return;
+  }
+
+  // Internal: actually run the guard loop (spawned by --guard)
+  if (values['_guard-loop']) {
+    const { startGuardLoop } = await import("./guard");
+    const intervalStr = positionals[0];
+    const intervalMs = intervalStr ? parseInt(intervalStr) * 1000 : undefined;
+    await startGuardLoop(intervalMs);
     return;
   }
 
@@ -186,6 +198,21 @@ async function run() {
       spawnEnv.BUN_PORT = requestedPort;
     }
 
+    // Resolve the target port: --port flag > BUN_PORT env > default 3000
+    const targetPort = parseInt(requestedPort || Bun.env.BUN_PORT || '3000');
+    if (!isNaN(targetPort) && targetPort > 0) {
+      // Auto-kill whatever occupies the target port so dashboard always reclaims it
+      const portFree = await isPortFree(targetPort);
+      if (!portFree) {
+        console.log(chalk.yellow(`  ⚡ Port ${targetPort} is occupied — reclaiming...`));
+        await killProcessOnPort(targetPort);
+        const freed = await waitForPortFree(targetPort, 5000);
+        if (!freed) {
+          console.log(chalk.red(`  ⚠ Could not free port ${targetPort} — dashboard may pick a fallback port`));
+        }
+      }
+    }
+
     const newProcess = Bun.spawn(getShellCommand(spawnCommand), {
       env: spawnEnv,
       cwd: bgrDir,
@@ -243,6 +270,85 @@ async function run() {
         ${chalk.yellow('bgrun --restart bgr-dashboard')} Restart the dashboard
     `;
     announce(msg, 'BGR Dashboard');
+    return;
+  }
+
+  // Guard: spawn the standalone guard as a bgr-managed process
+  if (values.guard) {
+    const guardName = 'bgr-guard';
+    const homePath = getHomeDir();
+    const bgrDir = join(homePath, '.bgr');
+
+    // Check if guard is already running
+    const existing = getProcess(guardName);
+    if (existing && await isProcessRunning(existing.pid)) {
+      announce(
+        `Guard is already running (PID ${existing.pid})\n\n` +
+        `  Use ${chalk.yellow(`bgrun --stop ${guardName}`)} to stop it\n` +
+        `  Use ${chalk.yellow(`bgrun --guard --force`)} to restart`,
+        'BGR Guard'
+      );
+      return;
+    }
+
+    // Kill existing if force
+    if (existing) {
+      if (await isProcessRunning(existing.pid)) {
+        await terminateProcess(existing.pid);
+      }
+      await retryDatabaseOperation(() => removeProcessByName(guardName));
+    }
+
+    const { resolve } = require('path');
+    const scriptPath = resolve(process.argv[1]);
+    const spawnCommand = `bun run ${scriptPath} --_guard-loop`;
+    const command = `bgrun --_guard-loop`;
+    const stdoutPath = join(bgrDir, `${guardName}-out.txt`);
+    const stderrPath = join(bgrDir, `${guardName}-err.txt`);
+
+    await Bun.write(stdoutPath, '');
+    await Bun.write(stderrPath, '');
+
+    const newProcess = Bun.spawn(getShellCommand(spawnCommand), {
+      env: { ...Bun.env },
+      cwd: bgrDir,
+      stdout: Bun.file(stdoutPath),
+      stderr: Bun.file(stderrPath),
+    });
+
+    newProcess.unref();
+    await sleep(1000);
+    const actualPid = await findChildPid(newProcess.pid);
+
+    await retryDatabaseOperation(() =>
+      insertProcess({
+        pid: actualPid,
+        workdir: bgrDir,
+        command,
+        name: guardName,
+        env: 'BGR_KEEP_ALIVE=false', // Guard doesn't guard itself
+        configPath: '',
+        stdout_path: stdoutPath,
+        stderr_path: stderrPath,
+      })
+    );
+
+    const msg = dedent`
+      ${chalk.bold('🛡️  BGR Standalone Guard launched')}
+      ${chalk.gray('─'.repeat(40))}
+
+        Monitors: All processes with BGR_KEEP_ALIVE=true
+        Also watches: bgr-dashboard (auto-restart if it dies)
+        Check interval: 30 seconds
+        Backoff: Exponential after 5 rapid crashes
+
+      ${chalk.gray('─'.repeat(40))}
+        Process: ${chalk.white(guardName)}  |  PID: ${chalk.white(String(actualPid))}
+
+        ${chalk.yellow(`bgrun ${guardName} --logs`)}    View guard logs
+        ${chalk.yellow(`bgrun --stop ${guardName}`)}    Stop the guard
+    `;
+    announce(msg, 'BGR Guard');
     return;
   }
 
@@ -435,6 +541,5 @@ async function run() {
 }
 
 run().catch(err => {
-  console.error(chalk.red(err));
-  process.exit(1);
+  error(err);
 });

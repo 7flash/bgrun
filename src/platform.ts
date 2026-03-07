@@ -31,7 +31,7 @@ export async function isProcessRunning(pid: number, command?: string): Promise<b
   // PID 0 means intentionally stopped — never alive
   if (pid <= 0) return false;
 
-  return plat.measure(`PID ${pid} alive?`, async () => {
+  return (await plat.measure(`PID ${pid} alive?`, async () => {
     try {
       // Docker container detection
       if (command && (command.includes('docker run') || command.includes('docker-compose up') || command.includes('docker compose up'))) {
@@ -48,7 +48,7 @@ export async function isProcessRunning(pid: number, command?: string): Promise<b
     } catch {
       return false;
     }
-  });
+  })) ?? false;
 }
 
 /**
@@ -224,8 +224,10 @@ export async function killProcessOnPort(port: number): Promise<void> {
         if (alive) {
           await $`taskkill /F /T /PID ${pid}`.nothrow().quiet();
           console.log(`Killed process ${pid} using port ${port}`);
+        } else {
+          // Zombie socket — PID no longer exists but socket lingers in kernel
+          console.warn(`⚠ Port ${port} held by zombie PID ${pid} (process dead, socket stuck in kernel). Will clear on reboot or TCP timeout.`);
         }
-        // else: zombie socket — PID no longer exists but socket lingers in kernel
       }
     } else {
       // On Unix, use lsof
@@ -456,7 +458,7 @@ export async function findPidByPort(port: number, maxWaitMs = 8000): Promise<num
 }
 
 export async function readFileTail(filePath: string, lines?: number): Promise<string> {
-  return plat.measure(`Read tail ${lines ?? 'all'}L`, async () => {
+  return (await plat.measure(`Read tail ${lines ?? 'all'}L`, async () => {
     try {
       const content = await Bun.file(filePath).text();
 
@@ -470,7 +472,7 @@ export async function readFileTail(filePath: string, lines?: number): Promise<st
     } catch (error) {
       throw new Error(`Error reading file: ${error}`);
     }
-  });
+  })) ?? '';
 }
 
 /**
@@ -514,7 +516,7 @@ export async function getProcessBatchResources(pids: number[]): Promise<Map<numb
           if (!trimmed || trimmed.startsWith('Id') || trimmed.startsWith('--')) continue;
 
           // Replace multiple spaces with a single space to parse correctly
-          const parts = trimmed.split(/\\s+/);
+          const parts = trimmed.split(/\s+/);
           if (parts.length >= 3) {
             const pid = parseInt(parts[0]);
             // CPU can sometimes be blank if process is just starting, handle that
@@ -541,7 +543,7 @@ export async function getProcessBatchResources(pids: number[]): Promise<Map<numb
         for (let i = 1; i < lines.length; i++) {
           const line = lines[i].trim();
           if (!line) continue;
-          const [pidStr, cpuStr, rssStr] = line.split(/\\s+/);
+          const [pidStr, cpuStr, rssStr] = line.split(/\s+/);
           const pid = parseInt(pidStr);
           const cpu = parseFloat(cpuStr) || 0;
           const rss = parseInt(rssStr) || 0;

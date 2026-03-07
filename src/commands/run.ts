@@ -17,6 +17,23 @@ export async function handleRun(options: CommandOptions) {
 
     const existingProcess = name ? getProcess(name) : null;
 
+    // Auto-start unmet dependencies before starting this process
+    if (name && existingProcess) {
+        const { getUnmetDeps } = await import('../deps');
+        const unmet = await getUnmetDeps(name);
+        if (unmet.length > 0) {
+            await run.measure(`Start ${unmet.length} dependencies for "${name}"`, async () => {
+                for (const depName of unmet) {
+                    const depProc = getProcess(depName);
+                    if (depProc) {
+                        announce(`📦 Starting dependency "${depName}" for "${name}"`, 'Dependency');
+                        await handleRun({ action: 'run', name: depName, force: true, remoteName: '' });
+                    }
+                }
+            });
+        }
+    }
+
     if (existingProcess) {
         const finalDirectory = directory || existingProcess.workdir;
         validateDirectory(finalDirectory);

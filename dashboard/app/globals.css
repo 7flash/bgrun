@@ -300,7 +300,7 @@ body::after {
 /* ─── Stats Grid ─── */
 .stats-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(6, 1fr);
     gap: 1rem;
     margin-bottom: 2rem;
 }
@@ -395,7 +395,7 @@ body::after {
     letter-spacing: -0.02em;
 }
 
-.stat-card:not(.running):not(.stopped):not(.memory) .stat-value {
+.stat-card:not(.running):not(.stopped):not(.memory):not(.restarts) .stat-value {
     background: var(--accent-gradient);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
@@ -443,6 +443,24 @@ body::after {
 
 .stat-card.guarded .stat-value {
     color: #14b8a6;
+}
+
+/* ─── Restarts Stat Card ─── */
+.stat-card.restarts {
+    border-left: 3px solid var(--warning);
+}
+
+.stat-card.restarts::before {
+    background: var(--warning);
+    opacity: 0.08;
+}
+
+.stat-card.restarts:hover::before {
+    opacity: 0.12;
+}
+
+.stat-card.restarts .stat-value {
+    color: var(--warning);
 }
 
 /* ─── Guard Toggle (inline shield icon in process name) ─── */
@@ -2258,7 +2276,7 @@ a.port-link:hover {
     }
 
     .stats-grid {
-        grid-template-columns: repeat(2, 1fr);
+        grid-template-columns: repeat(3, 1fr);
     }
 
     .toolbar {
@@ -2371,6 +2389,61 @@ a.port-link:hover {
         border: 1px solid var(--border-glass);
     }
 }
-.metrics-cell { display: flex; align-items: center; justify-content: flex-start; gap: 4px; }
-.metrics-cell span { min-width: 48px; }
 
+.metrics-cell {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 4px;
+}
+
+.metrics-cell span {
+    min-width: 48px;
+}
+
+
+/* Guard Sentinel Pill (standalone guard status) */
+.guard-sentinel-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 9999px;
+    font-size: 0.7rem;
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+    background: var(--bg-glass);
+    border: 1px solid var(--border-glass);
+    letter-spacing: 0.02em;
+    transition: all var(--transition-fast);
+    cursor: default;
+}
+
+.guard-sentinel-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--text-dim);
+    transition: all var(--transition-fast);
+}
+
+.guard-sentinel-pill.active {
+    border-color: rgba(20, 184, 166, 0.25);
+    color: #14b8a6;
+}
+
+.guard-sentinel-pill.active .guard-sentinel-dot {
+    background: #14b8a6;
+    box-shadow: 0 0 6px rgba(20, 184, 166, 0.6);
+    animation: statusPulse 2s infinite;
+}
+
+.guard-sentinel-pill.stopped {
+    border-color: rgba(239, 68, 68, 0.2);
+    color: var(--text-dim);
+}
+
+.guard-sentinel-pill.stopped .guard-sentinel-dot {
+    background: var(--danger);
+    box-shadow: 0 0 4px rgba(239, 68, 68, 0.3);
+}

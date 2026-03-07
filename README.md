@@ -5,6 +5,7 @@
 **Production-ready process manager with dashboard and programmatic API, designed for running your containers, services, and AI agents.**
 
 [![npm](https://img.shields.io/npm/v/bgrun?color=F7A41D&label=npm&logo=npm)](https://www.npmjs.com/package/bgrun)
+[![CI](https://github.com/Mements/bgr/actions/workflows/ci.yml/badge.svg)](https://github.com/Mements/bgr/actions/workflows/ci.yml)
 [![bun](https://img.shields.io/badge/runtime-bun-F7A41D?logo=bun)](https://bun.sh/)
 [![license](https://img.shields.io/npm/l/bgrun)](./LICENSE)
 
@@ -75,7 +76,8 @@ Features:
 - Real-time process status via SSE (no polling)
 - Start, stop, restart, and delete processes from the UI
 - Live stdout/stderr log viewer with search
-- Memory, PID, port, and runtime at a glance
+- Memory, PID, port, runtime, and guard restarts at a glance
+- Guard toggle per-process (auto-restart on crash)
 - Responsive mobile layout
 - Collapsible directory groups
 
@@ -91,6 +93,9 @@ Features:
 - [Caddy Reverse Proxy](#caddy-reverse-proxy)
 - [TOML Configuration](#toml-configuration)
 - [Programmatic API](#programmatic-api)
+- [Process Dependencies](#process-dependencies)
+- [Log Rotation](#log-rotation)
+- [Guard (Auto-Restart)](#guard-auto-restart)
 - [Migrating from PM2](#migrating-from-pm2)
 - [Edge Cases & Behaviors](#edge-cases--behaviors)
 - [Full CLI Reference](#full-cli-reference)
@@ -555,9 +560,77 @@ bgrun --name worker --directory ./workers --command "node worker.js" --force
    WantedBy=multi-user.target
    ```
 
-3. **No log rotation** — bgrun writes to plain text files in `~/.bgr/`. Use `logrotate` or similar tools, or specify custom log paths with `--stdout` and `--stderr`.
+3. **Built-in log rotation** — bgrun automatically rotates logs when they exceed 10MB, keeping the last 5000 lines. Manual rotation is also available via the dashboard API.
 
 4. **Bun required** — bgrun runs on Bun, but the *processes it manages* can be anything: Node.js, Python, Ruby, Go, Docker, shell scripts.
+
+---
+
+## Process Dependencies
+
+bgrun supports declaring process startup dependencies via the `BGR_DEPENDS_ON` environment variable:
+
+```bash
+# Start a price listener (no dependencies)
+bgrun --name price-feed --command "bun run sqd.ts" --force
+
+# Start a worker that depends on the price feed
+BGR_DEPENDS_ON=price-feed bgrun --name mm-worker --command "bun run worker.ts" --force
+```
+
+When you start `mm-worker`, bgrun will automatically start `price-feed` first if it's not already running.
+
+### Features
+
+- **Topological sort** — processes start in correct dependency order
+- **Cycle detection** — bgrun warns if dependencies form a cycle
+- **Auto-start** — unmet dependencies are started automatically
+- **API** — `GET /api/deps` returns the full dependency graph with startup order
+
+### Setting dependencies via API
+
+```bash
+curl -X POST http://localhost:3001/api/deps \
+  -H 'Content-Type: application/json' \
+  -d '{"name": "mm-worker", "dependsOn": ["price-feed", "redis"]}'
+```
+
+---
+
+## Log Rotation
+
+bgrun includes automatic log rotation to prevent unbounded log file growth:
+
+- **Size-based rotation**: Files exceeding 10MB are truncated, keeping the last 5000 lines
+- **Automatic checks**: Rotation runs every 60 seconds alongside the dashboard
+- **Rotation header**: Rotated files include a timestamp header for auditability
+- **Manual rotation**: Trigger via the dashboard API
+
+```bash
+# Check log sizes
+curl http://localhost:3001/api/logs/rotate
+
+# Force rotation now
+curl -X POST http://localhost:3001/api/logs/rotate
+```
+
+---
+
+## Guard (Auto-Restart)
+
+bgrun includes a standalone guard process that monitors and auto-restarts crashed processes:
+
+```bash
+# Enable guard for a process
+BGR_KEEP_ALIVE=true bgrun --name my-api --command "bun run server.ts" --force
+```
+
+The guard checks processes every 30 seconds and restarts any that have stopped. Features:
+
+- **Exponential backoff** — avoids restart storms for processes that keep crashing
+- **Per-process toggle** — enable/disable guard via the dashboard shield icon
+- **Guard sentinel** — dashboard shows a pulsing green dot when the guard is active
+- **Restart counter** — dashboard tracks total guard restarts across all processes
 
 ---
 
@@ -702,6 +775,8 @@ All state lives in `~/.bgr/`. To reset everything, delete this directory.
 |----------|-------------|---------|
 | `DB_NAME` | Custom database file name | `bgr` |
 | `BGR_GROUP` | Assign process to a group | *(none)* |
+| `BGR_KEEP_ALIVE` | Enable guard auto-restart for this process | `false` |
+| `BGR_DEPENDS_ON` | Comma-separated list of process dependencies | *(none)* |
 | `BUN_PORT` | Dashboard port (explicit, no fallback) | *(auto: 3000+)* |
 
 ---

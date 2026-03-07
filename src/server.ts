@@ -17,9 +17,10 @@ import path from 'path';
 import { getAllProcesses, getProcess } from './db';
 import { isProcessRunning } from './platform';
 import { handleRun } from './commands/run';
+import { parseEnvString } from './utils';
 
 const GUARD_INTERVAL_MS = 30_000; // Check every 30 seconds
-const GUARD_SKIP_NAMES = new Set(['bgr-dashboard']); // Don't try to restart ourselves
+const GUARD_SKIP_NAMES = new Set(['bgr-dashboard', 'bgr-guard']); // Don't try to restart ourselves or external guard
 
 // In-memory guard restart counter and timestamps (persists across module re-evaluations)
 const _g = globalThis as any;
@@ -45,6 +46,10 @@ export async function startServer() {
 
     // Start the built-in process guard
     startGuard();
+
+    // Start log rotation (prevents unbounded log file growth)
+    const { startLogRotation } = await import('./log-rotation');
+    startLogRotation(() => getAllProcesses());
 }
 
 /**
@@ -74,7 +79,7 @@ function startGuard() {
                 if (GUARD_SKIP_NAMES.has(proc.name)) continue;
 
                 // Only guard processes with BGR_KEEP_ALIVE=true
-                const env = proc.env ? (typeof proc.env === 'string' ? (() => { try { return JSON.parse(proc.env); } catch { return {}; } })() : proc.env) : {};
+                const env = proc.env ? parseEnvString(proc.env) : {};
                 if (env.BGR_KEEP_ALIVE !== 'true') continue;
 
                 const alive = await isProcessRunning(proc.pid, proc.command);

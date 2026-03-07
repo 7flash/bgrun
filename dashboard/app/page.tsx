@@ -33,6 +33,10 @@ export default function DashboardPage() {
                     <div className="stat-label">Total Memory</div>
                     <div className="stat-value" id="memory-count">–</div>
                 </div>
+                <div className="stat-card restarts">
+                    <div className="stat-label">Guard Restarts</div>
+                    <div className="stat-value" id="restarts-count">0</div>
+                </div>
             </div>
 
             {/* Toolbar */}
@@ -65,6 +69,10 @@ export default function DashboardPage() {
                         </svg>
                         <span id="guard-all-label">Guard All</span>
                     </button>
+                    <span className="guard-sentinel-pill" id="guard-sentinel-pill" title="Standalone guard process status">
+                        <span className="guard-sentinel-dot" id="guard-sentinel-dot" />
+                        <span id="guard-sentinel-label">Guard: –</span>
+                    </span>
                     <button className="btn btn-primary" id="new-process-btn">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                             <line x1="12" y1="5" x2="12" y2="19" />

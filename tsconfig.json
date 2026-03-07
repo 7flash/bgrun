@@ -24,5 +24,14 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false
-  }
+  },
+  "include": [
+    "src/**/*",
+    "tests/**/*",
+    "examples/**/*",
+    "dashboard/**/*"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
 }

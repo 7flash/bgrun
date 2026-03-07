@@ -1,4 +1,4 @@
-/** @jsxImportSource react */
+/** @jsxImportSource melina/client */
 /**
  * bgrun Dashboard — Page Client Interactivity
  *
@@ -247,7 +247,7 @@ function ProcessRow({ p, animate }: { p: ProcessData; animate?: boolean }) {
                 }
             </td>
             <td className="command" title={p.command}>{p.command}</td>
-            <td className="runtime">{formatRuntime(p.runtime)}</td>
+            <td className="runtime">{formatRuntime(String(p.runtime))}</td>
         </tr>
     );
 }
@@ -305,7 +305,7 @@ function ProcessCard({ p }: { p: ProcessData }) {
                 <div className="card-detail"><span className="card-label">Port</span>{p.port ? <a className="port-link" href={`http://localhost:${p.port}`} target="_blank" rel="noopener" onClick={(e: Event) => e.stopPropagation()}>:{p.port}</a> : <span>–</span>}</div>
                 <div className="card-detail"><span className="card-label">CPU</span>{p.running && (p.cpu !== undefined) ? <div style={{ display: 'flex', alignItems: 'center' }}><span>{p.cpu > 0 ? `${p.cpu.toFixed(1)}%` : '<0.1%'}</span><MiniSparkline data={p.cpuHistory || []} stroke="#7ee787" /></div> : <span>–</span>}</div>
                 <div className="card-detail"><span className="card-label">Memory</span>{p.running && p.memory > 0 ? <div style={{ display: 'flex', alignItems: 'center' }}><span>{formatMemory(p.memory)}</span><MiniSparkline data={p.memoryHistory || []} stroke="#a5d6ff" /></div> : <span>–</span>}</div>
-                <div className="card-detail"><span className="card-label">Runtime</span><span>{formatRuntime(p.runtime)}</span></div>
+                <div className="card-detail"><span className="card-label">Runtime</span><span>{formatRuntime(String(p.runtime))}</span></div>
             </div>
             <div className="card-command" title={p.command}>{p.command}</div>
             <div className="card-actions">
@@ -488,11 +488,14 @@ export default function mount(): () => void {
         const sc = $('stopped-count');
         const gc = $('guarded-count');
         const mc = $('memory-count');
+        const rrc = $('restarts-count');
         if (tc) tc.textContent = String(total);
         if (rc) rc.textContent = String(running);
         if (sc) sc.textContent = String(stopped);
         if (gc) gc.textContent = String(guarded);
         if (mc) mc.textContent = formatMemory(totalMemory) || '0 MB';
+        const totalRestarts = processes.reduce((sum, p) => sum + (p.guardRestarts || 0), 0);
+        if (rrc) rrc.textContent = String(totalRestarts);
 
         // Update Guard All button state
         const guardAllBtn = $('guard-all-btn');
@@ -502,6 +505,24 @@ export default function mount(): () => void {
             guardAllBtn.classList.toggle('all-guarded', allGuarded);
             guardAllLabel.textContent = allGuarded ? 'Unguard All' : 'Guard All';
             guardAllBtn.title = allGuarded ? 'Remove guard from all processes' : 'Guard all processes (auto-restart on crash)';
+        }
+
+        // Update guard sentinel pill
+        const guardPill = $('guard-sentinel-pill');
+        const guardLabel = $('guard-sentinel-label');
+        if (guardPill && guardLabel) {
+            const guardProc = processes.find(p => p.name === 'bgr-guard');
+            guardPill.classList.remove('active', 'stopped');
+            if (guardProc && guardProc.running) {
+                guardPill.classList.add('active');
+                const restarts = guardProc.guardRestarts || 0;
+                guardLabel.textContent = restarts > 0 ? `Guard: ON (${restarts}↻)` : 'Guard: ON';
+            } else if (guardProc) {
+                guardPill.classList.add('stopped');
+                guardLabel.textContent = 'Guard: OFF';
+            } else {
+                guardLabel.textContent = 'Guard: –';
+            }
         }
     }
 
@@ -967,7 +988,7 @@ export default function mount(): () => void {
                 { label: 'Status', value: proc.running ? '● Running' : '○ Stopped' },
                 { label: 'PID', value: String(proc.pid) },
                 { label: 'Port', value: proc.port ? `:${proc.port}` : '–', href: proc.port ? `http://localhost:${proc.port}` : undefined },
-                { label: 'Runtime', value: formatRuntime(proc.runtime) },
+                { label: 'Runtime', value: formatRuntime(String(proc.runtime)) },
                 { label: 'Command', value: proc.command },
                 { label: 'Directory', value: proc.directory || '–' },
                 { label: 'Memory', value: formatMemory(proc.memory) },

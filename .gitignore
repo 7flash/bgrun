@@ -4,6 +4,7 @@ dist
 bun.lockb
 *.log
 .agents
+.docs
 
 # Temp/debug output
 *-stdout.txt
@@ -12,3 +13,5 @@ page-*.txt
 hn-post.txt
 screenshot.png
 logo.pngbgrun.exe
+bgrun.exe
+dangling.txt
