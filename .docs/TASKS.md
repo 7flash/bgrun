@@ -8,7 +8,7 @@
 ## 🟡 Priority: Improve
 - [x] ~~**Dashboard SSE stability**~~ — ✅ DONE. Server: added 15s periodic keepalive comments to prevent proxy/browser timeouts. Client: exponential backoff reconnections (2s→30s max), visibility-based SSE pausing (disconnect on tab hide, reconnect on focus), backoff reset on successful message.
 - [x] ~~**Publish melina 2.3.7**~~ — ✅ DONE. Null guards added to render.ts (applyProps/patchProps/mountVNode). Published to npm, pushed to GitHub.
-- [ ] **Dashboard log viewer reconciliation** — The keyed reconciler for log lines was removed during jsx-dom revert. If log rendering perf degrades with many lines, need alternative optimization (e.g., virtual scrolling).
+- [x] ~~**Dashboard log viewer reconciliation**~~ — ✅ DONE. Replaced the removed keyed reconciler with full virtual scrolling. Below 200 lines: direct DOM render (zero overhead). Above 200 lines: sentinel spacer virtual scrolling with rAF-throttled scroll handler — only ~50 visible lines rendered regardless of total log size. Filtered indices cached for search. Line count shows "(virtual)" indicator when engaged.
 - [x] ~~**Guard dashboard UI**~~ — ✅ DONE. Added guard sentinel pill to toolbar showing standalone bgr-guard process status (green pulsing dot when running, red when stopped, gray when absent). Shows restart count. CSS: `.guard-sentinel-pill`, `.guard-sentinel-dot`.
 - [x] ~~**Log rotation**~~ — ✅ DONE. `src/log-rotation.ts` — size-based rotation (10MB max, keeps last 5000 lines), periodic check every 60s, auto-starts with dashboard. API: `GET /api/logs/rotate` (sizes), `POST /api/logs/rotate` (trigger). Rotation header preserved in file for auditability.
 - [x] ~~**Process dependency graph**~~ — ✅ DONE. `src/deps.ts` — adjacency list graph with Kahn's topological sort, cycle detection, and unmet dependency checking. Dependencies stored in `BGR_DEPENDS_ON=name1,name2` env var. Auto-start: `run.ts` checks and starts unmet deps before launching requested process. API: `GET /api/deps` (graph+order), `POST /api/deps` (set deps for a process).
@@ -29,6 +29,11 @@
 - [x] ~~**Dashboard port-reclaim**~~ — ✅ DONE. Auto-kills port occupant.
 - [x] ~~**Mobile responsive tables**~~ — ✅ DONE. 3-column grid layout for action buttons.
 - [x] ~~**Crash loop backoff**~~ — ✅ DONE. Exponential backoff after 5 rapid crashes.
+
+## 🟡 Priority: Improve
+- [ ] **Dashboard process search persistence** — Search query resets on SSE update. Should debounce and preserve across re-renders.
+- [ ] **Log line height calibration** — Virtual scrolling uses fixed 22px line height estimate. Could measure actual line height on first render for pixel-perfect spacers.
+- [x] ~~**Dashboard keyboard shortcuts**~~ — ✅ DONE. Arrow ↑/↓ (or j/k) to navigate process rows with purple focus ring. Enter=open drawer, R=restart, S=stop, G=guard toggle, D=delete, N=new process, ?=help overlay. Glassmorphism shortcuts panel with 2-column grid. `?` button in toolbar for discoverability. All shortcuts suppressed in text inputs.
 
 ## 📝 Architecture Notes
 - **Dashboard**: `bgrun --dashboard` (Port 3000 or `--port N`)

@@ -50,7 +50,7 @@
     "chalk": "^5.4.1",
     "dedent": "^1.5.3",
     "measure-fn": "3.10.1",
-    "melina": "2.3.3",
+    "melina": "2.3.6",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "sqlite-zod-orm": "3.26.1"

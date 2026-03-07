@@ -413,6 +413,7 @@ export default function mount(): () => void {
     let isFirstLoad = true;
     let allProcesses: ProcessData[] = [];
     let searchQuery = '';
+    let searchDebounce: ReturnType<typeof setTimeout> | null = null;
     let collapsedGroups: Set<string> = new Set(JSON.parse(localStorage.getItem('bgr_collapsed_groups') || '[]'));
     let drawerProcess: string | null = null;
     let drawerTab: 'stdout' | 'stderr' = 'stdout';
@@ -427,6 +428,14 @@ export default function mount(): () => void {
     let logCurrentTab = '';       // Track tab to reset on switch
     let logLastSize = -1;         // Detect no-change polls
     let logNeedsFullRebuild = true; // Full DOM rebuild flag (on tab switch, search change)
+
+    // ─── Virtual Scrolling State ───
+    const LOG_LINE_HEIGHT = 22;     // px per log line (matches line-height 1.7 @ 0.75rem ≈ ~20px + 2px padding)
+    const LOG_OVERSCAN = 10;        // extra lines rendered above/below viewport
+    const VIRTUAL_THRESHOLD = 200;  // switch to virtual mode above this many lines
+    let logVirtualActive = false;   // whether virtual scrolling is engaged
+    let logFilteredIndices: number[] = []; // indices into logLinesRaw that pass the search filter
+    let logScrollRAF: number | null = null; // rAF handle for throttled scroll
 
     // ─── Version Badge ───
     const versionBadge = $('version-badge');
@@ -460,6 +469,10 @@ export default function mount(): () => void {
     }
 
     function renderFilteredProcesses() {
+        // Always sync searchQuery from DOM to prevent desync
+        if (searchInput && searchInput.value.toLowerCase().trim() !== searchQuery) {
+            searchQuery = searchInput.value.toLowerCase().trim();
+        }
         const filtered = searchQuery
             ? allProcesses.filter(p =>
                 p.name.toLowerCase().includes(searchQuery) ||
@@ -468,6 +481,17 @@ export default function mount(): () => void {
             )
             : allProcesses;
         renderProcesses(filtered);
+
+        // Update search result count badge
+        const badge = $('search-count');
+        if (badge) {
+            if (searchQuery) {
+                badge.textContent = `${filtered.length}/${allProcesses.length}`;
+                badge.style.display = 'inline-block';
+            } else {
+                badge.style.display = 'none';
+            }
+        }
     }
 
     function updateStats(processes: ProcessData[]) {
@@ -594,20 +618,29 @@ export default function mount(): () => void {
 
         if (isFirstLoad) isFirstLoad = false;
 
-        // Highlight selected row
+        // Restore selected row + keyboard focus row
         if (drawerProcess) {
             const finalTbody = $('processes-table') || tbody;
             const row = finalTbody.querySelector(`tr[data-process-name="${drawerProcess}"]`);
             if (row) row.classList.add('selected');
         }
+        // Restore keyboard focus ring if user had a row focused
+        if (focusedProcessName) {
+            const finalTbody = $('processes-table') || tbody;
+            const focusRow = finalTbody.querySelector(`tr[data-process-name="${focusedProcessName}"]`);
+            if (focusRow) focusRow.classList.add('focus-ring');
+        }
     }
 
-    // ─── Search ───
+    // ─── Search (debounced 150ms) ───
 
     const searchInput = $('search-input') as HTMLInputElement;
     searchInput?.addEventListener('input', () => {
-        searchQuery = searchInput.value.toLowerCase().trim();
-        renderFilteredProcesses();
+        if (searchDebounce) clearTimeout(searchDebounce);
+        searchDebounce = setTimeout(() => {
+            searchQuery = searchInput.value.toLowerCase().trim();
+            renderFilteredProcesses();
+        }, 150);
     });
 
     /** Fetch with cache-bust to force fresh data after mutations */
@@ -924,6 +957,8 @@ export default function mount(): () => void {
         logCurrentTab = '';
         logLastSize = -1;
         logNeedsFullRebuild = true;
+        logVirtualActive = false;
+        logFilteredIndices = [];
         if (!skipRefresh) refreshDrawerLogs();
     }
 
@@ -1124,54 +1159,143 @@ export default function mount(): () => void {
     }
 
 
+    // ─── Build filtered indices ───
+    function rebuildFilteredIndices() {
+        const search = logSearch.toLowerCase();
+        logFilteredIndices = [];
+        for (let i = 0; i < logLinesRaw.length; i++) {
+            if (search && !logLinesRaw[i].toLowerCase().includes(search)) continue;
+            logFilteredIndices.push(i);
+        }
+    }
+
+    // ─── Render a single log line HTML string ───
+    function renderLogLineHtml(rawIndex: number): string {
+        const num = rawIndex + 1;
+        return `<div class="log-line" data-ln="${num}"><span class="log-line-num">${num}</span><span class="log-line-content">${logLinesHtml[rawIndex]}</span></div>`;
+    }
+
+    // ─── Virtual scroll: render only visible slice ───
+    function virtualRenderSlice(logsEl: HTMLElement) {
+        const count = logFilteredIndices.length;
+        if (count === 0) {
+            logsEl.innerHTML = '<em style="color: var(--text-muted)">No logs available</em>';
+            return;
+        }
+
+        const totalHeight = count * LOG_LINE_HEIGHT;
+        const scrollTop = logsEl.scrollTop;
+        const viewportH = logsEl.clientHeight;
+
+        // Calculate visible range with overscan
+        let startIdx = Math.floor(scrollTop / LOG_LINE_HEIGHT) - LOG_OVERSCAN;
+        let endIdx = Math.ceil((scrollTop + viewportH) / LOG_LINE_HEIGHT) + LOG_OVERSCAN;
+        startIdx = Math.max(0, startIdx);
+        endIdx = Math.min(count - 1, endIdx);
+
+        // Only rebuild if the visible range actually changed
+        const topSpacer = logsEl.querySelector('.log-virtual-top') as HTMLElement;
+        if (topSpacer && topSpacer.dataset.start === String(startIdx) && topSpacer.dataset.end === String(endIdx)) {
+            return; // same range, skip DOM work
+        }
+
+        const topH = startIdx * LOG_LINE_HEIGHT;
+        const bottomH = Math.max(0, (count - endIdx - 1) * LOG_LINE_HEIGHT);
+
+        // Build visible lines
+        const chunks: string[] = [];
+        chunks.push(`<div class="log-virtual-top" data-start="${startIdx}" data-end="${endIdx}" style="height:${topH}px"></div>`);
+        for (let i = startIdx; i <= endIdx; i++) {
+            chunks.push(renderLogLineHtml(logFilteredIndices[i]));
+        }
+        chunks.push(`<div class="log-virtual-bottom" style="height:${bottomH}px"></div>`);
+        logsEl.innerHTML = chunks.join('');
+    }
+
+    // ─── Scroll handler for virtual mode ───
+    function onLogScroll() {
+        if (!logVirtualActive) return;
+        if (logScrollRAF) return; // already scheduled
+        logScrollRAF = requestAnimationFrame(() => {
+            logScrollRAF = null;
+            const logsEl = $('drawer-logs') as HTMLElement;
+            if (logsEl) virtualRenderSlice(logsEl);
+        });
+    }
+
     function fullRebuildLogs(logsEl: HTMLElement) {
         const search = logSearch.toLowerCase();
         if (logLinesRaw.length === 0 || (logLinesRaw.length === 1 && !logLinesRaw[0])) {
             logsEl.innerHTML = '<em style="color: var(--text-muted)">No logs available</em>';
             updateLogCount(0);
             logNeedsFullRebuild = false;
+            logVirtualActive = false;
             return;
         }
 
-        // Build all HTML in one pass using cached ansiToHtml results
-        const chunks: string[] = [];
-        let count = 0;
-        for (let i = 0; i < logLinesRaw.length; i++) {
-            if (search && !logLinesRaw[i].toLowerCase().includes(search)) continue;
-            count++;
-            const num = i + 1;
-            chunks.push(`<div class="log-line" data-ln="${num}"><span class="log-line-num">${num}</span><span class="log-line-content">${logLinesHtml[i]}</span></div>`);
-        }
-        logsEl.innerHTML = chunks.join('');
+        // Rebuild filtered indices
+        rebuildFilteredIndices();
+        const count = logFilteredIndices.length;
         updateLogCount(count);
+
+        // Decide: virtual or direct
+        if (count >= VIRTUAL_THRESHOLD) {
+            logVirtualActive = true;
+            virtualRenderSlice(logsEl);
+        } else {
+            logVirtualActive = false;
+            // Direct render — small enough for full DOM
+            const chunks: string[] = [];
+            for (const idx of logFilteredIndices) {
+                chunks.push(renderLogLineHtml(idx));
+            }
+            logsEl.innerHTML = chunks.join('');
+        }
         logNeedsFullRebuild = false;
     }
 
     function appendNewLogLines(logsEl: HTMLElement, startIndex: number) {
-        // Fast path: append only new lines to existing DOM
         const search = logSearch.toLowerCase();
-        const fragment = document.createDocumentFragment();
-        let count = 0;
+
+        // Append to filtered indices
         for (let i = startIndex; i < logLinesRaw.length; i++) {
             if (search && !logLinesRaw[i].toLowerCase().includes(search)) continue;
-            count++;
-            const div = document.createElement('div');
-            div.className = 'log-line';
-            div.setAttribute('data-ln', String(i + 1));
-            div.innerHTML = `<span class="log-line-num">${i + 1}</span><span class="log-line-content">${logLinesHtml[i]}</span>`;
-            fragment.appendChild(div);
+            logFilteredIndices.push(i);
         }
-        if (count > 0) logsEl.appendChild(fragment);
-        // Update total count
-        const total = search
-            ? logLinesRaw.filter(l => l.toLowerCase().includes(search)).length
-            : logLinesRaw.length;
-        updateLogCount(total);
+        const count = logFilteredIndices.length;
+        updateLogCount(count);
+
+        // Check if we need to switch to virtual mode
+        if (count >= VIRTUAL_THRESHOLD && !logVirtualActive) {
+            logVirtualActive = true;
+            virtualRenderSlice(logsEl);
+            return;
+        }
+
+        if (logVirtualActive) {
+            // In virtual mode, re-render the current visible slice
+            virtualRenderSlice(logsEl);
+        } else {
+            // Direct DOM append for small logs
+            const fragment = document.createDocumentFragment();
+            for (let i = startIndex; i < logLinesRaw.length; i++) {
+                if (search && !logLinesRaw[i].toLowerCase().includes(search)) continue;
+                const div = document.createElement('div');
+                div.className = 'log-line';
+                div.setAttribute('data-ln', String(i + 1));
+                div.innerHTML = `<span class="log-line-num">${i + 1}</span><span class="log-line-content">${logLinesHtml[i]}</span>`;
+                fragment.appendChild(div);
+            }
+            if (fragment.childNodes.length > 0) logsEl.appendChild(fragment);
+        }
     }
 
     function updateLogCount(count: number) {
         const countEl = $('log-line-count');
-        if (countEl) countEl.textContent = `${count} line${count !== 1 ? 's' : ''}`;
+        if (countEl) {
+            const suffix = logVirtualActive ? ' (virtual)' : '';
+            countEl.textContent = `${count} line${count !== 1 ? 's' : ''}${suffix}`;
+        }
     }
 
     async function refreshDrawerLogs() {
@@ -1284,6 +1408,10 @@ export default function mount(): () => void {
 
     // Click log line → expand/collapse (word-wrap toggle)
     const logsContainer = $('drawer-logs');
+
+    // Virtual scroll handler — drives re-render on scroll in virtual mode
+    logsContainer?.addEventListener('scroll', onLogScroll, { passive: true });
+
     logsContainer?.addEventListener('click', (e: Event) => {
         const line = (e.target as Element).closest('.log-line') as HTMLElement;
         if (!line) return;
@@ -1467,6 +1595,9 @@ export default function mount(): () => void {
         if (drawerProcess) refreshDrawerLogs();
     });
 
+    // ─── Shortcuts Button ───
+    $('shortcuts-btn')?.addEventListener('click', toggleShortcutsOverlay);
+
     // ─── Guard All Button ───
     $('guard-all-btn')?.addEventListener('click', async () => {
         const guardAllBtn = $('guard-all-btn') as HTMLButtonElement;
@@ -1510,14 +1641,95 @@ export default function mount(): () => void {
     // Group toggle removed — always-on directory grouping
 
     // ─── Keyboard Shortcuts ───
+    let focusedProcessName: string | null = null;
+
+    function getFocusableRows(): HTMLElement[] {
+        const rows = tbody?.querySelectorAll('tr[data-process-name]') as NodeListOf<HTMLElement> | undefined;
+        return rows ? Array.from(rows) : [];
+    }
+
+    function setProcessFocus(name: string | null) {
+        // Remove previous focus
+        tbody?.querySelectorAll('tr.keyboard-focus').forEach(r => r.classList.remove('keyboard-focus'));
+        focusedProcessName = name;
+        if (!name) return;
+        const row = tbody?.querySelector(`tr[data-process-name="${name}"]`) as HTMLElement;
+        if (row) {
+            row.classList.add('keyboard-focus');
+            row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
+    }
+
+    function navigateProcess(direction: 'up' | 'down') {
+        const rows = getFocusableRows();
+        if (rows.length === 0) return;
+
+        if (!focusedProcessName) {
+            // Nothing focused: pick first or last
+            const target = direction === 'down' ? rows[0] : rows[rows.length - 1];
+            setProcessFocus(target.dataset.processName || null);
+            return;
+        }
+
+        const idx = rows.findIndex(r => r.dataset.processName === focusedProcessName);
+        if (idx === -1) {
+            setProcessFocus(rows[0].dataset.processName || null);
+            return;
+        }
+
+        const nextIdx = direction === 'down'
+            ? Math.min(idx + 1, rows.length - 1)
+            : Math.max(idx - 1, 0);
+        setProcessFocus(rows[nextIdx].dataset.processName || null);
+    }
+
+    /** Dispatch a process action by synthesizing a click on a virtual button */
+    function dispatchAction(actionName: string, processName: string) {
+        const fakeBtn = document.createElement('button');
+        fakeBtn.dataset.action = actionName;
+        fakeBtn.dataset.name = processName;
+        // For guard toggle, read current state
+        if (actionName === 'guard') {
+            const proc = allProcesses.find(p => p.name === processName);
+            fakeBtn.dataset.guarded = proc && isGuarded(proc) ? 'true' : 'false';
+        }
+        const fakeEvent = new MouseEvent('click');
+        Object.defineProperty(fakeEvent, 'target', { value: fakeBtn });
+        handleAction(fakeEvent);
+    }
+
+    function toggleShortcutsOverlay() {
+        const overlay = $('shortcuts-overlay');
+        if (overlay) overlay.classList.toggle('active');
+    }
+
+    $('shortcuts-close-btn')?.addEventListener('click', () => {
+        $('shortcuts-overlay')?.classList.remove('active');
+    });
+    $('shortcuts-overlay')?.addEventListener('click', (e) => {
+        if ((e.target as Element).classList.contains('shortcuts-overlay')) {
+            $('shortcuts-overlay')?.classList.remove('active');
+        }
+    });
+
     function handleKeydown(e: KeyboardEvent) {
+        // Skip all shortcuts when inside text inputs or textareas
+        const inInput = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
+
         // "/" to focus search (unless already in an input)
-        if (e.key === '/' && !(e.target instanceof HTMLInputElement)) {
+        if (e.key === '/' && !inInput) {
             e.preventDefault();
             searchInput?.focus();
             return;
         }
+
+        // Escape: close overlays progressively
         if (e.key === 'Escape') {
+            const shortcutsOverlay = $('shortcuts-overlay');
+            if (shortcutsOverlay?.classList.contains('active')) {
+                shortcutsOverlay.classList.remove('active');
+                return;
+            }
             if (contextMenuEl) {
                 closeContextMenu();
                 return;
@@ -1527,10 +1739,75 @@ export default function mount(): () => void {
             } else {
                 closeModal();
             }
+            // Clear keyboard focus
+            setProcessFocus(null);
             // Blur search on escape
             if (document.activeElement === searchInput) {
                 searchInput?.blur();
             }
+            return;
+        }
+
+        // Remaining shortcuts only when NOT in inputs
+        if (inInput) return;
+
+        // Arrow navigation
+        if (e.key === 'ArrowDown' || e.key === 'j') {
+            e.preventDefault();
+            navigateProcess('down');
+            return;
+        }
+        if (e.key === 'ArrowUp' || e.key === 'k') {
+            e.preventDefault();
+            navigateProcess('up');
+            return;
+        }
+
+        // Enter: open drawer for focused process
+        if (e.key === 'Enter' && focusedProcessName) {
+            e.preventDefault();
+            openDrawer(focusedProcessName);
+            return;
+        }
+
+        // ? — help overlay
+        if (e.key === '?') {
+            e.preventDefault();
+            toggleShortcutsOverlay();
+            return;
+        }
+
+        // N — new process modal
+        if (e.key === 'n' || e.key === 'N') {
+            e.preventDefault();
+            openModal();
+            return;
+        }
+
+        // Process actions — require a focused row
+        if (!focusedProcessName) return;
+
+        if (e.key === 'r' || e.key === 'R') {
+            e.preventDefault();
+            dispatchAction('restart', focusedProcessName);
+            return;
+        }
+        if (e.key === 's' || e.key === 'S') {
+            e.preventDefault();
+            dispatchAction('stop', focusedProcessName);
+            return;
+        }
+        if (e.key === 'g' || e.key === 'G') {
+            e.preventDefault();
+            dispatchAction('guard', focusedProcessName);
+            return;
+        }
+        if (e.key === 'd' || e.key === 'D') {
+            e.preventDefault();
+            dispatchAction('delete', focusedProcessName);
+            // Clear focus since process is gone
+            setProcessFocus(null);
+            return;
         }
     }
     document.addEventListener('keydown', handleKeydown);
@@ -1608,5 +1885,8 @@ export default function mount(): () => void {
         if (eventSource) eventSource.close();
         if (logRefreshTimer) clearInterval(logRefreshTimer);
         if (sseThrottleTimer) clearTimeout(sseThrottleTimer);
+        if (searchDebounce) clearTimeout(searchDebounce);
+        if (logScrollRAF) cancelAnimationFrame(logScrollRAF);
+        logsContainer?.removeEventListener('scroll', onLogScroll);
     };
 }

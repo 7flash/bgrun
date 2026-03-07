@@ -53,6 +53,7 @@ export default function DashboardPage() {
                             <line x1="21" y1="21" x2="16.65" y2="16.65" />
                         </svg>
                         <input type="text" className="search-input" id="search-input" placeholder="Filter processes..." />
+                        <span className="search-count" id="search-count" style={{ display: 'none' }}></span>
                         <span className="search-shortcut">/</span>
                     </div>
                 </div>
@@ -73,6 +74,9 @@ export default function DashboardPage() {
                         <span className="guard-sentinel-dot" id="guard-sentinel-dot" />
                         <span id="guard-sentinel-label">Guard: –</span>
                     </span>
+                    <button className="btn btn-ghost btn-icon" id="shortcuts-btn" title="Keyboard Shortcuts (?)">
+                        <span style={{ fontSize: '0.85rem', fontWeight: '700' }}>?</span>
+                    </button>
                     <button className="btn btn-primary" id="new-process-btn">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                             <line x1="12" y1="5" x2="12" y2="19" />
@@ -218,6 +222,34 @@ export default function DashboardPage() {
                     <div className="modal-footer">
                         <button className="btn btn-ghost" id="modal-cancel-btn">Cancel</button>
                         <button className="btn btn-primary" id="modal-create-btn">Create</button>
+                    </div>
+                </div>
+            </div>
+
+            {/* Keyboard Shortcuts Overlay */}
+            <div className="shortcuts-overlay" id="shortcuts-overlay">
+                <div className="shortcuts-panel">
+                    <div className="shortcuts-header">
+                        <h3>⌨️ Keyboard Shortcuts</h3>
+                        <button className="shortcuts-close" id="shortcuts-close-btn">✕</button>
+                    </div>
+                    <div className="shortcuts-grid">
+                        <div className="shortcut-section">
+                            <h4>Navigation</h4>
+                            <div className="shortcut-row"><kbd>↑</kbd><kbd>↓</kbd><span>Navigate processes</span></div>
+                            <div className="shortcut-row"><kbd>Enter</kbd><span>Open process drawer</span></div>
+                            <div className="shortcut-row"><kbd>/</kbd><span>Focus search</span></div>
+                            <div className="shortcut-row"><kbd>Esc</kbd><span>Close panel / blur</span></div>
+                        </div>
+                        <div className="shortcut-section">
+                            <h4>Actions</h4>
+                            <div className="shortcut-row"><kbd>R</kbd><span>Restart process</span></div>
+                            <div className="shortcut-row"><kbd>S</kbd><span>Stop process</span></div>
+                            <div className="shortcut-row"><kbd>G</kbd><span>Toggle guard</span></div>
+                            <div className="shortcut-row"><kbd>D</kbd><span>Delete process</span></div>
+                            <div className="shortcut-row"><kbd>N</kbd><span>New process</span></div>
+                            <div className="shortcut-row"><kbd>?</kbd><span>This help</span></div>
+                        </div>
                     </div>
                 </div>
             </div>
