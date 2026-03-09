@@ -11,6 +11,28 @@ import { measure, createMeasure } from "measure-fn";
 
 const plat = createMeasure('platform');
 
+/**
+ * Execute a PowerShell command with -NoProfile synchronously.
+ * Returns stdout as string, or empty string on error.
+ * 
+ * Uses Bun.spawnSync to avoid async stream hanging issues on Windows
+ * where Bun's pipe reader hangs indefinitely when reading killed processes.
+ */
+export function psExec(command: string, _timeoutMs: number = 3000): string {
+  const tmpFile = join(os.tmpdir(), `bgr-ps-${Date.now()}.ps1`);
+  try {
+    fs.writeFileSync(tmpFile, command);
+    const result = Bun.spawnSync(
+      ['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', tmpFile]
+    );
+    try { fs.unlinkSync(tmpFile); } catch { }
+    return result.stdout?.toString() || '';
+  } catch {
+    try { fs.unlinkSync(tmpFile); } catch { }
+    return '';
+  }
+}
+
 /** Detect if running on Windows - use function to prevent bundler tree-shaking */
 export function isWindows(): boolean {
   return process.platform === "win32";
@@ -39,8 +61,9 @@ export async function isProcessRunning(pid: number, command?: string): Promise<b
       }
 
       if (isWindows()) {
-        const result = await $`tasklist /FI "PID eq ${pid}" /NH`.nothrow().text();
-        return result.includes(`${pid}`);
+        // process.kill(pid, 0) — signal 0 checks existence without killing
+        // 100x faster than tasklist which hangs on some Windows systems
+        try { process.kill(pid, 0); return true; } catch { return false; }
       } else {
         const result = await $`ps -p ${pid}`.nothrow().text();
         return result.includes(`${pid}`);
@@ -86,11 +109,13 @@ async function isDockerContainerRunning(command: string): Promise<boolean> {
 async function getChildPids(pid: number): Promise<number[]> {
   try {
     if (isWindows()) {
-      // Use wmic instead of PowerShell for faster child PID discovery
-      const result = await $`wmic process where (ParentProcessId=${pid}) get ProcessId /format:list`.nothrow().quiet().text();
+      const result = await psExec(
+        `Get-CimInstance Win32_Process -Filter 'ParentProcessId=${pid}' | Select-Object -ExpandProperty ProcessId`,
+        3000
+      );
       return result
         .split('\n')
-        .map(line => { const m = line.match(/ProcessId=(\d+)/); return m ? parseInt(m[1]) : NaN; })
+        .map(line => parseInt(line.trim()))
         .filter(n => !isNaN(n) && n > 0);
     } else {
       // On Unix, use ps --ppid
@@ -265,32 +290,29 @@ export function getShellCommand(command: string): string[] {
     return ["sh", "-c", command];
   }
 }
-
 /**
  * Find the actual child process PID spawned by a shell wrapper.
- * Traverses the process tree recursively to find the deepest (leaf) child.
- * On Windows, bgr spawn creates: cmd.exe → bgr.exe → bun.exe
- * We need the bun.exe PID, not the intermediate bgr.exe.
+ * Traverses the process tree to find the deepest (leaf) child.
+ * On Windows, bgr spawn creates: cmd.exe → bun.exe (typically 1-2 levels)
  * 
- * Uses wmic (fast, ~50ms) instead of PowerShell Get-CimInstance (~3s per call).
+ * Uses PowerShell with -NoProfile and a hard timeout to prevent hangs.
  */
 export async function findChildPid(parentPid: number): Promise<number> {
   let currentPid = parentPid;
-  const maxDepth = 5; // Safety limit to avoid infinite loops
+  const maxDepth = 2; // cmd.exe → bun.exe is the typical chain
 
   for (let depth = 0; depth < maxDepth; depth++) {
     try {
       let childPids: number[] = [];
 
       if (isWindows()) {
-        // wmic is ~60x faster than PowerShell Get-CimInstance
-        const result = await $`wmic process where (ParentProcessId=${currentPid}) get ProcessId /format:list`.nothrow().quiet().text();
+        const result = await psExec(
+          `Get-CimInstance Win32_Process -Filter 'ParentProcessId=${currentPid}' | Select-Object -ExpandProperty ProcessId`,
+          3000
+        );
         childPids = result
           .split('\n')
-          .map((line: string) => {
-            const match = line.match(/ProcessId=(\d+)/);
-            return match ? parseInt(match[1]) : NaN;
-          })
+          .map((line: string) => parseInt(line.trim()))
           .filter((n: number) => !isNaN(n) && n > 0);
       } else {
         const result = await $`ps --no-headers -o pid --ppid ${currentPid}`.nothrow().text();
@@ -301,12 +323,7 @@ export async function findChildPid(parentPid: number): Promise<number> {
           .filter(n => !isNaN(n) && n > 0);
       }
 
-      if (childPids.length === 0) {
-        // No children — currentPid is the leaf process
-        break;
-      }
-
-      // Follow the first child deeper
+      if (childPids.length === 0) break;
       currentPid = childPids[0];
     } catch {
       break;
@@ -341,14 +358,10 @@ export async function reconcileProcessPids(
       let runningProcs: Array<{ pid: number; cmdLine: string }> = [];
 
       if (isWindows()) {
-        // Write a temp PS1 script to avoid quoting issues with $() in Bun's shell
-        const tmpScript = join(os.tmpdir(), 'bgr-reconcile.ps1');
-        const psCode = `Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'bun.exe' } | ForEach-Object { Write-Output "$($_.ProcessId)|$($_.CommandLine)" }`;
-        await Bun.write(tmpScript, psCode);
-
-        const ps = Bun.spawnSync(['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', tmpScript]);
-        const output = ps.stdout.toString();
-
+        const output = await psExec(
+          `Get-CimInstance Win32_Process -Filter "Name='bun.exe'" | ForEach-Object { Write-Output "$($_.ProcessId)|$($_.CommandLine)" }`,
+          5000
+        );
         for (const line of output.split('\n')) {
           const sepIdx = line.indexOf('|');
           if (sepIdx === -1) continue;
@@ -514,18 +527,15 @@ export async function getProcessBatchResources(pids: number[]): Promise<Map<numb
 
     try {
       if (isWindows()) {
-        const result = await $`wmic process get ProcessId,WorkingSetSize /format:list`.nothrow().quiet().text();
-        // Parse wmic list format: ProcessId=1234\nWorkingSetSize=56789\n\n
-        const blocks = result.split('\n\n').filter(b => b.trim());
-        for (const block of blocks) {
-          const lines = block.trim().split('\n');
-          let pid = NaN, memory = 0;
-          for (const line of lines) {
-            const pidMatch = line.match(/ProcessId=(\d+)/);
-            if (pidMatch) pid = parseInt(pidMatch[1]);
-            const memMatch = line.match(/WorkingSetSize=(\d+)/);
-            if (memMatch) memory = parseInt(memMatch[1]);
-          }
+        // psExec(Get-Process) is fast (~2ms) vs tasklist which hangs
+        const output = psExec(
+          `Get-Process -Id ${pids.join(',')} -ErrorAction SilentlyContinue | Select-Object Id, WorkingSet64 | ForEach-Object { Write-Output "$($_.Id)|$($_.WorkingSet64)" }`
+        );
+        for (const line of output.split('\n')) {
+          const sepIdx = line.indexOf('|');
+          if (sepIdx === -1) continue;
+          const pid = parseInt(line.substring(0, sepIdx).trim());
+          const memory = parseInt(line.substring(sepIdx + 1).trim()) || 0;
           if (!isNaN(pid) && pidSet.has(pid)) {
             resourceMap.set(pid, { memory, cpu: 0 });
           }

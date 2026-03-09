@@ -1,6 +1,6 @@
 import type { CommandOptions } from "../types";
 import { getProcess, removeProcessByName, retryDatabaseOperation, insertProcess } from "../db";
-import { isProcessRunning, terminateProcess, getHomeDir, getShellCommand, killProcessOnPort, findChildPid, getProcessPorts, waitForPortFree } from "../platform";
+import { isProcessRunning, terminateProcess, getHomeDir, getShellCommand, killProcessOnPort, findChildPid, getProcessPorts, waitForPortFree, psExec } from "../platform";
 import { error, announce } from "../logger";
 import { validateDirectory, parseEnvString } from "../utils";
 import { parseConfigFile } from "../config";
@@ -99,12 +99,13 @@ export async function handleRun(options: CommandOptions) {
         if (cmdToMatch) {
             await run.measure('Zombie sweep', async () => {
                 try {
-                    // Use wmic instead of PowerShell for ~60x faster process enumeration
                     const cmdKeyword = cmdToMatch.split(' ')[1] || cmdToMatch;
-                    const escapedKeyword = cmdKeyword.replace(/[%\\]/g, '');
-                    const result = await $`wmic process where "Name='bun.exe' AND CommandLine LIKE '%${escapedKeyword}%'" get ProcessId /format:list`.nothrow().quiet().text();
+                    const result = await psExec(
+                        `Get-CimInstance Win32_Process -Filter "Name='bun.exe'" | Where-Object { $_.CommandLine -match '${cmdKeyword.replace(/'/g, "''")}' } | Select-Object -ExpandProperty ProcessId`,
+                        3000
+                    );
                     const zombiePids = result.split('\n')
-                        .map((l: string) => { const m = l.match(/ProcessId=(\d+)/); return m ? parseInt(m[1]) : NaN; })
+                        .map((l: string) => parseInt(l.trim()))
                         .filter((n: number) => !isNaN(n) && n > 0);
                     for (const zPid of zombiePids) {
                         await $`taskkill /F /T /PID ${zPid}`.nothrow().quiet();
