@@ -14,7 +14,15 @@ export function announce(message: string, title?: string) {
     );
 }
 
-export function error(message: string | Error) {
+/** Custom error class so callers can distinguish bgrun errors from unexpected ones */
+export class BgrunError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = 'BgrunError';
+    }
+}
+
+export function error(message: string | Error): never {
     const text = message instanceof Error ? (message.stack || message.message) : String(message);
     console.error(
         boxen(chalk.red(text), {
@@ -26,5 +34,7 @@ export function error(message: string | Error) {
             borderStyle: 'double'
         })
     );
-    process.exit(1);
+    // Throw instead of process.exit() — lets dashboard API handlers catch gracefully
+    // CLI entry point has a top-level catch that calls process.exit(1)
+    throw new BgrunError(text);
 }

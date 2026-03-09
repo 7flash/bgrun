@@ -541,5 +541,10 @@ async function run() {
 }
 
 run().catch(err => {
-  error(err);
+  // BgrunError was already printed by error() — just exit
+  // For unexpected errors, print and exit
+  if (err.name !== 'BgrunError') {
+    console.error(err);
+  }
+  process.exit(1);
 });

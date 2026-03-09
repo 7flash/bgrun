@@ -95,18 +95,25 @@ export async function handleRun(options: CommandOptions) {
 
         // Zombie sweep: kill any remaining bun processes matching this command
         // This catches orphaned children that survived taskkill when the parent shell exited
+        // IMPORTANT: Exclude the current bgrun process and dashboard to avoid self-kill
         const cmdToMatch = existingProcess.command;
         if (cmdToMatch) {
             await run.measure('Zombie sweep', async () => {
                 try {
                     const cmdKeyword = cmdToMatch.split(' ')[1] || cmdToMatch;
+                    // Skip sweep if keyword is too generic (would match unrelated processes)
+                    const GENERIC_KEYWORDS = ['dev', 'run', 'start', 'serve', 'build', 'test'];
+                    if (GENERIC_KEYWORDS.includes(cmdKeyword.toLowerCase())) {
+                        return; // Too dangerous — skip zombie sweep for generic commands
+                    }
+                    const currentPid = process.pid;
                     const result = await psExec(
-                        `Get-CimInstance Win32_Process -Filter "Name='bun.exe'" | Where-Object { $_.CommandLine -match '${cmdKeyword.replace(/'/g, "''")}' } | Select-Object -ExpandProperty ProcessId`,
+                        `Get-CimInstance Win32_Process -Filter "Name='bun.exe'" | Where-Object { $_.CommandLine -match '${cmdKeyword.replace(/'/g, "''")}' -and $_.ProcessId -ne ${currentPid} } | Select-Object -ExpandProperty ProcessId`,
                         3000
                     );
                     const zombiePids = result.split('\n')
                         .map((l: string) => parseInt(l.trim()))
-                        .filter((n: number) => !isNaN(n) && n > 0);
+                        .filter((n: number) => !isNaN(n) && n > 0 && n !== currentPid);
                     for (const zPid of zombiePids) {
                         await $`taskkill /F /T /PID ${zPid}`.nothrow().quiet();
                     }
