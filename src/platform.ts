@@ -86,11 +86,11 @@ async function isDockerContainerRunning(command: string): Promise<boolean> {
 async function getChildPids(pid: number): Promise<number[]> {
   try {
     if (isWindows()) {
-      // On Windows, use PowerShell to get child processes
-      const result = await $`powershell -Command "Get-CimInstance Win32_Process -Filter 'ParentProcessId=${pid}' | Select-Object -ExpandProperty ProcessId"`.nothrow().text();
+      // Use wmic instead of PowerShell for faster child PID discovery
+      const result = await $`wmic process where (ParentProcessId=${pid}) get ProcessId /format:list`.nothrow().quiet().text();
       return result
         .split('\n')
-        .map(line => parseInt(line.trim()))
+        .map(line => { const m = line.match(/ProcessId=(\d+)/); return m ? parseInt(m[1]) : NaN; })
         .filter(n => !isNaN(n) && n > 0);
     } else {
       // On Unix, use ps --ppid
@@ -514,32 +514,20 @@ export async function getProcessBatchResources(pids: number[]): Promise<Map<numb
 
     try {
       if (isWindows()) {
-        const result = await $`powershell -Command "Get-Process | Select-Object Id, CPU, WorkingSet"`.nothrow().quiet().text();
-        const lines = result.trim().split('\n');
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed || trimmed.startsWith('Id') || trimmed.startsWith('--')) continue;
-
-          // Replace multiple spaces with a single space to parse correctly
-          const parts = trimmed.split(/\s+/);
-          if (parts.length >= 3) {
-            const pid = parseInt(parts[0]);
-            // CPU can sometimes be blank if process is just starting, handle that
-            let cpuStr = parts[1];
-            let memStr = parts[2];
-            if (parts.length === 2) {
-              // If CPU is missing, powershell might omit it and give just ID and WorkingSet
-              cpuStr = "0";
-              memStr = parts[1];
-            }
-
-            const cpu = parseFloat(cpuStr) || 0;
-            const memory = parseInt(memStr) || 0;
-
-            if (!isNaN(pid) && !isNaN(memory)) {
-              if (pidSet.has(pid)) resourceMap.set(pid, { memory, cpu });
-            }
+        const result = await $`wmic process get ProcessId,WorkingSetSize /format:list`.nothrow().quiet().text();
+        // Parse wmic list format: ProcessId=1234\nWorkingSetSize=56789\n\n
+        const blocks = result.split('\n\n').filter(b => b.trim());
+        for (const block of blocks) {
+          const lines = block.trim().split('\n');
+          let pid = NaN, memory = 0;
+          for (const line of lines) {
+            const pidMatch = line.match(/ProcessId=(\d+)/);
+            if (pidMatch) pid = parseInt(pidMatch[1]);
+            const memMatch = line.match(/WorkingSetSize=(\d+)/);
+            if (memMatch) memory = parseInt(memMatch[1]);
+          }
+          if (!isNaN(pid) && pidSet.has(pid)) {
+            resourceMap.set(pid, { memory, cpu: 0 });
           }
         }
       } else {
