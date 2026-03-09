@@ -37,8 +37,8 @@ export async function getVersion(): Promise<string> {
 
 export function validateDirectory(directory: string) {
     if (!directory || !fs.existsSync(directory)) {
-        console.log(chalk.red("❌ Error: 'directory' must be a valid path."));
-        process.exit(1);
+        // Throw instead of process.exit() — lets dashboard API handlers catch gracefully
+        throw new Error(`Directory not found or invalid: '${directory}'`);
     }
 }
 
