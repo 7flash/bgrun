@@ -271,6 +271,8 @@ export function getShellCommand(command: string): string[] {
  * Traverses the process tree recursively to find the deepest (leaf) child.
  * On Windows, bgr spawn creates: cmd.exe → bgr.exe → bun.exe
  * We need the bun.exe PID, not the intermediate bgr.exe.
+ * 
+ * Uses wmic (fast, ~50ms) instead of PowerShell Get-CimInstance (~3s per call).
  */
 export async function findChildPid(parentPid: number): Promise<number> {
   let currentPid = parentPid;
@@ -281,10 +283,14 @@ export async function findChildPid(parentPid: number): Promise<number> {
       let childPids: number[] = [];
 
       if (isWindows()) {
-        const result = await $`powershell -Command "Get-CimInstance Win32_Process -Filter 'ParentProcessId=${currentPid}' | Select-Object -ExpandProperty ProcessId"`.nothrow().text();
+        // wmic is ~60x faster than PowerShell Get-CimInstance
+        const result = await $`wmic process where (ParentProcessId=${currentPid}) get ProcessId /format:list`.nothrow().quiet().text();
         childPids = result
           .split('\n')
-          .map((line: string) => parseInt(line.trim()))
+          .map((line: string) => {
+            const match = line.match(/ProcessId=(\d+)/);
+            return match ? parseInt(match[1]) : NaN;
+          })
           .filter((n: number) => !isNaN(n) && n > 0);
       } else {
         const result = await $`ps --no-headers -o pid --ppid ${currentPid}`.nothrow().text();

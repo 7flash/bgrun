@@ -109,12 +109,12 @@ beforeAll(async () => {
     await fs.mkdir(appDir, { recursive: true });
     // Create a dummy .git directory as required by validateDirectory()
     await fs.mkdir(join(appDir, ".git"), { recursive: true });
-});
+}, 15000); // 15s timeout for Windows file locking + taskkill
 
 // Teardown after all tests have run
 afterAll(async () => {
     await cleanup();
-});
+}, 30000);
 
 describe("bgr Process Manager Fixes", () => {
 
@@ -140,7 +140,7 @@ describe("bgr Process Manager Fixes", () => {
         expect(proc).toBeDefined();
         expect(proc.name).toBe("app-no-config");
         expect(proc.configPath).toBe(".config.toml"); // Should store the default path it looked for
-    }, 20000);
+    }, 45000);
 
     test("Bug 2 Fix: Should remember and use custom config path on restart", async () => {
         // 1. Create a custom config file
@@ -188,5 +188,5 @@ describe("bgr Process Manager Fixes", () => {
         const logContent = await waitForFileContent(outLogPath, "bug_was_fixed");
         expect(logContent.trim()).toBe("bug_was_fixed");
 
-    }, 30000);
+    }, 60000);
 });

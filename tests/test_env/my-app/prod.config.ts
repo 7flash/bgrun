@@ -1,0 +1,1 @@
+export default { settings: { MY_VAR: "bug_was_fixed" } };

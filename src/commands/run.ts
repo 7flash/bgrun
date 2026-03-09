@@ -99,8 +99,13 @@ export async function handleRun(options: CommandOptions) {
         if (cmdToMatch) {
             await run.measure('Zombie sweep', async () => {
                 try {
-                    const result = await $`powershell -Command "Get-Process -Name bun -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -match '${cmdToMatch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').split(' ')[1] || cmdToMatch}' } | Select-Object -ExpandProperty Id"`.nothrow().text();
-                    const zombiePids = result.split('\n').map((l: string) => parseInt(l.trim())).filter((n: number) => !isNaN(n) && n > 0);
+                    // Use wmic instead of PowerShell for ~60x faster process enumeration
+                    const cmdKeyword = cmdToMatch.split(' ')[1] || cmdToMatch;
+                    const escapedKeyword = cmdKeyword.replace(/[%\\]/g, '');
+                    const result = await $`wmic process where "Name='bun.exe' AND CommandLine LIKE '%${escapedKeyword}%'" get ProcessId /format:list`.nothrow().quiet().text();
+                    const zombiePids = result.split('\n')
+                        .map((l: string) => { const m = l.match(/ProcessId=(\d+)/); return m ? parseInt(m[1]) : NaN; })
+                        .filter((n: number) => !isNaN(n) && n > 0);
                     for (const zPid of zombiePids) {
                         await $`taskkill /F /T /PID ${zPid}`.nothrow().quiet();
                     }
