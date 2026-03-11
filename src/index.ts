@@ -26,6 +26,48 @@ if (!Bun.argv.includes("--_serve")) {
   }
 }
 
+/**
+ * Redirect console.log/warn/error to log files when running detached.
+ * The parent spawner passes file paths via BGR_STDOUT/BGR_STDERR env vars.
+ * Appends timestamped lines so `bgrun <name> --logs` shows real output.
+ */
+function redirectConsoleToFiles() {
+  const stdoutPath = Bun.env.BGR_STDOUT;
+  const stderrPath = Bun.env.BGR_STDERR;
+  if (!stdoutPath && !stderrPath) return; // Not detached, keep normal console
+
+  const { appendFileSync } = require('fs');
+
+  // Strip ANSI escape codes for clean log files
+  const stripAnsi = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, '');
+
+  const timestamp = () => new Date().toISOString().replace('T', ' ').substring(0, 19);
+
+  if (stdoutPath) {
+    const origLog = console.log;
+    const origWarn = console.warn;
+    console.log = (...args: any[]) => {
+      const line = `[${timestamp()}] ${stripAnsi(args.map(String).join(' '))}\n`;
+      try { appendFileSync(stdoutPath, line); } catch { }
+      origLog.apply(console, args); // Also keep original (goes to /dev/null when detached, but useful if attached)
+    };
+    console.warn = (...args: any[]) => {
+      const line = `[${timestamp()}] WARN: ${stripAnsi(args.map(String).join(' '))}\n`;
+      try { appendFileSync(stdoutPath, line); } catch { }
+      origWarn.apply(console, args);
+    };
+  }
+
+  if (stderrPath) {
+    const origError = console.error;
+    console.error = (...args: any[]) => {
+      const line = `[${timestamp()}] ERROR: ${stripAnsi(args.map(String).join(' '))}\n`;
+      try { appendFileSync(stderrPath, line); } catch { }
+      origError.apply(console, args);
+    };
+  }
+}
+
 async function showHelp() {
   const usage = dedent`
     ${chalk.bold('bgrun — Bun Background Runner')}
@@ -120,6 +162,9 @@ async function run() {
   // Port is NOT passed explicitly — Melina auto-detects from BUN_PORT env
   // or defaults to 3000 with fallback to next available port.
   if (values['_serve']) {
+    // Redirect console output to log files when running detached
+    // The spawner passes paths via BGR_STDOUT/BGR_STDERR env vars
+    redirectConsoleToFiles();
     const { startServer } = await import("./server");
     await startServer();
     return;
@@ -127,6 +172,8 @@ async function run() {
 
   // Internal: actually run the guard loop (spawned by --guard)
   if (values['_guard-loop']) {
+    // Redirect console output to log files when running detached
+    redirectConsoleToFiles();
     const { startGuardLoop } = await import("./guard");
     const intervalStr = positionals[0];
     const intervalMs = intervalStr ? parseInt(intervalStr) * 1000 : undefined;
@@ -193,10 +240,13 @@ async function run() {
     await Bun.write(stderrPath, '');
 
     // Pass BUN_PORT env var only if user explicitly requested a port
-    const spawnEnv = { ...Bun.env };
+    const spawnEnv: Record<string, string> = { ...Bun.env } as any;
     if (requestedPort) {
       spawnEnv.BUN_PORT = requestedPort;
     }
+    // Pass log paths so the detached process can redirect its own console output
+    spawnEnv.BGR_STDOUT = stdoutPath;
+    spawnEnv.BGR_STDERR = stderrPath;
 
     // Resolve the target port: --port flag > BUN_PORT env > default 3000
     const targetPort = parseInt(requestedPort || Bun.env.BUN_PORT || '3000');
@@ -312,7 +362,7 @@ async function run() {
     await Bun.write(stderrPath, '');
 
     const newProcess = Bun.spawn(getShellCommand(spawnCommand), {
-      env: { ...Bun.env },
+      env: { ...Bun.env, BGR_STDOUT: stdoutPath, BGR_STDERR: stderrPath },
       cwd: bgrDir,
       stdout: "ignore",
       stderr: "ignore",
