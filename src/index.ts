@@ -12,7 +12,7 @@ import type { CommandOptions } from "./types";
 import { error, announce } from "./logger";
 // startServer is dynamically imported only when --_serve is used
 // to avoid loading melina (which has side-effects) on every bgrun command
-import { getHomeDir, getShellCommand, findChildPid, isProcessRunning, terminateProcess, getProcessPorts, killProcessOnPort, waitForPortFree, isPortFree } from "./platform";
+import { getHomeDir, getShellCommand, findChildPid, isProcessRunning, terminateProcess, getProcessPorts, killProcessOnPort, waitForPortFree, isPortFree, findPidByPort } from "./platform";
 import { insertProcess, removeProcessByName, getProcess, retryDatabaseOperation, getDbInfo } from "./db";
 import dedent from "dedent";
 import chalk from "chalk";
@@ -216,16 +216,18 @@ async function run() {
     const newProcess = Bun.spawn(getShellCommand(spawnCommand), {
       env: spawnEnv,
       cwd: bgrDir,
-      stdout: Bun.file(stdoutPath),
-      stderr: Bun.file(stderrPath),
-    });
+      stdout: "ignore",
+      stderr: "ignore",
+      detached: true, // Windows: new process group outside parent's Job Object — survives terminal close
+    } as any);
 
     newProcess.unref();
 
-    // Resolve the actual child PID by traversing the process tree
-    // (cmd.exe → bun.exe), then detect which port it bound
+    // With detached: cmd.exe wrapper exits immediately, so findChildPid won't work.
+    // Instead, wait for the server to bind a port and find the PID from there.
     await sleep(2000); // Give the server time to start and bind a port
-    const actualPid = await findChildPid(newProcess.pid);
+    const resolvedPort = parseInt(requestedPort || Bun.env.BUN_PORT || '3000');
+    const actualPid = await findPidByPort(resolvedPort, 10000) ?? await findChildPid(newProcess.pid);
 
     // Detect the port the server actually bound to
     let actualPort: number | null = null;
@@ -312,13 +314,25 @@ async function run() {
     const newProcess = Bun.spawn(getShellCommand(spawnCommand), {
       env: { ...Bun.env },
       cwd: bgrDir,
-      stdout: Bun.file(stdoutPath),
-      stderr: Bun.file(stderrPath),
-    });
+      stdout: "ignore",
+      stderr: "ignore",
+      detached: true, // Windows: new process group outside parent's Job Object — survives terminal close
+    } as any);
 
     newProcess.unref();
     await sleep(1000);
-    const actualPid = await findChildPid(newProcess.pid);
+    // With detached: cmd.exe exits immediately. Search for the guard by command line.
+    let actualPid = await findChildPid(newProcess.pid);
+    if (!(await isProcessRunning(actualPid))) {
+      // cmd.exe already died — search for the bun process running --_guard-loop
+      const { psExec: ps } = await import('./platform');
+      const result = ps(
+        `Get-CimInstance Win32_Process -Filter "Name='bun.exe'" | Where-Object { $_.CommandLine -match '_guard-loop' } | Sort-Object -Property CreationDate -Descending | Select-Object -First 1 -ExpandProperty ProcessId`,
+        3000
+      );
+      const foundPid = parseInt(result.trim());
+      if (!isNaN(foundPid) && foundPid > 0) actualPid = foundPid;
+    }
 
     await retryDatabaseOperation(() =>
       insertProcess({
