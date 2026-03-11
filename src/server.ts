@@ -29,6 +29,37 @@ if (!_g.__bgrGuardNextRestartTime) _g.__bgrGuardNextRestartTime = new Map<string
 export const guardRestartCounts: Map<string, number> = _g.__bgrGuardRestartCounts;
 const guardNextRestartTime: Map<string, number> = _g.__bgrGuardNextRestartTime;
 
+/** Try to free a port from zombie processes (dead PIDs holding sockets) */
+async function cleanupPort(port: number): Promise<number> {
+    if (process.platform !== 'win32') return port;
+    try {
+        const proc = Bun.spawn(['powershell', '-NoProfile', '-Command',
+            `Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess`
+        ], { stdout: 'pipe', stderr: 'pipe' });
+        const text = await new Response(proc.stdout).text();
+        const pid = parseInt(text.trim(), 10);
+        if (!pid || pid === process.pid) return port;
+
+        // Check if the owning process is actually dead
+        const checkProc = Bun.spawn(['powershell', '-NoProfile', '-Command',
+            `Get-Process -Id ${pid} -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id`
+        ], { stdout: 'pipe', stderr: 'pipe' });
+        const checkText = await new Response(checkProc.stdout).text();
+        if (checkText.trim()) {
+            // Process is alive — kill it to reclaim the port
+            console.log(`[server] Killing PID ${pid} holding port ${port}`);
+            Bun.spawn(['taskkill', '/F', '/PID', String(pid)], { stdout: 'pipe', stderr: 'pipe' });
+            await Bun.sleep(1000);
+            return port;
+        } else {
+            // Process is dead but socket is zombie — use fallback port
+            const fallback = port + 1;
+            console.log(`[server] ⚠ Port ${port} held by zombie PID ${pid} — falling back to port ${fallback}`);
+            return fallback;
+        }
+    } catch { return port; /* best-effort cleanup */ }
+}
+
 export async function startServer() {
     // Dynamic import to avoid melina's side-effect console.log at bundle load time
     const { start } = await import('melina');
@@ -36,12 +67,18 @@ export async function startServer() {
 
     // Only pass port when BUN_PORT is explicitly set.
     // When omitted, Melina defaults to 3000 with auto-fallback to next available port.
-    const explicitPort = process.env.BUN_PORT ? parseInt(process.env.BUN_PORT, 10) : undefined;
+    const requestedPort = process.env.BUN_PORT ? parseInt(process.env.BUN_PORT, 10) : 3000;
+
+    // Clean up zombie port bindings before starting — may return a different fallback port
+    const resolvedPort = await cleanupPort(requestedPort);
+
+    // Pass port explicitly if user requested one OR if we had to fallback
+    const needsExplicitPort = process.env.BUN_PORT || resolvedPort !== requestedPort;
     await start({
         appDir,
         defaultTitle: 'bgrun Dashboard - Process Manager',
         globalCss: path.join(appDir, 'globals.css'),
-        ...(explicitPort !== undefined && { port: explicitPort }),
+        ...(needsExplicitPort && { port: resolvedPort }),
     });
 
     // Start the built-in process guard
