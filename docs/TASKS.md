@@ -6,7 +6,7 @@
 
 ## 🟢 Priority: Features
 - [x] ~~**Process health metrics in dashboard**~~ — ✅ ALREADY DONE. `MiniSparkline` SVG component renders CPU/memory trends (up to 60 data points = 5 min at 5s polling). Displayed in both `ProcessRow` table and `ProcessCard` mobile views. API (`/api/processes`) collects `memoryHistory[]` and `cpuHistory[]` with per-process tracking via `__bgrResourceHistory` global Map. Windows CPU uses delta-time calculation; Unix uses `ps` percentage directly.
-- [ ] **Webhook notifications** — Send HTTP webhook when a guarded process crashes or restarts.
+- [x] ~~**Webhook notifications**~~ — ✅ DONE. Guard fires HTTP POST to `BGR_WEBHOOK_URL` on crash/restart/restart_failed events. Payload includes process name, PID, restart count, backoff, timestamp. Optional `BGR_WEBHOOK_SECRET` enables HMAC-SHA256 signature in `X-BGR-Signature` header (GitHub-style). 5s timeout, non-blocking. Shown in guard startup banner.
 
 ## 📝 Architecture Notes
 - **Package**: `bgrun` on npm
