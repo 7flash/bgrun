@@ -18,6 +18,11 @@ import { getAllProcesses, getProcess } from './db';
 import { isProcessRunning, getProcessPorts, findChildPid } from './platform';
 import { handleRun } from './commands/run';
 import { parseEnvString } from './utils';
+import { createHmac } from 'crypto';
+
+// Webhook configuration via environment variables
+const WEBHOOK_URL = process.env.BGR_WEBHOOK_URL || '';
+const WEBHOOK_SECRET = process.env.BGR_WEBHOOK_SECRET || '';
 
 const DEFAULT_INTERVAL_MS = 30_000;
 const MAX_BACKOFF_MS = 5 * 60_000; // 5 minutes max
@@ -35,6 +40,42 @@ const state: GuardState = {
     nextRestartTime: new Map(),
     lastSeenAlive: new Map(),
 };
+
+async function notifyWebhook(event: 'crash' | 'restart' | 'restart_failed', name: string, details: Record<string, any>) {
+    if (!WEBHOOK_URL) return;
+    try {
+        const payload = JSON.stringify({
+            event,
+            process: name,
+            timestamp: new Date().toISOString(),
+            ...details,
+        });
+
+        const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+            'User-Agent': 'bgrun-guard/1.0',
+        };
+
+        // HMAC signature if secret is configured
+        if (WEBHOOK_SECRET) {
+            const sig = createHmac('sha256', WEBHOOK_SECRET).update(payload).digest('hex');
+            headers['X-BGR-Signature'] = `sha256=${sig}`;
+        }
+
+        // Fire and forget with timeout
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 5000);
+        await fetch(WEBHOOK_URL, {
+            method: 'POST',
+            headers,
+            body: payload,
+            signal: controller.signal,
+        });
+        clearTimeout(timeout);
+    } catch (err: any) {
+        console.error(`[guard] Webhook failed: ${err.message}`);
+    }
+}
 
 async function restartProcess(name: string): Promise<boolean> {
     try {
@@ -94,6 +135,9 @@ async function guardCycle(): Promise<void> {
 
                     console.log(`[guard] ⚠ "${proc.name}" (PID ${proc.pid}) is dead — restarting...`);
 
+                    // Notify crash detected
+                    notifyWebhook('crash', proc.name, { pid: proc.pid, isDashboard });
+
                     const success = await restartProcess(proc.name);
                     if (success) {
                         const count = (state.restartCounts.get(proc.name) || 0) + 1;
@@ -108,6 +152,12 @@ async function guardCycle(): Promise<void> {
                             console.log(`[guard] ✓ Restarted "${proc.name}" (#${count})`);
                         }
                         restarted++;
+
+                        // Notify restart success
+                        notifyWebhook('restart', proc.name, { pid: proc.pid, restartCount: count, backoffMs: backoff });
+                    } else {
+                        // Notify restart failed
+                        notifyWebhook('restart_failed', proc.name, { pid: proc.pid });
                     }
                 } else if (alive) {
                     // Track stability — if alive for STABILITY_WINDOW, reset counters
@@ -146,6 +196,7 @@ export async function startGuardLoop(intervalMs: number = DEFAULT_INTERVAL_MS) {
     console.log(`[guard]    Crash backoff threshold: ${CRASH_THRESHOLD} restarts`);
     console.log(`[guard]    Stability window: ${STABILITY_WINDOW_MS / 1000}s`);
     console.log(`[guard]    Monitoring: BGR_KEEP_ALIVE=true + bgr-dashboard`);
+    console.log(`[guard]    Webhook: ${WEBHOOK_URL || '(none — set BGR_WEBHOOK_URL to enable)'}`);
     console.log(`[guard]    Started: ${new Date().toLocaleString()}`);
     console.log(`[guard] ═══════════════════════════════════════════`);
 
