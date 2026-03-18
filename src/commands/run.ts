@@ -138,6 +138,11 @@ export async function handleRun(options: CommandOptions) {
     const finalCommand = command || existingProcess!.command;
     const finalDirectory = directory || (existingProcess?.workdir!);
     let finalEnv = env || (existingProcess ? parseEnvString(existingProcess.env) : {});
+    
+    // Default BGR_KEEP_ALIVE=true for new processes unless explicitly disabled
+    if (!('BGR_KEEP_ALIVE' in finalEnv)) {
+        finalEnv.BGR_KEEP_ALIVE = 'true';
+    }
 
     let finalConfigPath: string | undefined | null;
     if (configPath !== undefined) {

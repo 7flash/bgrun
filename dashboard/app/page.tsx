@@ -39,6 +39,15 @@ export default function DashboardPage() {
                 </div>
             </div>
 
+            {/* Guard Activity Feed */}
+            <div className="guard-activity" id="guard-activity">
+                <div className="guard-activity-header">
+                    <span className="guard-activity-title">🛡️ Guard Activity</span>
+                    <span className="guard-activity-empty" id="guard-activity-empty">No recent activity</span>
+                </div>
+                <div className="guard-activity-list" id="guard-activity-list"></div>
+            </div>
+
             {/* Toolbar */}
             <div className="toolbar">
                 <div className="toolbar-left">
@@ -56,6 +65,9 @@ export default function DashboardPage() {
                         <span className="search-count" id="search-count" style={{ display: 'none' }}></span>
                         <span className="search-shortcut">/</span>
                     </div>
+                    <select className="group-filter" id="group-filter">
+                        <option value="">All Groups</option>
+                    </select>
                 </div>
                 <div className="toolbar-right">
                     <button className="btn btn-ghost btn-icon" id="refresh-btn" title="Refresh">
@@ -76,6 +88,20 @@ export default function DashboardPage() {
                     </span>
                     <button className="btn btn-ghost btn-icon" id="shortcuts-btn" title="Keyboard Shortcuts (?)">
                         <span style={{ fontSize: '0.85rem', fontWeight: '700' }}>?</span>
+                    </button>
+                    <button className="btn btn-secondary" id="templates-btn">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                            <polyline points="14 2 14 8 20 8" />
+                        </svg>
+                        Templates
+                    </button>
+                    <button className="btn btn-ghost" id="history-btn">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="12" cy="12" r="10" />
+                            <polyline points="12 6 12 12 16 14" />
+                        </svg>
+                        History
                     </button>
                     <button className="btn btn-primary" id="new-process-btn">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -222,6 +248,78 @@ export default function DashboardPage() {
                     <div className="modal-footer">
                         <button className="btn btn-ghost" id="modal-cancel-btn">Cancel</button>
                         <button className="btn btn-primary" id="modal-create-btn">Create</button>
+                    </div>
+                </div>
+            </div>
+
+            {/* History Modal */}
+            <div className="modal-overlay" id="history-modal">
+                <div className="modal modal-wide">
+                    <div className="modal-header">
+                        <h3>📜 Process History</h3>
+                        <button className="modal-close" id="history-modal-close">✕</button>
+                    </div>
+                    <div className="modal-body">
+                        <div className="history-filters">
+                            <select id="history-process-filter" className="history-select">
+                                <option value="">All Processes</option>
+                            </select>
+                            <select id="history-event-filter" className="history-select">
+                                <option value="">All Events</option>
+                                <option value="start">Start</option>
+                                <option value="stop">Stop</option>
+                                <option value="restart">Restart</option>
+                                <option value="guard_on">Guard On</option>
+                                <option value="guard_off">Guard Off</option>
+                            </select>
+                        </div>
+                        <div className="history-list" id="history-list">
+                            <div className="history-empty">No history yet</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Templates Modal */}
+            <div className="modal-overlay" id="templates-modal">
+                <div className="modal modal-wide">
+                    <div className="modal-header">
+                        <h3>📋 Process Templates</h3>
+                        <button className="modal-close" id="templates-modal-close">✕</button>
+                    </div>
+                    <div className="modal-body">
+                        <div className="templates-form">
+                            <div className="form-row">
+                                <div className="form-group">
+                                    <label htmlFor="template-name">Template Name</label>
+                                    <input type="text" id="template-name" placeholder="my-template" />
+                                </div>
+                                <div className="form-group">
+                                    <label htmlFor="template-command">Command</label>
+                                    <input type="text" id="template-command" placeholder="bun run dev" />
+                                </div>
+                            </div>
+                            <div className="form-row">
+                                <div className="form-group">
+                                    <label htmlFor="template-directory">Working Directory</label>
+                                    <input type="text" id="template-directory" placeholder="/path/to/project" />
+                                </div>
+                                <div className="form-group">
+                                    <label htmlFor="template-group">Group</label>
+                                    <input type="text" id="template-group" placeholder="my-group" />
+                                </div>
+                            </div>
+                            <div className="form-group">
+                                <label htmlFor="template-env">Environment (KEY=VAL,KEY2=VAL2)</label>
+                                <input type="text" id="template-env" placeholder="BGR_KEEP_ALIVE=true,PORT=3000" />
+                            </div>
+                            <div className="templates-actions">
+                                <button className="btn btn-primary" id="template-save-btn">Save Template</button>
+                            </div>
+                        </div>
+                        <div className="templates-list" id="templates-list">
+                            <div className="templates-empty">No templates saved yet</div>
+                        </div>
                     </div>
                 </div>
             </div>

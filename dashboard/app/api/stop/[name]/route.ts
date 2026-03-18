@@ -4,7 +4,7 @@
  * Kills the registered PID, then kills anything remaining on the port.
  * Sets PID to 0 to prevent reconciliation from hijacking unrelated processes.
  */
-import { getProcess, updateProcessPid } from '../../../../../src/db';
+import { getProcess, updateProcessPid, addHistoryEntry } from '../../../../../src/db';
 import { isProcessRunning, terminateProcess, getProcessPorts, killProcessOnPort } from '../../../../../src/platform';
 import { measure } from 'measure-fn';
 
@@ -36,6 +36,9 @@ export async function POST(req: Request, { params }: { params: { name: string } 
     // Mark PID as 0 — prevents reconcileProcessPids from re-attaching
     // a random matching process as this one
     updateProcessPid(name, 0);
+
+    // Record history
+    addHistoryEntry(name, 'stop', proc.pid);
 
     return Response.json({ success: true });
 }

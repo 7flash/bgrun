@@ -14,7 +14,7 @@
  *   - Otherwise → defaults to 3000, falls back to next available if busy
  */
 import path from 'path';
-import { getAllProcesses, getProcess } from './db';
+import { getAllProcesses, getProcess, addHistoryEntry } from './db';
 import { isProcessRunning } from './platform';
 import { handleRun } from './commands/run';
 import { parseEnvString } from './utils';
@@ -26,8 +26,10 @@ const GUARD_SKIP_NAMES = new Set(['bgr-dashboard', 'bgr-guard']); // Don't try t
 const _g = globalThis as any;
 if (!_g.__bgrGuardRestartCounts) _g.__bgrGuardRestartCounts = new Map<string, number>();
 if (!_g.__bgrGuardNextRestartTime) _g.__bgrGuardNextRestartTime = new Map<string, number>();
+if (!_g.__bgrGuardEvents) _g.__bgrGuardEvents = [] as { time: number; name: string; action: string; success: boolean }[];
 export const guardRestartCounts: Map<string, number> = _g.__bgrGuardRestartCounts;
 const guardNextRestartTime: Map<string, number> = _g.__bgrGuardNextRestartTime;
+export const guardEvents: { time: number; name: string; action: string; success: boolean }[] = _g.__bgrGuardEvents;
 
 /** Try to free a port from zombie processes (dead PIDs holding sockets) */
 async function cleanupPort(port: number): Promise<number> {
@@ -60,6 +62,9 @@ async function cleanupPort(port: number): Promise<number> {
     } catch { return port; /* best-effort cleanup */ }
 }
 
+let _originalPort = 3000;
+let _currentPort = 3000;
+
 export async function startServer() {
     // Dynamic import to avoid melina's side-effect console.log at bundle load time
     const { start } = await import('melina');
@@ -68,9 +73,11 @@ export async function startServer() {
     // Only pass port when BUN_PORT is explicitly set.
     // When omitted, Melina defaults to 3000 with auto-fallback to next available port.
     const requestedPort = process.env.BUN_PORT ? parseInt(process.env.BUN_PORT, 10) : 3000;
+    _originalPort = requestedPort;
 
     // Clean up zombie port bindings before starting — may return a different fallback port
     const resolvedPort = await cleanupPort(requestedPort);
+    _currentPort = resolvedPort;
 
     // Pass port explicitly if user requested one OR if we had to fallback
     const needsExplicitPort = process.env.BUN_PORT || resolvedPort !== requestedPort;
@@ -87,6 +94,33 @@ export async function startServer() {
     // Start log rotation (prevents unbounded log file growth)
     const { startLogRotation } = await import('./log-rotation');
     startLogRotation(() => getAllProcesses());
+
+    // Start sticky port checker - periodically try original port if we're on a fallback
+    if (resolvedPort !== requestedPort) {
+        startStickyPortChecker();
+    }
+}
+
+function startStickyPortChecker() {
+    const CHECK_INTERVAL_MS = 60_000; // Check every 60 seconds
+    console.log(`[server] Starting sticky port checker (original: ${_originalPort}, current: ${_currentPort})`);
+
+    setInterval(async () => {
+        if (_currentPort === _originalPort) return; // Already on original port
+
+        try {
+            const proc = Bun.spawn(['powershell', '-NoProfile', '-Command',
+                `Get-NetTCPConnection -LocalPort ${_originalPort} -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess`
+            ], { stdout: 'pipe', stderr: 'pipe' });
+            const text = await new Response(proc.stdout).text();
+            const pid = parseInt(text.trim(), 10);
+
+            if (!pid) {
+                console.log(`[server] ✓ Original port ${_originalPort} is now available! Consider restarting to reclaim it.`);
+                _currentPort = _originalPort;
+            }
+        } catch { /* best-effort */ }
+    }, CHECK_INTERVAL_MS);
 }
 
 /**
@@ -126,6 +160,7 @@ function startGuard() {
                     if (now < nextRestart) continue; // Still in backoff period
 
                     console.log(`[guard] ⚠ Guarded process "${proc.name}" (PID ${proc.pid}) is dead, restarting...`);
+                    let success = false;
                     try {
                         await handleRun({
                             action: 'run',
@@ -133,11 +168,21 @@ function startGuard() {
                             force: true,
                             remoteName: '',
                         });
+                        success = true;
 
                         // Track restart count
                         const prevCount = guardRestartCounts.get(proc.name) || 0;
                         const newCount = prevCount + 1;
                         guardRestartCounts.set(proc.name, newCount);
+
+                        // Record in history database
+                        try {
+                            addHistoryEntry(proc.name, 'restart', undefined, { by: 'guard', count: newCount });
+                        } catch { /* ignore history errors */ }
+
+                        // Record event for dashboard
+                        guardEvents.unshift({ time: now, name: proc.name, action: 'restart', success: true });
+                        if (guardEvents.length > 100) guardEvents.pop();
 
                         // Exponential backoff if it crashes repeatedly (more than 5 times)
                         if (newCount > 5) {
@@ -149,6 +194,8 @@ function startGuard() {
                         }
                     } catch (err: any) {
                         console.error(`[guard] ✗ Failed to restart "${proc.name}": ${err.message}`);
+                        guardEvents.unshift({ time: now, name: proc.name, action: 'restart', success: false });
+                        if (guardEvents.length > 100) guardEvents.pop();
                     }
                 } else {
                     // Reset counter if process has been stable (alive at least once during check)

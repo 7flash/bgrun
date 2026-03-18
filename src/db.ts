@@ -18,9 +18,31 @@ export const ProcessSchema = z.object({
     stdout_path: z.string(),
     stderr_path: z.string(),
     timestamp: z.string().default(() => new Date().toISOString()),
+    group: z.string().default(''),
 });
 
 export type Process = z.infer<typeof ProcessSchema> & { id: number };
+
+export const TemplateSchema = z.object({
+    name: z.string(),
+    command: z.string(),
+    workdir: z.string().default(''),
+    env: z.string().default(''),
+    group: z.string().default(''),
+    created_at: z.string().default(() => new Date().toISOString()),
+});
+
+export type Template = z.infer<typeof TemplateSchema> & { id: number };
+
+export const HistorySchema = z.object({
+    process_name: z.string(),
+    event: z.string(), // 'start', 'stop', 'restart', 'crash', 'guard_on', 'guard_off'
+    pid: z.number().optional(),
+    timestamp: z.string().default(() => new Date().toISOString()),
+    metadata: z.string().default(''), // JSON string for extra info
+});
+
+export type History = z.infer<typeof HistorySchema> & { id: number };
 
 // =============================================================================
 // DATABASE INITIALIZATION
@@ -48,9 +70,13 @@ if (!existsSync(dbPath) && existsSync(legacyDbPath)) {
 
 export const db = new Database(dbPath, {
     process: ProcessSchema,
+    template: TemplateSchema,
+    history: HistorySchema,
 }, {
     indexes: {
         process: ['name', 'timestamp', 'pid'],
+        template: ['name'],
+        history: ['process_name', 'timestamp'],
     },
 });
 
@@ -125,6 +151,95 @@ export function updateProcessEnv(name: string, envJson: string) {
     if (proc) {
         db.process.update(proc.id, { env: envJson });
     }
+}
+
+// =============================================================================
+// TEMPLATE FUNCTIONS
+// =============================================================================
+
+export function getAllTemplates() {
+    return db.template.select().all();
+}
+
+export function getTemplate(name: string) {
+    return db.template.select().where({ name }).limit(1).get() || null;
+}
+
+export function saveTemplate(data: {
+    name: string;
+    command: string;
+    workdir?: string;
+    env?: string;
+    group?: string;
+}) {
+    const existing = db.template.select().where({ name: data.name }).limit(1).get();
+    if (existing) {
+        db.template.update(existing.id, {
+            command: data.command,
+            workdir: data.workdir || '',
+            env: data.env || '',
+            group: data.group || '',
+        });
+    } else {
+        db.template.insert({
+            name: data.name,
+            command: data.command,
+            workdir: data.workdir || '',
+            env: data.env || '',
+            group: data.group || '',
+        });
+    }
+}
+
+export function deleteTemplate(name: string) {
+    const tmpl = db.template.select().where({ name }).limit(1).get();
+    if (tmpl) {
+        db.template.delete(tmpl.id);
+    }
+}
+
+// =============================================================================
+// HISTORY FUNCTIONS
+// =============================================================================
+
+export function getProcessHistory(name: string, limit = 50) {
+    return db.history.select()
+        .where({ process_name: name })
+        .orderBy('timestamp', 'desc')
+        .limit(limit)
+        .all();
+}
+
+export function addHistoryEntry(processName: string, event: string, pid?: number, metadata = {}) {
+    return db.history.insert({
+        process_name: processName,
+        event,
+        pid,
+        metadata: JSON.stringify(metadata),
+    });
+}
+
+export function getRecentHistory(limit = 100) {
+    return db.history.select()
+        .orderBy('timestamp', 'desc')
+        .limit(limit)
+        .all();
+}
+
+export function clearOldHistory(daysToKeep = 30) {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - daysToKeep);
+    const cutoffStr = cutoff.toISOString();
+    
+    const oldEntries = db.history.select()
+        .where('timestamp', '<', cutoffStr)
+        .all();
+    
+    for (const entry of oldEntries) {
+        db.history.delete(entry.id);
+    }
+    
+    return oldEntries.length;
 }
 
 // =============================================================================

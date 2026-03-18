@@ -1,8 +1,8 @@
 
 import { error, announce } from "../logger";
-import { getProcess } from "../db";
+import { getProcess, updateProcessPid } from "../db";
 import { isProcessRunning, calculateRuntime, parseEnvString } from "../utils";
-import { getProcessPorts } from "../platform";
+import { getProcessPorts, reconcileProcessPids } from "../platform";
 import chalk from "chalk";
 
 export async function showDetails(name: string) {
@@ -12,7 +12,21 @@ export async function showDetails(name: string) {
         return;
     }
 
-    const isRunning = await isProcessRunning(proc.pid, proc.command);
+    let isRunning = await isProcessRunning(proc.pid, proc.command);
+
+    // Reconcile stale PID: cmd.exe wrapper may have exited while bun.exe child lives
+    if (!isRunning && proc.pid > 0) {
+        const reconciled = await reconcileProcessPids(
+            [{ name: proc.name, pid: proc.pid, command: proc.command, workdir: proc.workdir }],
+            new Set([proc.pid]),
+        );
+        const newPid = reconciled.get(proc.name);
+        if (newPid) {
+            updateProcessPid(proc.name, newPid);
+            (proc as any).pid = newPid;
+            isRunning = true;
+        }
+    }
     const runtime = calculateRuntime(proc.timestamp);
     const envVars = parseEnvString(proc.env);
 

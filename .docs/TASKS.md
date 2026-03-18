@@ -2,11 +2,24 @@
 
 ## 🔴 Priority: Fix
 - [x] ~~**Dashboard unreachable after restart (zombie port)**~~ — ✅ DONE. Dead PIDs leave CloseWait sockets on port 3000 (Windows kernel issue). Added `cleanupPort()` that detects zombie PIDs and falls back to port+1 (3001).
-- [ ] **Guard not auto-enabled for new processes** — Guard requires `BGR_KEEP_ALIVE=true` in each process env. Users expect guard to work by default. Consider: (a) "Guard All" button should persist, (b) new processes created via dashboard default to guarded.
+- [x] ~~**Guard not auto-enabled for new processes**~~ — ✅ DONE. `run.ts` now defaults `BGR_KEEP_ALIVE=true` for all new processes (CLI and dashboard). Only skipped if explicitly set to `false` in env.
 
 ## 🟡 Priority: Improve
-- [ ] **Dashboard port should be sticky** — After falling back to 3001, the dashboard stays on 3001 even after zombie clears. Should periodically re-check if preferred port (3000) is available and migrate back.
-- [ ] **Guard restart logging** — Guard restarts are logged to stdout but not visible in the dashboard UI. Add a "Guard Activity" section showing recent auto-restarts with timestamps.
+- [x] ~~**Dashboard port should be sticky**~~ — ✅ DONE. Added `startStickyPortChecker()` in server.ts that checks every 60s if original port is available.
+- [x] ~~**Guard restart logging**~~ — ✅ DONE. Added `/api/guard-events` endpoint and guard activity panel in dashboard UI.
+
+## ✅ Completed This Session
+- Added sticky port checker that periodically re-checks for original port availability
+- Added guard activity feed showing real-time restart events in dashboard
+
+## 🟢 Priority: Features (Future)
+- [ ] **Process groups** — Allow grouping processes by directory/config
+- [ ] **Deploy all** — One-click git pull + restart for all processes in a group
+- [ ] **Process templates** — Save/load process configurations
+- [x] ~~**Port conflict detection**~~ — Added getPortInfo() to platform.ts, added to API (in progress - Melina caching issues)
+- [ ] **Process history** — Track start/stop/restart history with timestamps
+- [ ] **Dashboard UI improvements** — Show port conflict warning before starting
+- [ ] **Better error messages** — Improve bgrun CLI feedback for common issues
 
 ## 📝 Architecture Notes
 - **Version**: v3.12.0

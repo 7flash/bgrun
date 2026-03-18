@@ -288,6 +288,7 @@ function ProcessCard({ p }: { p: ProcessData }) {
             <div className="card-header">
                 <div className="process-name">
                     <span>{p.name}</span>
+                    {p.group && <span className="group-badge" title={`Group: ${p.group}`}>{p.group}</span>}
                     {guarded && <span className="guard-badge" title="Auto-restart enabled">🛡️</span>}
                 </div>
                 <span className={`status-badge ${p.running ? 'running' : 'stopped'}`}>
@@ -413,6 +414,7 @@ export default function mount(): () => void {
     let isFirstLoad = true;
     let allProcesses: ProcessData[] = [];
     let searchQuery = '';
+    let groupQuery = '';
     let searchDebounce: ReturnType<typeof setTimeout> | null = null;
     let collapsedGroups: Set<string> = new Set(JSON.parse(localStorage.getItem('bgr_collapsed_groups') || '[]'));
     let drawerProcess: string | null = null;
@@ -465,6 +467,48 @@ export default function mount(): () => void {
     }
     loadVersion();
 
+    // ─── Guard Activity Feed ───
+    interface GuardEvent {
+        time: number;
+        name: string;
+        action: string;
+        success: boolean;
+    }
+
+    async function loadGuardEvents() {
+        const listEl = $('guard-activity-list');
+        const emptyEl = $('guard-activity-empty');
+        if (!listEl) return;
+        try {
+            const res = await fetch('/api/guard-events');
+            const events: GuardEvent[] = await res.json();
+            if (events.length === 0) {
+                if (emptyEl) emptyEl.style.display = '';
+                listEl.innerHTML = '';
+                return;
+            }
+            if (emptyEl) emptyEl.style.display = 'none';
+            listEl.replaceChildren(...events.slice(0, 10).map(ev => {
+                const date = new Date(ev.time);
+                const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                const icon = ev.success ? '↻' : '✕';
+                const actionText = ev.action === 'restart' ? 'restarted' : ev.action;
+                return (
+                    <div className={`guard-event ${ev.success ? 'success' : 'failed'}`}>
+                        <span className="guard-event-time">{timeStr}</span>
+                        <span className="guard-event-icon">{icon}</span>
+                        <span className="guard-event-name">{ev.name}</span>
+                        <span className="guard-event-action">{actionText}</span>
+                    </div>
+                ) as unknown as Node;
+            }));
+        } catch {
+            if (emptyEl) emptyEl.style.display = '';
+        }
+    }
+    loadGuardEvents();
+    setInterval(loadGuardEvents, 10000); // Refresh every 10s
+
     // ─── Load & Render Processes ───
 
     async function loadProcesses() {
@@ -473,6 +517,7 @@ export default function mount(): () => void {
         try {
             const res = await fetch('/api/processes');
             allProcesses = await res.json();
+            updateGroupFilter();
             renderFilteredProcesses();
             updateStats(allProcesses);
         } catch (err) {
@@ -482,18 +527,45 @@ export default function mount(): () => void {
         }
     }
 
+    function updateGroupFilter() {
+        const groupFilter = $('group-filter') as HTMLSelectElement;
+        if (!groupFilter) return;
+        const groups = new Set<string>();
+        for (const p of allProcesses) {
+            if (p.group) groups.add(p.group);
+        }
+        const currentValue = groupFilter.value;
+        groupFilter.replaceChildren(
+            <option value="">All Groups</option> as unknown as Node,
+            ...Array.from(groups).sort().map(g => <option value={g}>{g}</option> as unknown as Node)
+        );
+        // Preserve selection if still valid
+        if (currentValue && groups.has(currentValue)) {
+            groupFilter.value = currentValue;
+        }
+    }
+
     function renderFilteredProcesses() {
         // Always sync searchQuery from DOM to prevent desync
         if (searchInput && searchInput.value.toLowerCase().trim() !== searchQuery) {
             searchQuery = searchInput.value.toLowerCase().trim();
         }
-        const filtered = searchQuery
+        // Sync groupQuery from dropdown
+        const groupFilter = $('group-filter') as HTMLSelectElement;
+        if (groupFilter && groupFilter.value !== groupQuery) {
+            groupQuery = groupFilter.value;
+        }
+        let filtered = searchQuery
             ? allProcesses.filter(p =>
                 p.name.toLowerCase().includes(searchQuery) ||
                 p.command.toLowerCase().includes(searchQuery) ||
                 (p.port && String(p.port).includes(searchQuery))
             )
             : allProcesses;
+        // Apply group filter
+        if (groupQuery) {
+            filtered = filtered.filter(p => p.group === groupQuery);
+        }
         renderProcesses(filtered);
 
         // Update search result count badge
@@ -655,6 +727,14 @@ export default function mount(): () => void {
             searchQuery = searchInput.value.toLowerCase().trim();
             renderFilteredProcesses();
         }, 150);
+    });
+
+    // ─── Group Filter ───
+
+    const groupFilter = $('group-filter') as HTMLSelectElement;
+    groupFilter?.addEventListener('change', () => {
+        groupQuery = groupFilter.value;
+        renderFilteredProcesses();
     });
 
     /** Fetch with cache-bust to force fresh data after mutations */
@@ -1607,6 +1687,263 @@ export default function mount(): () => void {
             closeModal();
         }
     });
+
+    // ─── Templates Modal ───
+
+    interface TemplateData {
+        name: string;
+        command: string;
+        workdir: string;
+        env: string;
+        group: string;
+        created_at: string;
+    }
+
+    let templates: TemplateData[] = [];
+
+    async function loadTemplates() {
+        try {
+            const res = await fetch('/api/templates');
+            if (res.ok) {
+                templates = await res.json();
+                renderTemplates();
+            }
+        } catch (err) {
+            console.error('[bgr-dashboard] loadTemplates error:', err);
+        }
+    }
+
+    function renderTemplates() {
+        const list = $('templates-list');
+        if (!list) return;
+
+        if (templates.length === 0) {
+            list.innerHTML = '<div class="templates-empty">No templates saved yet</div>';
+            return;
+        }
+
+        list.replaceChildren(...templates.map(t => (
+            <div className="template-item">
+                <div className="template-item-info">
+                    <div className="template-item-name">{t.name}</div>
+                    <div className="template-item-command">{t.command}</div>
+                </div>
+                {t.group && <span className="template-item-group">{t.group}</span>}
+                <div className="template-item-actions">
+                    <button className="use-btn" data-use={t.name} title="Use this template">Use</button>
+                    <button className="delete-btn" data-delete={t.name} title="Delete template">✕</button>
+                </div>
+            </div>
+        ) as unknown as Node));
+
+        // Add click handlers
+        list.querySelectorAll('.use-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const name = (e.target as HTMLElement).dataset.use;
+                const tmpl = templates.find(t => t.name === name);
+                if (tmpl) {
+                    useTemplate(tmpl);
+                }
+            });
+        });
+
+        list.querySelectorAll('.delete-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const name = (e.target as HTMLElement).dataset.delete;
+                if (name) deleteTemplate(name);
+            });
+        });
+    }
+
+    function openTemplatesModal() {
+        const modal = $('templates-modal');
+        if (modal) modal.classList.add('active');
+        loadTemplates();
+    }
+
+    function closeTemplatesModal() {
+        const modal = $('templates-modal');
+        if (modal) modal.classList.remove('active');
+        // Clear form
+        ($('template-name') as HTMLInputElement).value = '';
+        ($('template-command') as HTMLInputElement).value = '';
+        ($('template-directory') as HTMLInputElement).value = '';
+        ($('template-group') as HTMLInputElement).value = '';
+        ($('template-env') as HTMLInputElement).value = '';
+    }
+
+    async function saveTemplate() {
+        const name = ($('template-name') as HTMLInputElement)?.value?.trim();
+        const command = ($('template-command') as HTMLInputElement)?.value?.trim();
+        const workdir = ($('template-directory') as HTMLInputElement)?.value?.trim();
+        const group = ($('template-group') as HTMLInputElement)?.value?.trim();
+        const env = ($('template-env') as HTMLInputElement)?.value?.trim();
+
+        if (!name || !command) {
+            showToast('Name and command are required', 'error');
+            return;
+        }
+
+        try {
+            const res = await fetch('/api/templates', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, command, workdir, group, env }),
+            });
+
+            if (res.ok) {
+                showToast(`Template "${name}" saved`, 'success');
+                loadTemplates();
+                // Clear form
+                ($('template-name') as HTMLInputElement).value = '';
+                ($('template-command') as HTMLInputElement).value = '';
+                ($('template-directory') as HTMLInputElement).value = '';
+                ($('template-group') as HTMLInputElement).value = '';
+                ($('template-env') as HTMLInputElement).value = '';
+            } else {
+                showToast('Failed to save template', 'error');
+            }
+        } catch (err) {
+            showToast('Failed to save template', 'error');
+        }
+    }
+
+    async function deleteTemplate(name: string) {
+        if (!confirm(`Delete template "${name}"?`)) return;
+
+        try {
+            const res = await fetch(`/api/templates?name=${encodeURIComponent(name)}`, { method: 'DELETE' });
+            if (res.ok) {
+                showToast(`Template "${name}" deleted`, 'success');
+                loadTemplates();
+            } else {
+                showToast('Failed to delete template', 'error');
+            }
+        } catch (err) {
+            showToast('Failed to delete template', 'error');
+        }
+    }
+
+    function useTemplate(tmpl: TemplateData) {
+        // Fill new process form with template values
+        ($('process-name-input') as HTMLInputElement).value = '';
+        ($('process-command-input') as HTMLInputElement).value = tmpl.command;
+        ($('process-directory-input') as HTMLInputElement).value = tmpl.workdir;
+        closeTemplatesModal();
+        openModal();
+        showToast(`Template "${tmpl.name}" loaded — enter a process name`, 'success');
+    }
+
+    $('templates-btn')?.addEventListener('click', openTemplatesModal);
+    $('templates-modal-close')?.addEventListener('click', closeTemplatesModal);
+    $('template-save-btn')?.addEventListener('click', saveTemplate);
+    $('templates-modal')?.addEventListener('click', (e) => {
+        if ((e.target as Element).classList.contains('modal-overlay')) {
+            closeTemplatesModal();
+        }
+    });
+
+    // ─── History Modal ───
+
+    interface HistoryEntry {
+        process_name: string;
+        event: string;
+        pid: number | null;
+        timestamp: string;
+        metadata: Record<string, any>;
+    }
+
+    let allHistory: HistoryEntry[] = [];
+
+    async function loadHistory() {
+        try {
+            const res = await fetch('/api/history?limit=100');
+            if (res.ok) {
+                allHistory = await res.json();
+                renderHistory();
+                updateHistoryFilters();
+            }
+        } catch (err) {
+            console.error('[bgr-dashboard] loadHistory error:', err);
+        }
+    }
+
+    function updateHistoryFilters() {
+        const processFilter = $('history-process-filter') as HTMLSelectElement;
+        const eventFilter = $('history-event-filter') as HTMLSelectElement;
+        if (!processFilter) return;
+
+        const processNames = new Set<string>();
+        for (const h of allHistory) {
+            processNames.add(h.process_name);
+        }
+
+        const currentValue = processFilter.value;
+        processFilter.replaceChildren(
+            <option value="">All Processes</option> as unknown as Node,
+            ...Array.from(processNames).sort().map(n => <option value={n}>{n}</option> as unknown as Node)
+        );
+        if (currentValue && processNames.has(currentValue)) {
+            processFilter.value = currentValue;
+        }
+    }
+
+    function renderHistory() {
+        const list = $('history-list');
+        const processFilter = $('history-process-filter') as HTMLSelectElement;
+        const eventFilter = $('history-event-filter') as HTMLSelectElement;
+        if (!list) return;
+
+        const processValue = processFilter?.value || '';
+        const eventValue = eventFilter?.value || '';
+
+        let filtered = allHistory;
+        if (processValue) {
+            filtered = filtered.filter(h => h.process_name === processValue);
+        }
+        if (eventValue) {
+            filtered = filtered.filter(h => h.event === eventValue);
+        }
+
+        if (filtered.length === 0) {
+            list.innerHTML = '<div class="history-empty">No history found</div>';
+            return;
+        }
+
+        list.replaceChildren(...filtered.map(h => {
+            const time = new Date(h.timestamp);
+            const timeStr = time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' ' + time.toLocaleDateString([], { month: 'short', day: 'numeric' });
+            return (
+                <div className="history-item">
+                    <span className="history-item-time">{timeStr}</span>
+                    <span className="history-item-process">{h.process_name}</span>
+                    <span className={`history-item-event ${h.event}`}>{h.event.replace('_', ' ')}</span>
+                    {h.pid && <span className="history-item-pid">PID {h.pid}</span>}
+                </div>
+            ) as unknown as Node;
+        }));
+    }
+
+    function openHistoryModal() {
+        const modal = $('history-modal');
+        if (modal) modal.classList.add('active');
+        loadHistory();
+    }
+
+    function closeHistoryModal() {
+        const modal = $('history-modal');
+        if (modal) modal.classList.remove('active');
+    }
+
+    $('history-btn')?.addEventListener('click', openHistoryModal);
+    $('history-modal-close')?.addEventListener('click', closeHistoryModal);
+    $('history-modal')?.addEventListener('click', (e) => {
+        if ((e.target as Element).classList.contains('modal-overlay')) {
+            closeHistoryModal();
+        }
+    });
+    $('history-process-filter')?.addEventListener('change', renderHistory);
+    $('history-event-filter')?.addEventListener('change', renderHistory);
 
     // ─── Toolbar Actions ───
     $('refresh-btn')?.addEventListener('click', () => {

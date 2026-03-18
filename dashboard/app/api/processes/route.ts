@@ -237,10 +237,11 @@ async function fetchProcesses(): Promise<any[]> {
 export async function GET(req: Request) {
     const url = new URL(req.url);
     const bustCache = url.searchParams.has('t');
+    const portFilter = url.searchParams.get('port');
     const now = Date.now();
 
-    // Return cached data if still fresh and no bust param
-    if (!bustCache && cache.data && (now - cache.timestamp) < CACHE_TTL_MS) {
+    // Return cached data if still fresh and no bust param and no port filter
+    if (!bustCache && !portFilter && cache.data && (now - cache.timestamp) < CACHE_TTL_MS) {
         return Response.json(cache.data);
     }
 
@@ -258,7 +259,14 @@ export async function GET(req: Request) {
     }
 
     try {
-        const result = await cache.inflight;
+        let result = await cache.inflight;
+        // Filter by port if specified (also ensures fresh data by bypassing cache above)
+        if (portFilter) {
+            const portNum = parseInt(portFilter);
+            if (!isNaN(portNum)) {
+                result = result.filter((p: any) => p.ports?.includes(portNum));
+            }
+        }
         return Response.json(result);
     } catch (err) {
         console.error('[api/processes] Error fetching processes:', err);

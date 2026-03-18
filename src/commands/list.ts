@@ -1,10 +1,10 @@
 import chalk from "chalk";
 import { renderProcessTable } from "../table";
 import type { ProcessTableRow } from "../table";
-import { getAllProcesses } from "../db";
+import { getAllProcesses, updateProcessPid } from "../db";
 import { announce } from "../logger";
 import { isProcessRunning, calculateRuntime, parseEnvString } from "../utils";
-import { getProcessPorts, getProcessBatchResources } from "../platform";
+import { getProcessPorts, getProcessBatchResources, reconcileProcessPids } from "../platform";
 import { measure } from "measure-fn";
 
 function formatMemory(bytes: number): string {
@@ -24,12 +24,45 @@ export async function showAll(opts?: { json?: boolean; filter?: string }) {
         return envVars["BGR_GROUP"] === opts.filter;
     });
 
+    // ─── PID Reconciliation ──────────────────────────────────────────
+    // On Windows, the stored PID may be a dead cmd.exe wrapper while the
+    // actual bun.exe child is still running.  Detect dead PIDs up-front,
+    // reconcile them in one batch PowerShell call, and patch the DB so
+    // subsequent invocations are stable (no flicker).
+    const deadPids = new Set<number>();
+    const aliveCache = new Map<number, boolean>();
+
+    for (const proc of filtered) {
+        const alive = await isProcessRunning(proc.pid, proc.command);
+        aliveCache.set(proc.pid, alive);
+        if (!alive && proc.pid > 0) deadPids.add(proc.pid);
+    }
+
+    if (deadPids.size > 0) {
+        const reconciled = await reconcileProcessPids(
+            filtered.map(p => ({ name: p.name, pid: p.pid, command: p.command, workdir: p.workdir })),
+            deadPids,
+        );
+
+        for (const [name, newPid] of reconciled) {
+            updateProcessPid(name, newPid);
+            // Patch the in-memory record so the rest of this function sees
+            // the corrected PID without re-querying the DB.
+            const proc = filtered.find(p => p.name === name);
+            if (proc) {
+                (proc as any).pid = newPid;
+                aliveCache.set(newPid, true);
+            }
+        }
+    }
+    // ─────────────────────────────────────────────────────────────────
+
     if (opts?.json) {
         // JSON output with filtered env variables
         const jsonData: any[] = [];
 
         for (const proc of filtered) {
-            const isRunning = await isProcessRunning(proc.pid, proc.command);
+            const isRunning = aliveCache.get(proc.pid) ?? await isProcessRunning(proc.pid, proc.command);
             const envVars = parseEnvString(proc.env);
 
             const ports = isRunning ? await getProcessPorts(proc.pid) : [];
@@ -54,7 +87,7 @@ export async function showAll(opts?: { json?: boolean; filter?: string }) {
     const resourceMap = await getProcessBatchResources(allPids);
 
     for (const proc of filtered) {
-        const isRunning = await isProcessRunning(proc.pid, proc.command);
+        const isRunning = aliveCache.get(proc.pid) ?? await isProcessRunning(proc.pid, proc.command);
         const runtime = calculateRuntime(proc.timestamp);
         const mem = isRunning ? (resourceMap.get(proc.pid)?.memory || 0) : 0;
 

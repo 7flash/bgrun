@@ -202,6 +202,39 @@ export async function isPortFree(port: number): Promise<boolean> {
 }
 
 /**
+ * Get info about what's using a port.
+ * Returns { inUse: boolean, pid?: number, processName?: string }
+ */
+export async function getPortInfo(port: number): Promise<{ inUse: boolean; pid?: number; processName?: string }> {
+    try {
+        if (isWindows()) {
+            const result = await $`netstat -ano | findstr :${port}`.nothrow().quiet().text();
+            for (const line of result.split('\n')) {
+                const match = line.match(new RegExp(`:(${port})\\s+.*LISTENING\\s+(\\d+)`));
+                if (match) {
+                    const pid = parseInt(match[2]);
+                    if (pid > 0 && await isProcessRunning(pid)) {
+                        // Get process name
+                        const nameResult = await $`powershell -NoProfile -Command "(Get-Process -Id ${pid} -ErrorAction SilentlyContinue).ProcessName"`.nothrow().quiet().text();
+                        return { inUse: true, pid, processName: nameResult.trim() || 'unknown' };
+                    }
+                }
+            }
+            return { inUse: false };
+        } else {
+            const result = await $`ss -tln sport = :${port}`.nothrow().quiet().text();
+            const lines = result.trim().split('\n').filter((l: string) => l.trim());
+            if (lines.length > 1) {
+                return { inUse: true };
+            }
+            return { inUse: false };
+        }
+    } catch {
+        return { inUse: false };
+    }
+}
+
+/**
  * Wait for a port to become free, polling with timeout.
  * Returns true if port is free, false if timeout reached.
  */

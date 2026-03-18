@@ -5,7 +5,7 @@
  * When enabled=true, the built-in guard will auto-restart this process if it dies.
  * When enabled=false, the process is left alone.
  */
-import { getProcess, updateProcessEnv } from '../../../../src/db';
+import { getProcess, updateProcessEnv, addHistoryEntry } from '../../../../src/db';
 
 export async function POST(req: Request) {
     try {
@@ -34,6 +34,9 @@ export async function POST(req: Request) {
 
         // Save back
         updateProcessEnv(body.name, JSON.stringify(env));
+
+        // Record history
+        addHistoryEntry(body.name, body.enabled ? 'guard_on' : 'guard_off');
 
         return Response.json({
             ok: true,
