@@ -2147,75 +2147,88 @@ export default function mount(): () => void {
             return (
                 <div className="history-item" data-history-process={h.process_name} data-history-event={h.event}>
                     <span className="history-item-time">{timeStr}</span>
-                    <div className="history-item-process-wrap">
-                        <button
-                            className="history-item-process history-filter-shortcut"
-                            data-action="open-history-process"
-                            data-process={h.process_name}
-                            title={`Open process drawer for ${h.process_name}`}
-                        >
-                            {h.process_name}
-                        </button>
-                        <div className="history-item-actions">
+                    <div className="history-item-main">
+                        <div className="history-item-meta">
                             <button
-                                className="history-action-btn"
+                                className="history-item-process history-filter-shortcut"
                                 data-action="open-history-process"
                                 data-process={h.process_name}
                                 title={`Open process drawer for ${h.process_name}`}
                             >
-                                Open
+                                {h.process_name}
                             </button>
                             <button
-                                className="history-action-btn"
-                                data-action="filter-history-process"
-                                data-process={h.process_name}
-                                title={`Filter history to process ${h.process_name}`}
+                                className={`history-item-event history-filter-shortcut ${h.event}`}
+                                data-action="filter-history-event"
+                                data-event={h.event}
+                                title={`Filter history to event ${h.event}`}
                             >
-                                Filter
+                                {h.event.replace('_', ' ')}
                             </button>
+                            {h.pid && <span className="history-item-pid">PID {h.pid}</span>}
+                            <details className="history-item-actions-menu">
+                                <summary className="history-item-actions-toggle">Actions</summary>
+                                <div className="history-item-actions">
+                                    <button
+                                        className="history-action-btn"
+                                        data-action="open-history-process"
+                                        data-process={h.process_name}
+                                        title={`Open process drawer for ${h.process_name}`}
+                                    >
+                                        Open
+                                    </button>
+                                    <button
+                                        className="history-action-btn"
+                                        data-action="filter-history-process"
+                                        data-process={h.process_name}
+                                        title={`Filter history to process ${h.process_name}`}
+                                    >
+                                        Process Filter
+                                    </button>
+                                    <button
+                                        className="history-action-btn"
+                                        data-action="filter-history-event"
+                                        data-event={h.event}
+                                        title={`Filter history to event ${h.event}`}
+                                    >
+                                        Event Filter
+                                    </button>
+                                </div>
+                            </details>
                         </div>
-                    </div>
-                    <button
-                        className={`history-item-event history-filter-shortcut ${h.event}`}
-                        data-action="filter-history-event"
-                        data-event={h.event}
-                        title={`Filter history to event ${h.event}`}
-                    >
-                        {h.event.replace('_', ' ')}
-                    </button>
-                    {h.pid && <span className="history-item-pid">PID {h.pid}</span>}
-                    {details.length > 0 && (
-                        <details className="history-item-details-wrap">
-                            <summary className="history-item-details-summary">
-                                <span>Details</span>
-                                <span className="history-item-details-count">{details.length}</span>
-                            </summary>
-                            <div className="history-item-details">
-                                {details.map(detail => (
-                                    <span className="history-item-detail">
-                                        <button
-                                            className="history-item-detail-text history-item-filter-chip"
-                                            data-action="filter-history-detail"
-                                            data-filter={detail.value}
-                                            title={`Filter history by ${detail.label}: ${detail.value}`}
-                                        >
-                                            {detail.label}: {detail.value}
-                                        </button>
-                                        {detail.copyable && (
+                        {details.length > 0 && (
+                            <details className="history-item-details-wrap">
+                                <summary className="history-item-details-summary">
+                                    <span>Details</span>
+                                    <span className="history-item-details-count">{details.length}</span>
+                                </summary>
+                                <div className="history-item-details">
+                                    {details.map(detail => (
+                                        <span className="history-item-detail">
                                             <button
-                                                className="history-item-copy"
-                                                data-action="copy-history-detail"
-                                                data-copy={detail.value}
-                                                title={`Copy ${detail.label}`}
+                                                className="history-item-detail-text history-item-filter-chip"
+                                                data-action="filter-history-detail"
+                                                data-filter={detail.value}
+                                                title={`Filter history by ${detail.label}: ${detail.value}`}
                                             >
-                                                Copy
+                                                {detail.label}: {detail.value}
                                             </button>
-                                        )}
-                                    </span>
-                                ) as unknown as Node)}
-                            </div>
-                        </details>
-                    )}
+                                            {detail.copyable && (
+                                                <button
+                                                    className="history-item-copy"
+                                                    data-action="copy-history-detail"
+                                                    data-copy={detail.value}
+                                                    title={`Copy ${detail.label}`}
+                                                >
+                                                    Copy
+                                                </button>
+                                            )}
+                                        </span>
+                                    ) as unknown as Node)}
+                                </div>
+                            </details>
+                        )}
+                    </div>
                 </div>
             ) as unknown as Node;
         }));

@@ -43,8 +43,9 @@
 - [x] ~~**History → process jump**~~ — ✅ DONE. History process labels now open the related process drawer directly, while a small inline Filter action preserves filtering.
 - [x] ~~**Persistent history jump state**~~ — ✅ DONE. History jump targets now persist in session storage so reloads/reopenings can restore the highlighted target.
 - [x] ~~**History row action polish**~~ — ✅ DONE. History rows now use a more consistent action pattern with grouped process actions and unified button styling.
-- [ ] **History action grouping** — Group row actions more cleanly to reduce visual clutter
+- [x] ~~**History action grouping**~~ — ✅ DONE. History rows now use an explicit Actions menu so row content stays cleaner while controls remain available.
 - [ ] **History density modes** — Add compact/cozy display options for the History modal
+- [ ] **History action shortcuts toggle** — Let users show or hide quick-action affordances in History rows
 
 ## 📝 Architecture Notes
 - **Package**: `bgrun` on npm

@@ -3024,29 +3024,53 @@ tr.keyboard-focus td:first-child .process-name span {
     width: 85px;
 }
 
-.history-item-process-wrap {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.55rem;
+.history-item-main {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
     flex: 1;
+    min-width: 0;
+}
+
+.history-item-meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.55rem;
     min-width: 0;
 }
 
 .history-item-process {
     font-weight: 600;
     color: var(--text-primary);
-    flex: 1;
     min-width: 0;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
-.history-item-actions {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
+.history-item-actions-menu {
+    position: relative;
+    margin-left: auto;
     flex-shrink: 0;
+}
+
+.history-item-actions {
+    position: absolute;
+    top: calc(100% + 0.35rem);
+    right: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.35rem;
+    padding: 0.5rem;
+    border-radius: 0.7rem;
+    border: 1px solid var(--border-glass);
+    background: rgba(15, 23, 42, 0.96);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+    min-width: 220px;
 }
 
 .history-filter-shortcut {
@@ -3061,6 +3085,31 @@ tr.keyboard-focus td:first-child .process-name span {
 .history-filter-shortcut:hover {
     opacity: 0.85;
     text-decoration: underline;
+}
+
+.history-item-actions-toggle {
+    list-style: none;
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid rgba(139, 148, 158, 0.18);
+    background: rgba(139, 148, 158, 0.1);
+    color: var(--text-muted);
+    border-radius: 999px;
+    padding: 0.12rem 0.5rem;
+    font-size: 0.66rem;
+    font-weight: 700;
+    cursor: pointer;
+    user-select: none;
+}
+
+.history-item-actions-toggle::-webkit-details-marker {
+    display: none;
+}
+
+.history-item-actions-toggle:hover,
+.history-item-actions-menu[open] .history-item-actions-toggle {
+    background: rgba(96, 165, 250, 0.18);
+    color: #93c5fd;
 }
 
 .history-action-btn,
@@ -3130,7 +3179,6 @@ tr.keyboard-focus td:first-child .process-name span {
 
 .history-item-details-wrap {
     width: 100%;
-    margin-left: calc(85px + 0.75rem);
 }
 
 .history-item-details-summary {
