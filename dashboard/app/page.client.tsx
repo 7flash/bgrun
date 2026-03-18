@@ -430,6 +430,7 @@ export default function mount(): () => void {
     let historyShortcutsEnabled = localStorage.getItem('bgr_history_shortcuts') !== 'false';
     let historyDetailsDefault = localStorage.getItem('bgr_history_details_default') === 'expanded' ? 'expanded' : 'collapsed';
     let focusedHistoryIndex = 0;
+    let historyDetailState = new Map<string, boolean>();
     let logSearch = '';
     let logLinesRaw: string[] = [];  // Raw text (for search filtering)
     let logLinesHtml: string[] = []; // Pre-converted HTML (cached ansiToHtml)
@@ -2114,6 +2115,10 @@ export default function mount(): () => void {
         if (select) select.value = historyDetailsDefault;
     }
 
+    function getHistoryDetailKey(h: HistoryEntry) {
+        return `${h.timestamp}::${h.process_name}::${h.event}::${h.pid || ''}`;
+    }
+
     function updateHistoryClearButton() {
         const btn = $('history-clear-filters-btn') as HTMLButtonElement | null;
         const processFilter = $('history-process-filter') as HTMLSelectElement | null;
@@ -2195,6 +2200,8 @@ export default function mount(): () => void {
             const time = new Date(h.timestamp);
             const timeStr = time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' ' + time.toLocaleDateString([], { month: 'short', day: 'numeric' });
             const details = formatHistoryDetails(h);
+            const detailKey = getHistoryDetailKey(h);
+            const detailsOpen = historyDetailState.get(detailKey) ?? (historyDetailsDefault === 'expanded');
             return (
                 <div className="history-item" data-history-process={h.process_name} data-history-event={h.event} data-history-index={String(index)} tabIndex={-1} role="button" aria-selected="false">
                     <span className="history-item-time">{timeStr}</span>
@@ -2258,7 +2265,7 @@ export default function mount(): () => void {
                             </details>
                         </div>
                         {details.length > 0 && (
-                            <details className="history-item-details-wrap" open={historyDetailsDefault === 'expanded'}>
+                            <details className="history-item-details-wrap" data-history-detail-key={detailKey} open={detailsOpen}>
                                 <summary className="history-item-details-summary">
                                     <span>Details</span>
                                     <span className="history-item-details-count">{details.length}</span>
@@ -2388,6 +2395,13 @@ export default function mount(): () => void {
         renderHistory();
         showToast('History filters cleared', 'success');
     });
+    $('history-list')?.addEventListener('toggle', (e) => {
+        const target = e.target as HTMLElement;
+        if (!(target instanceof HTMLDetailsElement) || !target.classList.contains('history-item-details-wrap')) return;
+        const key = target.dataset.historyDetailKey;
+        if (!key) return;
+        historyDetailState.set(key, target.open);
+    }, true);
     $('history-list')?.addEventListener('click', async (e) => {
         const target = e.target as Element;
         const row = target.closest('.history-item') as HTMLElement | null;
@@ -2898,7 +2912,11 @@ export default function mount(): () => void {
             if ((e.key === ' ' || e.key === 'Spacebar') && activeRow) {
                 e.preventDefault();
                 const details = activeRow.querySelector('.history-item-details-wrap') as HTMLDetailsElement | null;
-                if (details) details.open = !details.open;
+                if (details) {
+                    details.open = !details.open;
+                    const key = details.dataset.historyDetailKey;
+                    if (key) historyDetailState.set(key, details.open);
+                }
                 return;
             }
         }
