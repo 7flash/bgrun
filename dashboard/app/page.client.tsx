@@ -2019,6 +2019,7 @@ export default function mount(): () => void {
     let allHistory: HistoryEntry[] = [];
     let latestDeployResults: DeployResultEntry[] = [];
     let latestDeploySummary: { group?: string | null; deployed?: number; skipped?: number; failed?: number; total?: number } | undefined;
+    let pendingHistoryFocus: { process?: string; event?: string } | null = null;
 
     async function loadHistory() {
         try {
@@ -2128,7 +2129,7 @@ export default function mount(): () => void {
             const timeStr = time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' ' + time.toLocaleDateString([], { month: 'short', day: 'numeric' });
             const details = formatHistoryDetails(h);
             return (
-                <div className="history-item">
+                <div className="history-item" data-history-process={h.process_name} data-history-event={h.event}>
                     <span className="history-item-time">{timeStr}</span>
                     <button
                         className="history-item-process history-filter-shortcut"
@@ -2182,9 +2183,21 @@ export default function mount(): () => void {
                 </div>
             ) as unknown as Node;
         }));
+
+        if (pendingHistoryFocus) {
+            const selector = `.history-item[data-history-process="${pendingHistoryFocus.process || ''}"][data-history-event="${pendingHistoryFocus.event || ''}"]`;
+            const match = list.querySelector(selector) as HTMLElement | null;
+            if (match) {
+                list.querySelectorAll('.history-item.jump-highlight').forEach(el => el.classList.remove('jump-highlight'));
+                match.classList.add('jump-highlight');
+                match.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+                setTimeout(() => match.classList.remove('jump-highlight'), 2200);
+            }
+            pendingHistoryFocus = null;
+        }
     }
 
-    async function openHistoryModalWithFilters(filters?: { process?: string; event?: string; metadata?: string }) {
+    async function openHistoryModalWithFilters(filters?: { process?: string; event?: string; metadata?: string; focus?: { process?: string; event?: string } }) {
         const modal = $('history-modal');
         const processFilter = $('history-process-filter') as HTMLSelectElement | null;
         const eventFilter = $('history-event-filter') as HTMLSelectElement | null;
@@ -2196,6 +2209,7 @@ export default function mount(): () => void {
         if (processFilter) processFilter.value = filters?.process || '';
         if (eventFilter) eventFilter.value = filters?.event || '';
         if (metadataFilter) metadataFilter.value = filters?.metadata || '';
+        pendingHistoryFocus = filters?.focus || null;
 
         updateHistoryClearButton();
         renderHistory();
@@ -2437,7 +2451,7 @@ export default function mount(): () => void {
             const name = historyBtn.dataset.name;
             if (!name) return;
             closeDeployResultsModal();
-            openHistoryModalWithFilters({ process: name, event: 'deploy' });
+            openHistoryModalWithFilters({ process: name, event: 'deploy', focus: { process: name, event: 'deploy' } });
             showToast(`Opened History for "${name}"`, 'info');
             return;
         }
