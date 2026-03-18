@@ -2133,6 +2133,18 @@ export default function mount(): () => void {
         if (select) select.value = historyDetailsDefault;
     }
 
+    function setHistoryHintPreset(preset: 'minimal' | 'navigation' | 'all') {
+        if (preset === 'minimal') {
+            historyHintGroups = { nav: true, open: true, filter: false, details: false, close: false };
+        } else if (preset === 'navigation') {
+            historyHintGroups = { nav: true, open: true, filter: true, details: false, close: true };
+        } else {
+            historyHintGroups = { nav: true, open: true, filter: true, details: true, close: true };
+        }
+        localStorage.setItem('bgr_history_hint_groups', JSON.stringify(historyHintGroups));
+        applyHistoryHintsPreference();
+    }
+
     function applyHistoryHintsPreference() {
         const hints = $('history-keyboard-hints');
         const toggle = $('history-hints-toggle') as HTMLButtonElement | null;
@@ -2524,6 +2536,14 @@ export default function mount(): () => void {
             localStorage.setItem('bgr_history_hint_groups', JSON.stringify(historyHintGroups));
             applyHistoryHintsPreference();
             showToast(`History hint group ${group} ${input?.checked ? 'shown' : 'hidden'}`, 'success');
+        });
+    });
+    document.querySelectorAll('[data-history-hint-preset]').forEach(el => {
+        el.addEventListener('click', () => {
+            const preset = (el as HTMLElement).dataset.historyHintPreset as 'minimal' | 'navigation' | 'all' | undefined;
+            if (!preset) return;
+            setHistoryHintPreset(preset);
+            showToast(`History hint preset set to ${preset}`, 'success');
         });
     });
     $('history-hint-density-select')?.addEventListener('change', () => {

@@ -346,6 +346,11 @@ export default function DashboardPage() {
                                 <details className="history-hint-groups-menu">
                                     <summary className="history-hints-toggle" title="Choose which History hint groups to show">Groups</summary>
                                     <div className="history-hint-groups-panel">
+                                        <div className="history-hint-presets">
+                                            <button className="history-hint-preset" type="button" data-history-hint-preset="minimal">Minimal</button>
+                                            <button className="history-hint-preset" type="button" data-history-hint-preset="navigation">Navigation</button>
+                                            <button className="history-hint-preset" type="button" data-history-hint-preset="all">All</button>
+                                        </div>
                                         <label className="history-hint-group-option"><input id="history-hint-group-nav" type="checkbox" /> <span>Navigation</span></label>
                                         <label className="history-hint-group-option"><input id="history-hint-group-open" type="checkbox" /> <span>Open</span></label>
                                         <label className="history-hint-group-option"><input id="history-hint-group-filter" type="checkbox" /> <span>Filters</span></label>
