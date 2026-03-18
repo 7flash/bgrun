@@ -430,6 +430,7 @@ export default function mount(): () => void {
     let historyShortcutsEnabled = localStorage.getItem('bgr_history_shortcuts') !== 'false';
     let historyDetailsDefault = localStorage.getItem('bgr_history_details_default') === 'expanded' ? 'expanded' : 'collapsed';
     let historyHintsVisible = localStorage.getItem('bgr_history_hints_visible') !== 'false';
+    let historyHintDensity = localStorage.getItem('bgr_history_hint_density') === 'compact' ? 'compact' : 'full';
     let focusedHistoryIndex = 0;
     let focusedHistoryKey: string | null = null;
     let historyDetailState = new Map<string, boolean>();
@@ -2120,7 +2121,13 @@ export default function mount(): () => void {
     function applyHistoryHintsPreference() {
         const hints = $('history-keyboard-hints');
         const toggle = $('history-hints-toggle') as HTMLButtonElement | null;
-        if (hints) hints.style.display = historyHintsVisible ? '' : 'none';
+        const densitySelect = $('history-hint-density-select') as HTMLSelectElement | null;
+        if (hints) {
+            hints.style.display = historyHintsVisible ? '' : 'none';
+            hints.classList.toggle('compact', historyHintDensity === 'compact');
+            hints.classList.toggle('full', historyHintDensity !== 'compact');
+        }
+        if (densitySelect) densitySelect.value = historyHintDensity;
         if (toggle) {
             toggle.textContent = historyHintsVisible ? 'Hide' : 'Show';
             toggle.title = historyHintsVisible ? 'Hide keyboard shortcut hints' : 'Show keyboard shortcut hints';
@@ -2438,6 +2445,13 @@ export default function mount(): () => void {
         applyHistoryDetailsPreference();
         renderHistory();
         showToast(`History details default set to ${historyDetailsDefault}`, 'success');
+    });
+    $('history-hint-density-select')?.addEventListener('change', () => {
+        const select = $('history-hint-density-select') as HTMLSelectElement | null;
+        historyHintDensity = select?.value === 'compact' ? 'compact' : 'full';
+        localStorage.setItem('bgr_history_hint_density', historyHintDensity);
+        applyHistoryHintsPreference();
+        showToast(`History hint density set to ${historyHintDensity}`, 'success');
     });
     $('history-hints-toggle')?.addEventListener('click', () => {
         historyHintsVisible = !historyHintsVisible;

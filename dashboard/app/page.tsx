@@ -327,7 +327,16 @@ export default function DashboardPage() {
                                 <span className="history-hints-title">Keyboard shortcuts</span>
                                 <span className="history-focus-status" id="history-focus-status">No row selected</span>
                             </div>
-                            <button className="history-hints-toggle" id="history-hints-toggle" type="button" title="Hide keyboard shortcut hints">Hide</button>
+                            <div className="history-hints-actions">
+                                <label className="history-hint-density-wrap" title="Keyboard hint density">
+                                    <span className="history-density-label">Hints</span>
+                                    <select id="history-hint-density-select" className="history-select history-hint-density-select">
+                                        <option value="full">Full</option>
+                                        <option value="compact">Compact</option>
+                                    </select>
+                                </label>
+                                <button className="history-hints-toggle" id="history-hints-toggle" type="button" title="Hide keyboard shortcut hints">Hide</button>
+                            </div>
                         </div>
                         <div className="history-keyboard-hints" id="history-keyboard-hints" aria-label="History keyboard shortcuts">
                             <span className="history-keyboard-hint"><kbd>↑</kbd><kbd>↓</kbd><span>Move</span></span>
