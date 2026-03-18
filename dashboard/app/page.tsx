@@ -300,6 +300,7 @@ export default function DashboardPage() {
                                 <option value="guard_on">Guard On</option>
                                 <option value="guard_off">Guard Off</option>
                             </select>
+                            <input id="history-metadata-filter" className="history-select history-search" type="text" placeholder="Filter metadata..." />
                         </div>
                         <div className="history-list" id="history-list">
                             <div className="history-empty">No history yet</div>

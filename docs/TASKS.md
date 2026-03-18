@@ -31,8 +31,9 @@
 - [x] ~~**Deploy preset reset UI**~~ — ✅ DONE. Added a toolbar button to clear the saved deploy concurrency preset for the current group (or All Groups).
 - [x] ~~**History metadata copy actions**~~ — ✅ DONE. History detail rows now provide one-click copy buttons for directories and install commands.
 - [x] ~~**Deploy preset source indicator**~~ — ✅ DONE. Deploy toolbar now displays whether the current concurrency comes from a saved preset or the default value.
-- [ ] **History metadata filtering** — Filter history entries by metadata like package manager or directory
+- [x] ~~**History metadata filtering**~~ — ✅ DONE. Added a metadata filter input to the History modal for matching package manager, directory, install command, and other metadata values.
 - [ ] **Preset scope visibility** — Indicate which groups currently have saved deploy presets
+- [ ] **History chip-to-filter interaction** — Clicking a metadata chip should populate the metadata filter for fast drill-down
 
 ## 📝 Architecture Notes
 - **Package**: `bgrun` on npm

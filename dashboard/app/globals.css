@@ -2946,6 +2946,11 @@ tr.keyboard-focus td:first-child .process-name span {
     cursor: pointer;
 }
 
+.history-search {
+    min-width: 220px;
+    cursor: text;
+}
+
 .history-list {
     max-height: 400px;
     overflow-y: auto;

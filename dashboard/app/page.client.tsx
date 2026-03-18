@@ -2027,10 +2027,12 @@ export default function mount(): () => void {
         const list = $('history-list');
         const processFilter = $('history-process-filter') as HTMLSelectElement;
         const eventFilter = $('history-event-filter') as HTMLSelectElement;
+        const metadataFilter = $('history-metadata-filter') as HTMLInputElement;
         if (!list) return;
 
         const processValue = processFilter?.value || '';
         const eventValue = eventFilter?.value || '';
+        const metadataValue = metadataFilter?.value?.toLowerCase().trim() || '';
 
         let filtered = allHistory;
         if (processValue) {
@@ -2038,6 +2040,15 @@ export default function mount(): () => void {
         }
         if (eventValue) {
             filtered = filtered.filter(h => h.event === eventValue);
+        }
+        if (metadataValue) {
+            filtered = filtered.filter(h => {
+                const details = formatHistoryDetails(h);
+                return details.some(detail =>
+                    detail.label.toLowerCase().includes(metadataValue) ||
+                    detail.value.toLowerCase().includes(metadataValue)
+                );
+            });
         }
 
         if (filtered.length === 0) {
@@ -2105,6 +2116,7 @@ export default function mount(): () => void {
     });
     $('history-process-filter')?.addEventListener('change', renderHistory);
     $('history-event-filter')?.addEventListener('change', renderHistory);
+    $('history-metadata-filter')?.addEventListener('input', renderHistory);
     $('history-list')?.addEventListener('click', async (e) => {
         const btn = (e.target as Element).closest('[data-action="copy-history-detail"]') as HTMLElement | null;
         const value = btn?.dataset.copy;
