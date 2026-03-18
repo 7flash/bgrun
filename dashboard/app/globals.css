@@ -3002,12 +3002,56 @@ tr.keyboard-focus td:first-child .process-name span {
     flex-shrink: 0;
 }
 
+.history-item-details-wrap {
+    width: 100%;
+    margin-left: calc(85px + 0.75rem);
+}
+
+.history-item-details-summary {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    cursor: pointer;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    user-select: none;
+    list-style: none;
+}
+
+.history-item-details-summary::-webkit-details-marker {
+    display: none;
+}
+
+.history-item-details-summary::before {
+    content: '▸';
+    font-size: 0.8rem;
+    transition: transform 0.15s ease;
+}
+
+.history-item-details-wrap[open] .history-item-details-summary::before {
+    transform: rotate(90deg);
+}
+
+.history-item-details-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.2rem;
+    height: 1.2rem;
+    padding: 0 0.3rem;
+    border-radius: 999px;
+    background: rgba(139, 148, 158, 0.18);
+    color: var(--text-secondary);
+    font-size: 0.7rem;
+    font-weight: 700;
+}
+
 .history-item-details {
     display: flex;
     flex-wrap: wrap;
     gap: 0.4rem;
     width: 100%;
-    margin-left: calc(85px + 0.75rem);
+    margin-top: 0.45rem;
 }
 
 .history-item-detail {

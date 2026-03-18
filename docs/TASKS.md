@@ -27,8 +27,9 @@
 - [x] ~~**Parallel bulk deploy mode**~~ — ✅ DONE. Added a 1×–4× bulk deploy concurrency selector in the dashboard and bounded parallel workers for faster group rollouts.
 - [x] ~~**Deploy history diagnostics**~~ — ✅ DONE. History view now shows deploy package manager, install command, and directory metadata for past deploy events.
 - [x] ~~**Per-group deploy presets**~~ — ✅ DONE. The dashboard now remembers bulk deploy concurrency separately for each group and restores it when the group filter changes.
-- [ ] **Expandable history details** — Better presentation for long metadata values in the history modal
+- [x] ~~**Expandable history details**~~ — ✅ DONE. History rows now use collapsible detail sections so long metadata stays compact by default.
 - [ ] **Deploy preset reset UI** — Let users clear/reset saved per-group deploy concurrency presets from the toolbar
+- [ ] **History metadata copy actions** — Quick-copy buttons for directories/install commands shown in history details
 
 ## 📝 Architecture Notes
 - **Package**: `bgrun` on npm

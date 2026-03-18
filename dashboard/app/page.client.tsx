@@ -2015,9 +2015,15 @@ export default function mount(): () => void {
                     <span className={`history-item-event ${h.event}`}>{h.event.replace('_', ' ')}</span>
                     {h.pid && <span className="history-item-pid">PID {h.pid}</span>}
                     {details.length > 0 && (
-                        <div className="history-item-details">
-                            {details.map(detail => <span className="history-item-detail">{detail}</span> as unknown as Node)}
-                        </div>
+                        <details className="history-item-details-wrap">
+                            <summary className="history-item-details-summary">
+                                <span>Details</span>
+                                <span className="history-item-details-count">{details.length}</span>
+                            </summary>
+                            <div className="history-item-details">
+                                {details.map(detail => <span className="history-item-detail">{detail}</span> as unknown as Node)}
+                            </div>
+                        </details>
                     )}
                 </div>
             ) as unknown as Node;
