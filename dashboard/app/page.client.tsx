@@ -429,6 +429,7 @@ export default function mount(): () => void {
     let historyDensity = localStorage.getItem('bgr_history_density') === 'compact' ? 'compact' : 'cozy';
     let historyShortcutsEnabled = localStorage.getItem('bgr_history_shortcuts') !== 'false';
     let historyDetailsDefault = localStorage.getItem('bgr_history_details_default') === 'expanded' ? 'expanded' : 'collapsed';
+    let focusedHistoryIndex = 0;
     let logSearch = '';
     let logLinesRaw: string[] = [];  // Raw text (for search filtering)
     let logLinesHtml: string[] = []; // Pre-converted HTML (cached ansiToHtml)
@@ -2125,6 +2126,28 @@ export default function mount(): () => void {
         btn.style.opacity = active ? '' : '0.5';
     }
 
+    function focusHistoryRow(index: number) {
+        const list = $('history-list');
+        if (!list) return;
+        const rows = Array.from(list.querySelectorAll('.history-item')) as HTMLElement[];
+        if (rows.length === 0) {
+            focusedHistoryIndex = 0;
+            return;
+        }
+
+        focusedHistoryIndex = Math.max(0, Math.min(index, rows.length - 1));
+        rows.forEach((row, rowIndex) => {
+            const active = rowIndex === focusedHistoryIndex;
+            row.classList.toggle('keyboard-focused', active);
+            row.setAttribute('tabindex', active ? '0' : '-1');
+            row.setAttribute('aria-selected', active ? 'true' : 'false');
+        });
+
+        const activeRow = rows[focusedHistoryIndex];
+        activeRow?.focus({ preventScroll: true });
+        activeRow?.scrollIntoView({ block: 'nearest' });
+    }
+
     function renderHistory() {
         const list = $('history-list');
         const processFilter = $('history-process-filter') as HTMLSelectElement;
@@ -2168,12 +2191,12 @@ export default function mount(): () => void {
             return;
         }
 
-        list.replaceChildren(...filtered.map(h => {
+        list.replaceChildren(...filtered.map((h, index) => {
             const time = new Date(h.timestamp);
             const timeStr = time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' ' + time.toLocaleDateString([], { month: 'short', day: 'numeric' });
             const details = formatHistoryDetails(h);
             return (
-                <div className="history-item" data-history-process={h.process_name} data-history-event={h.event}>
+                <div className="history-item" data-history-process={h.process_name} data-history-event={h.event} data-history-index={String(index)} tabIndex={-1} role="button" aria-selected="false">
                     <span className="history-item-time">{timeStr}</span>
                     <div className="history-item-main">
                         <div className="history-item-meta">
@@ -2285,9 +2308,12 @@ export default function mount(): () => void {
                 match.classList.add('jump-highlight');
                 match.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
                 setTimeout(() => match.classList.remove('jump-highlight'), 2200);
+                focusedHistoryIndex = Math.max(0, Array.from(list.querySelectorAll('.history-item')).indexOf(match));
                 pendingHistoryFocus = null;
             }
         }
+
+        focusHistoryRow(focusedHistoryIndex);
     }
 
     async function openHistoryModalWithFilters(filters?: { process?: string; event?: string; metadata?: string; focus?: { process?: string; event?: string } }) {
@@ -2364,6 +2390,10 @@ export default function mount(): () => void {
     });
     $('history-list')?.addEventListener('click', async (e) => {
         const target = e.target as Element;
+        const row = target.closest('.history-item') as HTMLElement | null;
+        if (row && row.dataset.historyIndex) {
+            focusHistoryRow(parseInt(row.dataset.historyIndex, 10) || 0);
+        }
         const copyBtn = target.closest('[data-action="copy-history-detail"]') as HTMLElement | null;
         if (copyBtn) {
             const value = copyBtn.dataset.copy;
@@ -2816,6 +2846,62 @@ export default function mount(): () => void {
     function handleKeydown(e: KeyboardEvent) {
         // Skip all shortcuts when inside text inputs or textareas
         const inInput = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
+        const historyModal = $('history-modal');
+        const historyList = $('history-list');
+        const historyOpen = !!historyModal?.classList.contains('active');
+
+        if (historyOpen && !inInput) {
+            const rows = Array.from(historyList?.querySelectorAll('.history-item') || []) as HTMLElement[];
+            const activeRow = rows[focusedHistoryIndex] || null;
+            if (e.key === 'ArrowDown' || e.key === 'j') {
+                e.preventDefault();
+                focusHistoryRow(focusedHistoryIndex + 1);
+                return;
+            }
+            if (e.key === 'ArrowUp' || e.key === 'k') {
+                e.preventDefault();
+                focusHistoryRow(focusedHistoryIndex - 1);
+                return;
+            }
+            if ((e.key === 'Enter' || e.key === 'o' || e.key === 'O') && activeRow) {
+                e.preventDefault();
+                const processName = activeRow.dataset.historyProcess || '';
+                if (processName) {
+                    closeHistoryModal();
+                    openDrawer(processName);
+                    showToast(`Opened process "${processName}"`, 'info');
+                }
+                return;
+            }
+            if ((e.key === 'f' || e.key === 'F') && activeRow) {
+                e.preventDefault();
+                const processName = activeRow.dataset.historyProcess || '';
+                const select = $('history-process-filter') as HTMLSelectElement | null;
+                if (select && processName) {
+                    select.value = processName;
+                    renderHistory();
+                    showToast(`Filtering history to process "${processName}"`, 'info');
+                }
+                return;
+            }
+            if ((e.key === 'e' || e.key === 'E') && activeRow) {
+                e.preventDefault();
+                const eventName = activeRow.dataset.historyEvent || '';
+                const select = $('history-event-filter') as HTMLSelectElement | null;
+                if (select && eventName) {
+                    select.value = eventName;
+                    renderHistory();
+                    showToast(`Filtering history to event "${eventName}"`, 'info');
+                }
+                return;
+            }
+            if ((e.key === ' ' || e.key === 'Spacebar') && activeRow) {
+                e.preventDefault();
+                const details = activeRow.querySelector('.history-item-details-wrap') as HTMLDetailsElement | null;
+                if (details) details.open = !details.open;
+                return;
+            }
+        }
 
         // "/" to focus search (unless already in an input)
         if (e.key === '/' && !inInput) {
@@ -2833,6 +2919,10 @@ export default function mount(): () => void {
             }
             if (contextMenuEl) {
                 closeContextMenu();
+                return;
+            }
+            if (historyOpen) {
+                closeHistoryModal();
                 return;
             }
             if (drawer?.classList.contains('open')) {

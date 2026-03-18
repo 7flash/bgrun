@@ -3050,6 +3050,12 @@ tr.keyboard-focus td:first-child .process-name span {
     box-shadow: inset 0 0 0 1px rgba(96, 165, 250, 0.35);
 }
 
+.history-item.keyboard-focused {
+    outline: none;
+    box-shadow: inset 0 0 0 1px rgba(168, 85, 247, 0.45), 0 0 0 1px rgba(168, 85, 247, 0.12);
+    background: rgba(168, 85, 247, 0.08);
+}
+
 .history-list.history-density-compact .history-item {
     padding: 0.45rem 0.6rem;
     gap: 0.55rem;
