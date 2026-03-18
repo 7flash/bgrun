@@ -21,8 +21,9 @@
 - [x] ~~**Deploy result details UI**~~ — ✅ DONE. Bulk deploy now opens a results modal with per-process deployed/skipped/failed status plus expandable git/install output.
 - [x] ~~**Package manager auto-detection for deploys**~~ — ✅ DONE. Deploy helper now inspects lockfiles and runs `bun install`, `pnpm install --frozen-lockfile`, `yarn install --frozen-lockfile`, or `npm ci` as appropriate.
 - [x] ~~**Deploy retry actions in results modal**~~ — ✅ DONE. Failed/skipped entries in the deploy results modal can now be retried inline and update their own result card after completion.
-- [ ] **Missing package-manager UX** — Better errors when a deploy needs pnpm/yarn/npm but that binary is unavailable on the machine
+- [x] ~~**Missing package-manager UX**~~ — ✅ DONE. Deploy helper now turns missing pnpm/yarn/npm/bun executables into clear install/PATH errors instead of generic command failures.
 - [ ] **Bulk deploy progress UI** — Show per-run progress while bulk deploy is executing, not just the final results modal
+- [ ] **Deploy environment diagnostics** — Show detected package manager and install-step context in deploy result details for easier debugging
 
 ## 📝 Architecture Notes
 - **Package**: `bgrun` on npm

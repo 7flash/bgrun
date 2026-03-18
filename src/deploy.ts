@@ -13,6 +13,22 @@ export interface DeployResult {
 
 export type PackageManager = 'bun' | 'pnpm' | 'yarn' | 'npm' | null;
 
+export function formatDeployToolError(manager: Exclude<PackageManager, null>, error: unknown): string {
+    const raw = error instanceof Error ? error.message : String(error ?? 'Unknown error');
+    const lower = raw.toLowerCase();
+
+    if (
+        lower.includes('command not found') ||
+        lower.includes('not recognized as an internal or external command') ||
+        lower.includes('executable not found') ||
+        lower.includes('no such file or directory')
+    ) {
+        return `Deploy requires '${manager}', but it is not installed or not available on PATH.`;
+    }
+
+    return `Dependency install failed with ${manager}: ${raw}`;
+}
+
 function isInternalProcess(name: string): boolean {
     return name === 'bgr-dashboard' || name === 'bgr-guard';
 }
@@ -43,17 +59,21 @@ async function installDependencies(dir: string): Promise<{ manager: PackageManag
 
     $.cwd(dir);
 
-    switch (manager) {
-        case 'bun':
-            return { manager, output: (await $`bun install`.text()).trim() };
-        case 'pnpm':
-            return { manager, output: (await $`pnpm install --frozen-lockfile`.text()).trim() };
-        case 'yarn':
-            return { manager, output: (await $`yarn install --frozen-lockfile`.text()).trim() };
-        case 'npm':
-            return { manager, output: (await $`npm ci`.text()).trim() };
-        default:
-            return { manager: null, output: '' };
+    try {
+        switch (manager) {
+            case 'bun':
+                return { manager, output: (await $`bun install`.text()).trim() };
+            case 'pnpm':
+                return { manager, output: (await $`pnpm install --frozen-lockfile`.text()).trim() };
+            case 'yarn':
+                return { manager, output: (await $`yarn install --frozen-lockfile`.text()).trim() };
+            case 'npm':
+                return { manager, output: (await $`npm ci`.text()).trim() };
+            default:
+                return { manager: null, output: '' };
+        }
+    } catch (error) {
+        throw new Error(formatDeployToolError(manager, error));
     }
 }
 

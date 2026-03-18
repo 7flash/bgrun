@@ -9,7 +9,7 @@
 import { describe, expect, test } from 'bun:test'
 import { parseEnvString, calculateRuntime } from './utils'
 import { stripAnsi, truncateString, truncatePath } from './table'
-import { detectPackageManager } from './deploy'
+import { detectPackageManager, formatDeployToolError } from './deploy'
 import { mkdirSync, rmSync } from 'fs'
 
 // ─── parseEnvString ─────────────────────────────────────
@@ -111,6 +111,20 @@ describe('truncatePath', () => {
 })
 
 // ─── detectPackageManager ───────────────────────────────
+
+describe('formatDeployToolError', () => {
+    test('returns actionable message for missing binary', () => {
+        const msg = formatDeployToolError('pnpm', new Error('command not found: pnpm'))
+        expect(msg).toContain("requires 'pnpm'")
+        expect(msg).toContain('PATH')
+    })
+
+    test('preserves non-missing-binary failures', () => {
+        const msg = formatDeployToolError('npm', new Error('npm ci failed with exit code 1'))
+        expect(msg).toContain('Dependency install failed with npm')
+        expect(msg).toContain('exit code 1')
+    })
+})
 
 describe('detectPackageManager', () => {
     test('returns null when no package.json exists', async () => {
