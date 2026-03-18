@@ -3029,12 +3029,43 @@ tr.keyboard-focus td:first-child .process-name span {
     margin: 0.35rem 0 0.4rem;
 }
 
+.history-hints-bar-left {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    min-width: 0;
+    flex-wrap: wrap;
+}
+
 .history-hints-title {
     font-size: 0.72rem;
     font-weight: 700;
     color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.04em;
+}
+
+.history-focus-status {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.5rem;
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    border: 1px solid rgba(139, 148, 158, 0.14);
+    background: rgba(139, 148, 158, 0.08);
+    color: var(--text-dim);
+    font-size: 0.68rem;
+    font-family: var(--font-mono);
+    white-space: nowrap;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.history-focus-status.active {
+    color: #c4b5fd;
+    border-color: rgba(168, 85, 247, 0.24);
+    background: rgba(168, 85, 247, 0.12);
 }
 
 .history-hints-toggle {

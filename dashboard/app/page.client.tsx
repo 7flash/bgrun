@@ -2127,6 +2127,30 @@ export default function mount(): () => void {
         }
     }
 
+    function updateHistoryFocusStatus() {
+        const status = $('history-focus-status');
+        const list = $('history-list');
+        if (!status || !list) return;
+        const rows = Array.from(list.querySelectorAll('.history-item')) as HTMLElement[];
+        if (rows.length === 0) {
+            status.textContent = 'No row selected';
+            status.classList.remove('active');
+            return;
+        }
+
+        const row = rows[Math.max(0, Math.min(focusedHistoryIndex, rows.length - 1))];
+        if (!row) {
+            status.textContent = 'No row selected';
+            status.classList.remove('active');
+            return;
+        }
+
+        const processName = row.dataset.historyProcess || 'Unknown';
+        const eventName = row.dataset.historyEvent || 'event';
+        status.textContent = `${focusedHistoryIndex + 1}/${rows.length} · ${processName} · ${eventName}`;
+        status.classList.add('active');
+    }
+
     function getHistoryDetailKey(h: HistoryEntry) {
         return `${h.timestamp}::${h.process_name}::${h.event}::${h.pid || ''}`;
     }
@@ -2150,6 +2174,7 @@ export default function mount(): () => void {
         if (rows.length === 0) {
             focusedHistoryIndex = 0;
             focusedHistoryKey = null;
+            updateHistoryFocusStatus();
             return;
         }
 
@@ -2167,6 +2192,7 @@ export default function mount(): () => void {
         const activeRow = rows[focusedHistoryIndex];
         activeRow?.focus({ preventScroll: true });
         activeRow?.scrollIntoView({ block: 'nearest' });
+        updateHistoryFocusStatus();
     }
 
     function renderHistory() {
@@ -2209,6 +2235,9 @@ export default function mount(): () => void {
 
         if (filtered.length === 0) {
             list.innerHTML = '<div class="history-empty">No history found</div>';
+            focusedHistoryIndex = 0;
+            focusedHistoryKey = null;
+            updateHistoryFocusStatus();
             return;
         }
 
