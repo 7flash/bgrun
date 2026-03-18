@@ -2116,8 +2116,22 @@ export default function mount(): () => void {
             return (
                 <div className="history-item">
                     <span className="history-item-time">{timeStr}</span>
-                    <span className="history-item-process">{h.process_name}</span>
-                    <span className={`history-item-event ${h.event}`}>{h.event.replace('_', ' ')}</span>
+                    <button
+                        className="history-item-process history-filter-shortcut"
+                        data-action="filter-history-process"
+                        data-process={h.process_name}
+                        title={`Filter history to process ${h.process_name}`}
+                    >
+                        {h.process_name}
+                    </button>
+                    <button
+                        className={`history-item-event history-filter-shortcut ${h.event}`}
+                        data-action="filter-history-event"
+                        data-event={h.event}
+                        title={`Filter history to event ${h.event}`}
+                    >
+                        {h.event.replace('_', ' ')}
+                    </button>
                     {h.pid && <span className="history-item-pid">PID {h.pid}</span>}
                     {details.length > 0 && (
                         <details className="history-item-details-wrap">
@@ -2189,6 +2203,28 @@ export default function mount(): () => void {
             } catch {
                 showToast('Failed to copy', 'error');
             }
+            return;
+        }
+
+        const processBtn = target.closest('[data-action="filter-history-process"]') as HTMLElement | null;
+        if (processBtn) {
+            const value = processBtn.dataset.process || '';
+            const select = $('history-process-filter') as HTMLSelectElement | null;
+            if (!select) return;
+            select.value = value;
+            renderHistory();
+            showToast(`Filtering history to process "${value}"`, 'info');
+            return;
+        }
+
+        const eventBtn = target.closest('[data-action="filter-history-event"]') as HTMLElement | null;
+        if (eventBtn) {
+            const value = eventBtn.dataset.event || '';
+            const select = $('history-event-filter') as HTMLSelectElement | null;
+            if (!select) return;
+            select.value = value;
+            renderHistory();
+            showToast(`Filtering history to event "${value}"`, 'info');
             return;
         }
 

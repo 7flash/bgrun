@@ -3023,6 +3023,20 @@ tr.keyboard-focus td:first-child .process-name span {
     text-overflow: ellipsis;
 }
 
+.history-filter-shortcut {
+    border: none;
+    background: transparent;
+    padding: 0;
+    font: inherit;
+    cursor: pointer;
+    text-align: left;
+}
+
+.history-filter-shortcut:hover {
+    opacity: 0.85;
+    text-decoration: underline;
+}
+
 .history-item-event {
     font-size: 0.75rem;
     padding: 0.2rem 0.5rem;
