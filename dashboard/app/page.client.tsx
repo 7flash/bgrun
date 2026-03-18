@@ -427,6 +427,7 @@ export default function mount(): () => void {
     let configSubtab = 'toml'; // 'toml' | 'env'
     let logAutoScroll = localStorage.getItem('bgr_autoscroll') === 'true'; // OFF by default
     let historyDensity = localStorage.getItem('bgr_history_density') === 'compact' ? 'compact' : 'cozy';
+    let historyShortcutsEnabled = localStorage.getItem('bgr_history_shortcuts') !== 'false';
     let logSearch = '';
     let logLinesRaw: string[] = [];  // Raw text (for search filtering)
     let logLinesHtml: string[] = []; // Pre-converted HTML (cached ansiToHtml)
@@ -2098,6 +2099,14 @@ export default function mount(): () => void {
         list.classList.toggle('history-density-cozy', historyDensity !== 'compact');
     }
 
+    function applyHistoryShortcutPreference() {
+        const list = $('history-list');
+        const toggle = $('history-shortcuts-toggle') as HTMLInputElement | null;
+        if (toggle) toggle.checked = historyShortcutsEnabled;
+        if (!list) return;
+        list.classList.toggle('history-shortcuts-hidden', !historyShortcutsEnabled);
+    }
+
     function updateHistoryClearButton() {
         const btn = $('history-clear-filters-btn') as HTMLButtonElement | null;
         const processFilter = $('history-process-filter') as HTMLSelectElement | null;
@@ -2145,6 +2154,7 @@ export default function mount(): () => void {
 
         updateHistoryClearButton();
         applyHistoryDensity();
+        applyHistoryShortcutPreference();
 
         if (filtered.length === 0) {
             list.innerHTML = '<div class="history-empty">No history found</div>';
@@ -2160,22 +2170,32 @@ export default function mount(): () => void {
                     <span className="history-item-time">{timeStr}</span>
                     <div className="history-item-main">
                         <div className="history-item-meta">
-                            <button
-                                className="history-item-process history-filter-shortcut"
-                                data-action="open-history-process"
-                                data-process={h.process_name}
-                                title={`Open process drawer for ${h.process_name}`}
-                            >
-                                {h.process_name}
-                            </button>
-                            <button
-                                className={`history-item-event history-filter-shortcut ${h.event}`}
-                                data-action="filter-history-event"
-                                data-event={h.event}
-                                title={`Filter history to event ${h.event}`}
-                            >
-                                {h.event.replace('_', ' ')}
-                            </button>
+                            {historyShortcutsEnabled ? (
+                                <button
+                                    className="history-item-process history-filter-shortcut"
+                                    data-action="open-history-process"
+                                    data-process={h.process_name}
+                                    title={`Open process drawer for ${h.process_name}`}
+                                >
+                                    {h.process_name}
+                                </button>
+                            ) : (
+                                <span className="history-item-process history-static-label">{h.process_name}</span>
+                            )}
+                            {historyShortcutsEnabled ? (
+                                <button
+                                    className={`history-item-event history-filter-shortcut ${h.event}`}
+                                    data-action="filter-history-event"
+                                    data-event={h.event}
+                                    title={`Filter history to event ${h.event}`}
+                                >
+                                    {h.event.replace('_', ' ')}
+                                </button>
+                            ) : (
+                                <span className={`history-item-event history-static-label ${h.event}`}>
+                                    {h.event.replace('_', ' ')}
+                                </span>
+                            )}
                             {h.pid && <span className="history-item-pid">PID {h.pid}</span>}
                             <details className="history-item-actions-menu">
                                 <summary className="history-item-actions-toggle">Actions</summary>
@@ -2216,14 +2236,20 @@ export default function mount(): () => void {
                                 <div className="history-item-details">
                                     {details.map(detail => (
                                         <span className="history-item-detail">
-                                            <button
-                                                className="history-item-detail-text history-item-filter-chip"
-                                                data-action="filter-history-detail"
-                                                data-filter={detail.value}
-                                                title={`Filter history by ${detail.label}: ${detail.value}`}
-                                            >
-                                                {detail.label}: {detail.value}
-                                            </button>
+                                            {historyShortcutsEnabled ? (
+                                                <button
+                                                    className="history-item-detail-text history-item-filter-chip"
+                                                    data-action="filter-history-detail"
+                                                    data-filter={detail.value}
+                                                    title={`Filter history by ${detail.label}: ${detail.value}`}
+                                                >
+                                                    {detail.label}: {detail.value}
+                                                </button>
+                                            ) : (
+                                                <span className="history-item-detail-text history-static-label">
+                                                    {detail.label}: {detail.value}
+                                                </span>
+                                            )}
                                             {detail.copyable && (
                                                 <button
                                                     className="history-item-copy"
@@ -2301,6 +2327,14 @@ export default function mount(): () => void {
         applyHistoryDensity();
         renderHistory();
         showToast(`History density set to ${historyDensity}`, 'success');
+    });
+    $('history-shortcuts-toggle')?.addEventListener('change', () => {
+        const toggle = $('history-shortcuts-toggle') as HTMLInputElement | null;
+        historyShortcutsEnabled = !!toggle?.checked;
+        localStorage.setItem('bgr_history_shortcuts', String(historyShortcutsEnabled));
+        applyHistoryShortcutPreference();
+        renderHistory();
+        showToast(`History shortcuts ${historyShortcutsEnabled ? 'enabled' : 'hidden'}`, 'success');
     });
     $('history-clear-filters-btn')?.addEventListener('click', () => {
         const processFilter = $('history-process-filter') as HTMLSelectElement | null;

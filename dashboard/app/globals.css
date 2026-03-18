@@ -3005,6 +3005,22 @@ tr.keyboard-focus td:first-child .process-name span {
     min-width: 88px;
 }
 
+.history-shortcuts-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    font-weight: 600;
+    user-select: none;
+    cursor: pointer;
+}
+
+.history-shortcuts-toggle input {
+    margin: 0;
+    accent-color: var(--accent-primary);
+}
+
 .history-list {
     max-height: 400px;
     overflow-y: auto;
@@ -3096,6 +3112,10 @@ tr.keyboard-focus td:first-child .process-name span {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.history-static-label {
+    cursor: default;
 }
 
 .history-item-actions-menu {

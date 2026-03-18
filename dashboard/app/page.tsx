@@ -309,6 +309,10 @@ export default function DashboardPage() {
                                     <option value="compact">Compact</option>
                                 </select>
                             </label>
+                            <label className="history-shortcuts-toggle" title="Show quick-action affordances in History rows">
+                                <input id="history-shortcuts-toggle" type="checkbox" />
+                                <span>Shortcuts</span>
+                            </label>
                             <button className="btn btn-ghost btn-sm" id="history-clear-filters-btn" title="Clear all history filters">Clear</button>
                         </div>
                         <div className="history-list" id="history-list">
