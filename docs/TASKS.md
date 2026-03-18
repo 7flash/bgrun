@@ -29,8 +29,9 @@
 - [x] ~~**Per-group deploy presets**~~ — ✅ DONE. The dashboard now remembers bulk deploy concurrency separately for each group and restores it when the group filter changes.
 - [x] ~~**Expandable history details**~~ — ✅ DONE. History rows now use collapsible detail sections so long metadata stays compact by default.
 - [x] ~~**Deploy preset reset UI**~~ — ✅ DONE. Added a toolbar button to clear the saved deploy concurrency preset for the current group (or All Groups).
-- [ ] **History metadata copy actions** — Quick-copy buttons for directories/install commands shown in history details
+- [x] ~~**History metadata copy actions**~~ — ✅ DONE. History detail rows now provide one-click copy buttons for directories and install commands.
 - [ ] **Deploy preset source indicator** — Show when a group is using a saved preset versus the default deploy concurrency
+- [ ] **History metadata filtering** — Filter history entries by metadata like package manager or directory
 
 ## 📝 Architecture Notes
 - **Package**: `bgrun` on npm

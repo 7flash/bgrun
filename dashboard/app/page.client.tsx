@@ -1992,19 +1992,19 @@ export default function mount(): () => void {
         }
     }
 
-    function formatHistoryDetails(h: HistoryEntry): string[] {
+    function formatHistoryDetails(h: HistoryEntry): Array<{ label: string; value: string; copyable?: boolean }> {
         const md = h.metadata || {};
-        const parts: string[] = [];
+        const parts: Array<{ label: string; value: string; copyable?: boolean }> = [];
 
         if (h.event === 'deploy') {
-            if (md.packageManager) parts.push(`pm: ${md.packageManager}`);
-            if (md.installCommand) parts.push(`install: ${md.installCommand}`);
-            else if (md.installed === false) parts.push('install: skipped');
-            if (md.directory) parts.push(`dir: ${md.directory}`);
+            if (md.packageManager) parts.push({ label: 'pm', value: String(md.packageManager) });
+            if (md.installCommand) parts.push({ label: 'install', value: String(md.installCommand), copyable: true });
+            else if (md.installed === false) parts.push({ label: 'install', value: 'skipped' });
+            if (md.directory) parts.push({ label: 'dir', value: String(md.directory), copyable: true });
         } else {
-            if (md.by) parts.push(`by: ${md.by}`);
-            if (md.count !== undefined) parts.push(`count: ${md.count}`);
-            if (md.directory) parts.push(`dir: ${md.directory}`);
+            if (md.by) parts.push({ label: 'by', value: String(md.by) });
+            if (md.count !== undefined) parts.push({ label: 'count', value: String(md.count) });
+            if (md.directory) parts.push({ label: 'dir', value: String(md.directory), copyable: true });
         }
 
         return parts;
@@ -2049,7 +2049,21 @@ export default function mount(): () => void {
                                 <span className="history-item-details-count">{details.length}</span>
                             </summary>
                             <div className="history-item-details">
-                                {details.map(detail => <span className="history-item-detail">{detail}</span> as unknown as Node)}
+                                {details.map(detail => (
+                                    <span className="history-item-detail">
+                                        <span className="history-item-detail-text">{detail.label}: {detail.value}</span>
+                                        {detail.copyable && (
+                                            <button
+                                                className="history-item-copy"
+                                                data-action="copy-history-detail"
+                                                data-copy={detail.value}
+                                                title={`Copy ${detail.label}`}
+                                            >
+                                                Copy
+                                            </button>
+                                        )}
+                                    </span>
+                                ) as unknown as Node)}
                             </div>
                         </details>
                     )}
@@ -2078,6 +2092,17 @@ export default function mount(): () => void {
     });
     $('history-process-filter')?.addEventListener('change', renderHistory);
     $('history-event-filter')?.addEventListener('change', renderHistory);
+    $('history-list')?.addEventListener('click', async (e) => {
+        const btn = (e.target as Element).closest('[data-action="copy-history-detail"]') as HTMLElement | null;
+        const value = btn?.dataset.copy;
+        if (!value) return;
+        try {
+            await navigator.clipboard.writeText(value);
+            showToast('Copied to clipboard', 'success');
+        } catch {
+            showToast('Failed to copy', 'error');
+        }
+    });
 
     // ─── Deploy Results Modal ───
 
