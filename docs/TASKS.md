@@ -51,8 +51,9 @@
 - [x] ~~**History row state memory**~~ — ✅ DONE. The History modal now preserves each row’s detail expansion state across in-session re-renders.
 - [x] ~~**History keyboard shortcut hints**~~ — ✅ DONE. The History modal now shows inline key hints for navigation, open, filter, details toggle, and close actions.
 - [x] ~~**History focus restoration**~~ — ✅ DONE. The History modal now restores keyboard focus to the same entry after filtering/re-rendering when that row still exists.
-- [ ] **History hints minimization** — Let users collapse or hide the History keyboard hint strip
+- [x] ~~**History hints minimization**~~ — ✅ DONE. The History keyboard hint strip can now be hidden or shown, and that preference is remembered locally.
 - [ ] **History focus status indicator** — Show which History row is currently keyboard-active in the modal chrome
+- [ ] **History hint density** — Offer compact/full modes for the History keyboard hint strip
 
 ## 📝 Architecture Notes
 - **Package**: `bgrun` on npm

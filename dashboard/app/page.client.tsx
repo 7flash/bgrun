@@ -429,6 +429,7 @@ export default function mount(): () => void {
     let historyDensity = localStorage.getItem('bgr_history_density') === 'compact' ? 'compact' : 'cozy';
     let historyShortcutsEnabled = localStorage.getItem('bgr_history_shortcuts') !== 'false';
     let historyDetailsDefault = localStorage.getItem('bgr_history_details_default') === 'expanded' ? 'expanded' : 'collapsed';
+    let historyHintsVisible = localStorage.getItem('bgr_history_hints_visible') !== 'false';
     let focusedHistoryIndex = 0;
     let focusedHistoryKey: string | null = null;
     let historyDetailState = new Map<string, boolean>();
@@ -2116,6 +2117,16 @@ export default function mount(): () => void {
         if (select) select.value = historyDetailsDefault;
     }
 
+    function applyHistoryHintsPreference() {
+        const hints = $('history-keyboard-hints');
+        const toggle = $('history-hints-toggle') as HTMLButtonElement | null;
+        if (hints) hints.style.display = historyHintsVisible ? '' : 'none';
+        if (toggle) {
+            toggle.textContent = historyHintsVisible ? 'Hide' : 'Show';
+            toggle.title = historyHintsVisible ? 'Hide keyboard shortcut hints' : 'Show keyboard shortcut hints';
+        }
+    }
+
     function getHistoryDetailKey(h: HistoryEntry) {
         return `${h.timestamp}::${h.process_name}::${h.event}::${h.pid || ''}`;
     }
@@ -2352,6 +2363,7 @@ export default function mount(): () => void {
         setHistoryFocusTarget(filters?.focus || pendingHistoryFocus || null);
 
         updateHistoryClearButton();
+        applyHistoryHintsPreference();
         renderHistory();
     }
 
@@ -2397,6 +2409,12 @@ export default function mount(): () => void {
         applyHistoryDetailsPreference();
         renderHistory();
         showToast(`History details default set to ${historyDetailsDefault}`, 'success');
+    });
+    $('history-hints-toggle')?.addEventListener('click', () => {
+        historyHintsVisible = !historyHintsVisible;
+        localStorage.setItem('bgr_history_hints_visible', String(historyHintsVisible));
+        applyHistoryHintsPreference();
+        showToast(`History hints ${historyHintsVisible ? 'shown' : 'hidden'}`, 'success');
     });
     $('history-clear-filters-btn')?.addEventListener('click', () => {
         const processFilter = $('history-process-filter') as HTMLSelectElement | null;
