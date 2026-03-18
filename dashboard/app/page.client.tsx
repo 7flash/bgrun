@@ -2080,7 +2080,10 @@ export default function mount(): () => void {
 
         const processValue = processFilter?.value || '';
         const eventValue = eventFilter?.value || '';
-        const metadataValue = metadataFilter?.value?.toLowerCase().trim() || '';
+        const metadataTerms = (metadataFilter?.value || '')
+            .split(',')
+            .map(v => v.toLowerCase().trim())
+            .filter(Boolean);
 
         let filtered = allHistory;
         if (processValue) {
@@ -2089,12 +2092,14 @@ export default function mount(): () => void {
         if (eventValue) {
             filtered = filtered.filter(h => h.event === eventValue);
         }
-        if (metadataValue) {
+        if (metadataTerms.length > 0) {
             filtered = filtered.filter(h => {
                 const details = formatHistoryDetails(h);
-                return details.some(detail =>
-                    detail.label.toLowerCase().includes(metadataValue) ||
-                    detail.value.toLowerCase().includes(metadataValue)
+                return metadataTerms.every(term =>
+                    details.some(detail =>
+                        detail.label.toLowerCase().includes(term) ||
+                        detail.value.toLowerCase().includes(term)
+                    )
                 );
             });
         }
@@ -2192,9 +2197,16 @@ export default function mount(): () => void {
             const value = filterBtn.dataset.filter || '';
             const input = $('history-metadata-filter') as HTMLInputElement | null;
             if (!input) return;
-            input.value = value;
+            const existing = input.value
+                .split(',')
+                .map(v => v.trim())
+                .filter(Boolean);
+            if (!existing.some(v => v.toLowerCase() === value.toLowerCase())) {
+                existing.push(value);
+            }
+            input.value = existing.join(', ');
             renderHistory();
-            showToast(`Filtering history by "${value}"`, 'info');
+            showToast(`Added history filter "${value}"`, 'info');
         }
     });
 

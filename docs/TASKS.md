@@ -35,8 +35,9 @@
 - [x] ~~**Preset scope visibility**~~ — ✅ DONE. Toolbar now renders chips for scopes that currently have saved deploy presets, highlighting the active one.
 - [x] ~~**History chip-to-filter interaction**~~ — ✅ DONE. Clicking a metadata chip now populates the metadata filter and re-renders the History list immediately.
 - [x] ~~**Preset scope quick-switch**~~ — ✅ DONE. Clicking a saved preset scope chip now switches the group filter and restores that scope’s deploy settings immediately.
-- [ ] **Multi-value history filters** — Allow stacking multiple metadata chip filters instead of replacing the current one
+- [x] ~~**Multi-value history filters**~~ — ✅ DONE. Metadata filtering now supports comma-separated stacked values, and chip clicks append instead of replacing.
 - [ ] **Clickable history process/event badges** — Use the existing history row labels as quick filter shortcuts
+- [ ] **History filter clear controls** — Quick reset/clear buttons for active History filters
 
 ## 📝 Architecture Notes
 - **Package**: `bgrun` on npm
