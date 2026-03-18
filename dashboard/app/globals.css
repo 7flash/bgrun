@@ -585,6 +585,26 @@ body::after {
     cursor: not-allowed;
 }
 
+.deploy-preset-source {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 3.9rem;
+    padding: 0.22rem 0.5rem;
+    border-radius: 999px;
+    background: rgba(139, 148, 158, 0.16);
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.deploy-preset-source.is-preset {
+    background: rgba(34, 197, 94, 0.15);
+    color: #86efac;
+}
+
 /* Guard action button styling */
 .action-btn.guard {
     color: var(--text-muted);

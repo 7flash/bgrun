@@ -472,6 +472,7 @@ export default function mount(): () => void {
 
     const deployConcurrencySelect = $('deploy-concurrency-select') as HTMLSelectElement | null;
     const deployPresetResetBtn = $('deploy-preset-reset-btn') as HTMLButtonElement | null;
+    const deployPresetSourceEl = $('deploy-preset-source');
 
     function getDeployPresetKey(group: string): string {
         return group ? `group:${group}` : '__all__';
@@ -499,6 +500,17 @@ export default function mount(): () => void {
         updateDeployPresetResetButton();
     }
 
+    function updateDeployPresetIndicator() {
+        const hasPreset = Object.prototype.hasOwnProperty.call(deployPresets, getDeployPresetKey(groupQuery));
+        if (deployPresetSourceEl) {
+            deployPresetSourceEl.textContent = hasPreset ? 'preset' : 'default';
+            deployPresetSourceEl.classList.toggle('is-preset', hasPreset);
+            deployPresetSourceEl.title = hasPreset
+                ? `Using saved deploy preset for ${groupQuery || 'All Groups'}`
+                : `Using default deploy concurrency for ${groupQuery || 'All Groups'}`;
+        }
+    }
+
     function updateDeployPresetResetButton() {
         if (!deployPresetResetBtn) return;
         const hasPreset = Object.prototype.hasOwnProperty.call(deployPresets, getDeployPresetKey(groupQuery));
@@ -507,6 +519,7 @@ export default function mount(): () => void {
         deployPresetResetBtn.title = hasPreset
             ? `Reset saved deploy preset for ${groupQuery || 'All Groups'}`
             : `No saved deploy preset for ${groupQuery || 'All Groups'}`;
+        updateDeployPresetIndicator();
     }
 
     if (deployConcurrencySelect) {

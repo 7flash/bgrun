@@ -101,6 +101,7 @@ export default function DashboardPage() {
                                 <option value="4">4×</option>
                             </select>
                         </label>
+                        <span className="deploy-preset-source" id="deploy-preset-source" title="Current deploy preset source">default</span>
                         <button className="btn btn-ghost btn-icon" id="deploy-preset-reset-btn" title="Reset saved deploy preset for current group">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                 <polyline points="1 4 1 10 7 10" />
