@@ -40,8 +40,9 @@
 - [x] ~~**History filter clear controls**~~ — ✅ DONE. History modal now has a clear button that resets all active filters at once.
 - [x] ~~**Deploy result → history shortcut**~~ — ✅ DONE. Deploy result cards now have a History action that opens the History modal pre-filtered to that process’s deploy events.
 - [x] ~~**Deploy result history jump**~~ — ✅ DONE. Deploy result cards now jump into filtered History, scroll to the matching entry, and highlight it.
-- [ ] **History → process jump** — Open the related process drawer directly from History entries
+- [x] ~~**History → process jump**~~ — ✅ DONE. History process labels now open the related process drawer directly, while a small inline Filter action preserves filtering.
 - [ ] **Persistent history jump state** — Preserve highlighted History targets across modal reloads or refreshes
+- [ ] **History row action polish** — Clean up the mix of open/filter/copy controls in each History row
 
 ## 📝 Architecture Notes
 - **Package**: `bgrun` on npm

@@ -2131,14 +2131,24 @@ export default function mount(): () => void {
             return (
                 <div className="history-item" data-history-process={h.process_name} data-history-event={h.event}>
                     <span className="history-item-time">{timeStr}</span>
-                    <button
-                        className="history-item-process history-filter-shortcut"
-                        data-action="filter-history-process"
-                        data-process={h.process_name}
-                        title={`Filter history to process ${h.process_name}`}
-                    >
-                        {h.process_name}
-                    </button>
+                    <div className="history-item-process-wrap">
+                        <button
+                            className="history-item-process history-filter-shortcut"
+                            data-action="open-history-process"
+                            data-process={h.process_name}
+                            title={`Open process drawer for ${h.process_name}`}
+                        >
+                            {h.process_name}
+                        </button>
+                        <button
+                            className="history-inline-filter-btn"
+                            data-action="filter-history-process"
+                            data-process={h.process_name}
+                            title={`Filter history to process ${h.process_name}`}
+                        >
+                            Filter
+                        </button>
+                    </div>
                     <button
                         className={`history-item-event history-filter-shortcut ${h.event}`}
                         data-action="filter-history-event"
@@ -2256,6 +2266,15 @@ export default function mount(): () => void {
             } catch {
                 showToast('Failed to copy', 'error');
             }
+            return;
+        }
+
+        const openProcessBtn = target.closest('[data-action="open-history-process"]') as HTMLElement | null;
+        if (openProcessBtn) {
+            const value = openProcessBtn.dataset.process || '';
+            closeHistoryModal();
+            openDrawer(value);
+            showToast(`Opened process "${value}"`, 'info');
             return;
         }
 
