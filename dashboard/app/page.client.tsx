@@ -415,6 +415,8 @@ export default function mount(): () => void {
     let allProcesses: ProcessData[] = [];
     let searchQuery = '';
     let groupQuery = '';
+    const deployPresetKey = 'bgr_deploy_concurrency_presets';
+    const deployPresets = JSON.parse(localStorage.getItem(deployPresetKey) || '{}') as Record<string, number>;
     let deployConcurrency = Math.max(1, Math.min(4, parseInt(localStorage.getItem('bgr_deploy_concurrency') || '1') || 1));
     let searchDebounce: ReturnType<typeof setTimeout> | null = null;
     let collapsedGroups: Set<string> = new Set(JSON.parse(localStorage.getItem('bgr_collapsed_groups') || '[]'));
@@ -469,11 +471,30 @@ export default function mount(): () => void {
     loadVersion();
 
     const deployConcurrencySelect = $('deploy-concurrency-select') as HTMLSelectElement | null;
+
+    function getDeployPresetKey(group: string): string {
+        return group ? `group:${group}` : '__all__';
+    }
+
+    function applyDeployConcurrencyPreset(group: string) {
+        const preset = deployPresets[getDeployPresetKey(group)];
+        const next = Math.max(1, Math.min(4, preset || parseInt(localStorage.getItem('bgr_deploy_concurrency') || '1') || 1));
+        deployConcurrency = next;
+        localStorage.setItem('bgr_deploy_concurrency', String(deployConcurrency));
+        if (deployConcurrencySelect) deployConcurrencySelect.value = String(deployConcurrency);
+    }
+
+    function saveDeployConcurrencyPreset(group: string, concurrency: number) {
+        deployPresets[getDeployPresetKey(group)] = concurrency;
+        localStorage.setItem(deployPresetKey, JSON.stringify(deployPresets));
+        localStorage.setItem('bgr_deploy_concurrency', String(concurrency));
+    }
+
     if (deployConcurrencySelect) {
         deployConcurrencySelect.value = String(deployConcurrency);
         deployConcurrencySelect.addEventListener('change', () => {
             deployConcurrency = Math.max(1, Math.min(4, parseInt(deployConcurrencySelect.value) || 1));
-            localStorage.setItem('bgr_deploy_concurrency', String(deployConcurrency));
+            saveDeployConcurrencyPreset(groupQuery, deployConcurrency);
         });
     }
 
@@ -552,7 +573,11 @@ export default function mount(): () => void {
         // Preserve selection if still valid
         if (currentValue && groups.has(currentValue)) {
             groupFilter.value = currentValue;
+        } else if (currentValue && !groups.has(currentValue)) {
+            groupFilter.value = '';
+            groupQuery = '';
         }
+        applyDeployConcurrencyPreset(groupFilter.value || '');
     }
 
     function renderFilteredProcesses() {
@@ -604,10 +629,10 @@ export default function mount(): () => void {
 
         if (groupQuery) {
             label.textContent = `Deploy Group (${targetCount})`;
-            btn.title = `Git pull + restart deployable processes in group "${groupQuery}"`;
+            btn.title = `Git pull + restart deployable processes in group "${groupQuery}" with preset ${deployConcurrency}×`;
         } else {
             label.textContent = `Deploy All (${targetCount})`;
-            btn.title = 'Git pull + restart all deployable processes';
+            btn.title = `Git pull + restart all deployable processes with preset ${deployConcurrency}×`;
         }
 
         btn.disabled = targetCount === 0;
@@ -768,6 +793,7 @@ export default function mount(): () => void {
     const groupFilter = $('group-filter') as HTMLSelectElement;
     groupFilter?.addEventListener('change', () => {
         groupQuery = groupFilter.value;
+        applyDeployConcurrencyPreset(groupQuery);
         renderFilteredProcesses();
     });
 

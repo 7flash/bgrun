@@ -91,7 +91,7 @@ export default function DashboardPage() {
                         </svg>
                         <span id="deploy-all-label">Deploy All</span>
                     </button>
-                    <label className="deploy-concurrency-wrap" title="Bulk deploy concurrency">
+                    <label className="deploy-concurrency-wrap" title="Bulk deploy concurrency (saved per group)">
                         <span className="deploy-concurrency-label">Deploy</span>
                         <select className="deploy-concurrency-select" id="deploy-concurrency-select">
                             <option value="1">1×</option>
