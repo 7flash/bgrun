@@ -322,6 +322,14 @@ export default function DashboardPage() {
                             </label>
                             <button className="btn btn-ghost btn-sm" id="history-clear-filters-btn" title="Clear all history filters">Clear</button>
                         </div>
+                        <div className="history-keyboard-hints" aria-label="History keyboard shortcuts">
+                            <span className="history-keyboard-hint"><kbd>↑</kbd><kbd>↓</kbd><span>Move</span></span>
+                            <span className="history-keyboard-hint"><kbd>Enter</kbd><span>Open</span></span>
+                            <span className="history-keyboard-hint"><kbd>F</kbd><span>Process filter</span></span>
+                            <span className="history-keyboard-hint"><kbd>E</kbd><span>Event filter</span></span>
+                            <span className="history-keyboard-hint"><kbd>Space</kbd><span>Toggle details</span></span>
+                            <span className="history-keyboard-hint"><kbd>Esc</kbd><span>Close</span></span>
+                        </div>
                         <div className="history-list" id="history-list">
                             <div className="history-empty">No history yet</div>
                         </div>

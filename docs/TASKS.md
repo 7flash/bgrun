@@ -49,8 +49,9 @@
 - [x] ~~**History default details preference**~~ — ✅ DONE. The History modal now remembers whether detail sections should open collapsed or expanded by default.
 - [x] ~~**History keyboard navigation**~~ — ✅ DONE. The History modal now supports keyboard row navigation plus keyboard actions for open, filtering, and details toggling.
 - [x] ~~**History row state memory**~~ — ✅ DONE. The History modal now preserves each row’s detail expansion state across in-session re-renders.
-- [ ] **History keyboard shortcut hints** — Show inline key hints for History navigation/actions
+- [x] ~~**History keyboard shortcut hints**~~ — ✅ DONE. The History modal now shows inline key hints for navigation, open, filter, details toggle, and close actions.
 - [ ] **History focus restoration** — Restore the last keyboard-focused History row when filters change but that row still exists
+- [ ] **History hints minimization** — Let users collapse or hide the History keyboard hint strip
 
 ## 📝 Architecture Notes
 - **Package**: `bgrun` on npm

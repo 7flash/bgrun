@@ -3021,6 +3021,42 @@ tr.keyboard-focus td:first-child .process-name span {
     accent-color: var(--accent-primary);
 }
 
+.history-keyboard-hints {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 0.35rem 0 0.75rem;
+}
+
+.history-keyboard-hint {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.28rem 0.5rem;
+    border-radius: 999px;
+    border: 1px solid rgba(139, 148, 158, 0.14);
+    background: rgba(139, 148, 158, 0.08);
+    color: var(--text-muted);
+    font-size: 0.7rem;
+    white-space: nowrap;
+}
+
+.history-keyboard-hint kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.3rem;
+    height: 1.3rem;
+    padding: 0 0.28rem;
+    border-radius: 0.38rem;
+    border: 1px solid rgba(139, 148, 158, 0.18);
+    background: rgba(15, 23, 42, 0.75);
+    color: var(--text-secondary);
+    font-size: 0.68rem;
+    font-family: var(--font-mono);
+    box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.04);
+}
+
 .history-list {
     max-height: 400px;
     overflow-y: auto;
