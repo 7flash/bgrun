@@ -1938,6 +1938,24 @@ export default function mount(): () => void {
         }
     }
 
+    function formatHistoryDetails(h: HistoryEntry): string[] {
+        const md = h.metadata || {};
+        const parts: string[] = [];
+
+        if (h.event === 'deploy') {
+            if (md.packageManager) parts.push(`pm: ${md.packageManager}`);
+            if (md.installCommand) parts.push(`install: ${md.installCommand}`);
+            else if (md.installed === false) parts.push('install: skipped');
+            if (md.directory) parts.push(`dir: ${md.directory}`);
+        } else {
+            if (md.by) parts.push(`by: ${md.by}`);
+            if (md.count !== undefined) parts.push(`count: ${md.count}`);
+            if (md.directory) parts.push(`dir: ${md.directory}`);
+        }
+
+        return parts;
+    }
+
     function renderHistory() {
         const list = $('history-list');
         const processFilter = $('history-process-filter') as HTMLSelectElement;
@@ -1963,12 +1981,18 @@ export default function mount(): () => void {
         list.replaceChildren(...filtered.map(h => {
             const time = new Date(h.timestamp);
             const timeStr = time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' ' + time.toLocaleDateString([], { month: 'short', day: 'numeric' });
+            const details = formatHistoryDetails(h);
             return (
                 <div className="history-item">
                     <span className="history-item-time">{timeStr}</span>
                     <span className="history-item-process">{h.process_name}</span>
                     <span className={`history-item-event ${h.event}`}>{h.event.replace('_', ' ')}</span>
                     {h.pid && <span className="history-item-pid">PID {h.pid}</span>}
+                    {details.length > 0 && (
+                        <div className="history-item-details">
+                            {details.map(detail => <span className="history-item-detail">{detail}</span> as unknown as Node)}
+                        </div>
+                    )}
                 </div>
             ) as unknown as Node;
         }));

@@ -2930,6 +2930,7 @@ tr.keyboard-focus td:first-child .process-name span {
 .history-item {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     padding: 0.6rem 0.75rem;
     border-radius: var(--radius-sm);
     background: var(--bg-secondary);
@@ -2989,11 +2990,34 @@ tr.keyboard-focus td:first-child .process-name span {
     color: #8b949e;
 }
 
+.history-item-event.deploy {
+    background: rgba(168, 85, 247, 0.15);
+    color: #a855f7;
+}
+
 .history-item-pid {
     font-size: 0.7rem;
     color: var(--text-muted);
     font-family: var(--font-mono);
     flex-shrink: 0;
+}
+
+.history-item-details {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    width: 100%;
+    margin-left: calc(85px + 0.75rem);
+}
+
+.history-item-detail {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    padding: 0.18rem 0.45rem;
+    border-radius: 999px;
+    background: rgba(139, 148, 158, 0.12);
+    border: 1px solid rgba(139, 148, 158, 0.18);
 }
 
 /* Deploy Results Modal */
