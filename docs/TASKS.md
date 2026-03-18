@@ -58,8 +58,9 @@
 - [x] ~~**History hint personalization**~~ — ✅ DONE. The History shortcut strip now supports per-group visibility controls for each hint category.
 - [x] ~~**History focus auto-open**~~ — ✅ DONE. The History modal now has an Auto-open mode that keeps the process drawer synced while stepping through focused rows.
 - [x] ~~**History hint presets**~~ — ✅ DONE. The History hint strip now supports one-click Minimal / Navigation / All visibility presets.
-- [ ] **History focus scope modes** — Let auto-open choose between syncing the drawer only or closing the modal for direct inspection
+- [x] ~~**History focus scope modes**~~ — ✅ DONE. Auto-open can now either sync the drawer while History stays open or close History for direct inspection mode.
 - [ ] **History preset discoverability** — Highlight when the current hint selection no longer matches a preset
+- [ ] **History auto-open preview delay** — Add an optional debounce before auto-open reacts to rapid row stepping
 
 ## 📝 Architecture Notes
 - **Package**: `bgrun` on npm

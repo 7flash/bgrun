@@ -334,6 +334,13 @@ export default function DashboardPage() {
                                     <input id="history-auto-open-toggle" type="checkbox" />
                                     <span>Auto-open</span>
                                 </label>
+                                <label className="history-hint-density-wrap" title="Auto-open behavior while stepping through History rows">
+                                    <span className="history-density-label">Scope</span>
+                                    <select id="history-focus-scope-select" className="history-select history-hint-density-select">
+                                        <option value="sync">Sync drawer</option>
+                                        <option value="inspect">Inspect</option>
+                                    </select>
+                                </label>
                             </div>
                             <div className="history-hints-actions">
                                 <label className="history-hint-density-wrap" title="Keyboard hint density">

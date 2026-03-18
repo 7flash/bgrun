@@ -432,6 +432,7 @@ export default function mount(): () => void {
     let historyHintsVisible = localStorage.getItem('bgr_history_hints_visible') !== 'false';
     let historyHintDensity = localStorage.getItem('bgr_history_hint_density') === 'compact' ? 'compact' : 'full';
     let historyAutoOpen = localStorage.getItem('bgr_history_auto_open') === 'true';
+    let historyFocusScope = localStorage.getItem('bgr_history_focus_scope') === 'inspect' ? 'inspect' : 'sync';
     let historyHintGroups = (() => {
         try {
             const raw = JSON.parse(localStorage.getItem('bgr_history_hint_groups') || 'null');
@@ -2219,13 +2220,21 @@ export default function mount(): () => void {
         const rows = Array.from(list.querySelectorAll('.history-item')) as HTMLElement[];
         const row = rows[Math.max(0, Math.min(focusedHistoryIndex, rows.length - 1))];
         const processName = row?.dataset.historyProcess || '';
-        if (!processName || drawerProcess === processName) return;
+        if (!processName) return;
+        if (historyFocusScope === 'inspect') {
+            closeHistoryModal();
+            openDrawer(processName);
+            return;
+        }
+        if (drawerProcess === processName) return;
         openDrawer(processName);
     }
 
     function applyHistoryAutoOpenPreference() {
         const toggle = $('history-auto-open-toggle') as HTMLInputElement | null;
+        const scopeSelect = $('history-focus-scope-select') as HTMLSelectElement | null;
         if (toggle) toggle.checked = historyAutoOpen;
+        if (scopeSelect) scopeSelect.value = historyFocusScope;
     }
 
     function updateHistoryClearButton() {
@@ -2522,6 +2531,13 @@ export default function mount(): () => void {
         localStorage.setItem('bgr_history_auto_open', String(historyAutoOpen));
         applyHistoryAutoOpenPreference();
         showToast(`History auto-open ${historyAutoOpen ? 'enabled' : 'disabled'}`, 'success');
+    });
+    $('history-focus-scope-select')?.addEventListener('change', () => {
+        const select = $('history-focus-scope-select') as HTMLSelectElement | null;
+        historyFocusScope = select?.value === 'inspect' ? 'inspect' : 'sync';
+        localStorage.setItem('bgr_history_focus_scope', historyFocusScope);
+        applyHistoryAutoOpenPreference();
+        showToast(`History focus scope set to ${historyFocusScope}`, 'success');
     });
     $('history-focus-prev')?.addEventListener('click', () => {
         focusHistoryRow(focusedHistoryIndex - 1, { syncDrawer: true });
