@@ -567,6 +567,7 @@ export default function mount(): () => void {
             filtered = filtered.filter(p => p.group === groupQuery);
         }
         renderProcesses(filtered);
+        updateDeployAllButton();
 
         // Update search result count badge
         const badge = $('search-count');
@@ -578,6 +579,29 @@ export default function mount(): () => void {
                 badge.style.display = 'none';
             }
         }
+    }
+
+    function updateDeployAllButton() {
+        const btn = $('deploy-all-btn') as HTMLButtonElement;
+        const label = $('deploy-all-label');
+        if (!btn || !label) return;
+
+        const targetCount = allProcesses.filter(p => {
+            if (p.name === 'bgr-dashboard' || p.name === 'bgr-guard') return false;
+            if (groupQuery && p.group !== groupQuery) return false;
+            return true;
+        }).length;
+
+        if (groupQuery) {
+            label.textContent = `Deploy Group (${targetCount})`;
+            btn.title = `Git pull + restart deployable processes in group "${groupQuery}"`;
+        } else {
+            label.textContent = `Deploy All (${targetCount})`;
+            btn.title = 'Git pull + restart all deployable processes';
+        }
+
+        btn.disabled = targetCount === 0;
+        btn.style.opacity = targetCount === 0 ? '0.5' : '';
     }
 
     function updateStats(processes: ProcessData[]) {
@@ -1992,6 +2016,42 @@ export default function mount(): () => void {
         guardAllBtn.style.opacity = '';
         await loadProcessesFresh();
         mutationUntil = Date.now() + 3000;
+    });
+
+    // ─── Deploy All Button ───
+    $('deploy-all-btn')?.addEventListener('click', async () => {
+        const deployAllBtn = $('deploy-all-btn') as HTMLButtonElement;
+        if (!deployAllBtn || deployAllBtn.disabled) return;
+
+        const scope = groupQuery ? `group "${groupQuery}"` : 'all deployable processes';
+        deployAllBtn.disabled = true;
+        deployAllBtn.style.opacity = '0.5';
+        showToast(`Deploying ${scope}...`, 'info');
+
+        try {
+            const res = await fetch('/api/deploy-all', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ group: groupQuery || null }),
+            });
+            const data = await res.json();
+            if (res.ok) {
+                const parts = [];
+                if (data.deployed) parts.push(`${data.deployed} deployed`);
+                if (data.skipped) parts.push(`${data.skipped} skipped`);
+                if (data.failed) parts.push(`${data.failed} failed`);
+                showToast(parts.length > 0 ? `Deploy complete: ${parts.join(', ')}` : 'Deploy complete', 'success');
+            } else {
+                showToast(data.error || 'Failed to deploy processes', 'error');
+            }
+        } catch {
+            showToast('Failed to deploy processes', 'error');
+        }
+
+        deployAllBtn.disabled = false;
+        deployAllBtn.style.opacity = '';
+        await loadProcessesFresh();
+        mutationUntil = Date.now() + 5000;
     });
 
     // Group toggle removed — always-on directory grouping

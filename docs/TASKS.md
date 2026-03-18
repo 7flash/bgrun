@@ -13,9 +13,13 @@
 - [x] ~~**Process groups**~~ — ✅ DONE. Added group filter dropdown in toolbar, group badge on process cards, filtering by group in renderFilteredProcesses(), and CSS styles for group-badge and group-filter dropdown.
 - [x] ~~**Process templates**~~ — ✅ DONE. Added template schema in db.ts, `/api/templates` CRUD endpoints, Templates button in toolbar, modal UI with form fields (name, command, directory, group, env), saved template list with Use/Delete actions, and "Use" fills New Process form.
 - [x] ~~**Process history**~~ — ✅ DONE. Added history schema and functions in db.ts, `/api/history` endpoint, History button in toolbar, modal UI with process/event filters, and history entries recorded on start/stop/restart/guard events. Shows timestamp, process name, event type, and PID.
-- [ ] **Deploy all processes** — One-click deploy: git pull + restart for all processes
+- [x] ~~**Windows detached-process liveness mismatch**~~ — ✅ DONE. Reproduced a CLI/dashboard disagreement for `bgr-guard`; fixed `isProcessRunning()` to fall back to `Get-Process` when signal-0 checks fail under Git Bash/MSYS or detached wrapper scenarios.
+- [x] ~~**Deploy all processes**~~ — ✅ DONE. Added shared deploy helper in `src/deploy.ts`, refactored single deploy API to use it, and added `/api/deploy-all` plus a toolbar button that deploys either all deployable processes or the currently selected group.
 - [ ] **Dashboard UI polish** — Theme toggle, process uptime stats, better mobile layout
 - [ ] **Sticky port allocation** — Auto-assign next available port when starting new processes
+- [ ] **Regression test for Windows liveness fallback** — Add coverage around detached/background processes so CLI and dashboard status stay consistent on Windows shells
+- [ ] **Deploy result details UI** — Show per-process success/skip/failure results after bulk deploy, not just aggregate toasts
+- [ ] **Package manager auto-detection for deploys** — Respect bun/npm/pnpm/yarn lockfiles when installing after git pull
 
 ## 📝 Architecture Notes
 - **Package**: `bgrun` on npm

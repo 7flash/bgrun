@@ -61,9 +61,19 @@ export async function isProcessRunning(pid: number, command?: string): Promise<b
       }
 
       if (isWindows()) {
-        // process.kill(pid, 0) — signal 0 checks existence without killing
-        // 100x faster than tasklist which hangs on some Windows systems
-        try { process.kill(pid, 0); return true; } catch { return false; }
+        // Fast path: signal 0 works for many native Windows/Bun invocations.
+        // But under MSYS/Git Bash or detached wrapper scenarios it can return
+        // false negatives for live Windows PIDs. Fall back to Get-Process so
+        // CLI, dashboard, and guard all agree on process liveness.
+        try {
+          process.kill(pid, 0);
+          return true;
+        } catch {
+          const output = psExec(
+            `Get-Process -Id ${pid} -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id`
+          ).trim();
+          return output === String(pid);
+        }
       } else {
         const result = await $`ps -p ${pid}`.nothrow().text();
         return result.includes(`${pid}`);
