@@ -313,6 +313,13 @@ export default function DashboardPage() {
                                 <input id="history-shortcuts-toggle" type="checkbox" />
                                 <span>Shortcuts</span>
                             </label>
+                            <label className="history-density-wrap" title="Default History details state">
+                                <span className="history-density-label">Details</span>
+                                <select id="history-details-default-select" className="history-select history-density-select">
+                                    <option value="collapsed">Collapsed</option>
+                                    <option value="expanded">Expanded</option>
+                                </select>
+                            </label>
                             <button className="btn btn-ghost btn-sm" id="history-clear-filters-btn" title="Clear all history filters">Clear</button>
                         </div>
                         <div className="history-list" id="history-list">

@@ -428,6 +428,7 @@ export default function mount(): () => void {
     let logAutoScroll = localStorage.getItem('bgr_autoscroll') === 'true'; // OFF by default
     let historyDensity = localStorage.getItem('bgr_history_density') === 'compact' ? 'compact' : 'cozy';
     let historyShortcutsEnabled = localStorage.getItem('bgr_history_shortcuts') !== 'false';
+    let historyDetailsDefault = localStorage.getItem('bgr_history_details_default') === 'expanded' ? 'expanded' : 'collapsed';
     let logSearch = '';
     let logLinesRaw: string[] = [];  // Raw text (for search filtering)
     let logLinesHtml: string[] = []; // Pre-converted HTML (cached ansiToHtml)
@@ -2107,6 +2108,11 @@ export default function mount(): () => void {
         list.classList.toggle('history-shortcuts-hidden', !historyShortcutsEnabled);
     }
 
+    function applyHistoryDetailsPreference() {
+        const select = $('history-details-default-select') as HTMLSelectElement | null;
+        if (select) select.value = historyDetailsDefault;
+    }
+
     function updateHistoryClearButton() {
         const btn = $('history-clear-filters-btn') as HTMLButtonElement | null;
         const processFilter = $('history-process-filter') as HTMLSelectElement | null;
@@ -2155,6 +2161,7 @@ export default function mount(): () => void {
         updateHistoryClearButton();
         applyHistoryDensity();
         applyHistoryShortcutPreference();
+        applyHistoryDetailsPreference();
 
         if (filtered.length === 0) {
             list.innerHTML = '<div class="history-empty">No history found</div>';
@@ -2228,7 +2235,7 @@ export default function mount(): () => void {
                             </details>
                         </div>
                         {details.length > 0 && (
-                            <details className="history-item-details-wrap">
+                            <details className="history-item-details-wrap" open={historyDetailsDefault === 'expanded'}>
                                 <summary className="history-item-details-summary">
                                     <span>Details</span>
                                     <span className="history-item-details-count">{details.length}</span>
@@ -2335,6 +2342,14 @@ export default function mount(): () => void {
         applyHistoryShortcutPreference();
         renderHistory();
         showToast(`History shortcuts ${historyShortcutsEnabled ? 'enabled' : 'hidden'}`, 'success');
+    });
+    $('history-details-default-select')?.addEventListener('change', () => {
+        const select = $('history-details-default-select') as HTMLSelectElement | null;
+        historyDetailsDefault = select?.value === 'expanded' ? 'expanded' : 'collapsed';
+        localStorage.setItem('bgr_history_details_default', historyDetailsDefault);
+        applyHistoryDetailsPreference();
+        renderHistory();
+        showToast(`History details default set to ${historyDetailsDefault}`, 'success');
     });
     $('history-clear-filters-btn')?.addEventListener('click', () => {
         const processFilter = $('history-process-filter') as HTMLSelectElement | null;

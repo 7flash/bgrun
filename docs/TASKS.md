@@ -46,8 +46,9 @@
 - [x] ~~**History action grouping**~~ — ✅ DONE. History rows now use an explicit Actions menu so row content stays cleaner while controls remain available.
 - [x] ~~**History density modes**~~ — ✅ DONE. The History modal now supports cozy/compact density modes and remembers the selected mode locally.
 - [x] ~~**History action shortcuts toggle**~~ — ✅ DONE. The History modal now has a persistent Shortcuts toggle that swaps row shortcuts between interactive controls and plain labels.
-- [ ] **History default details preference** — Let users choose whether History details start expanded or collapsed
+- [x] ~~**History default details preference**~~ — ✅ DONE. The History modal now remembers whether detail sections should open collapsed or expanded by default.
 - [ ] **History keyboard navigation** — Add keyboard navigation and activation support inside the History modal
+- [ ] **History row state memory** — Remember per-entry details expansion state while the History modal remains open
 
 ## 📝 Architecture Notes
 - **Package**: `bgrun` on npm
