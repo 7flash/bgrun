@@ -430,6 +430,7 @@ export default function mount(): () => void {
     let historyShortcutsEnabled = localStorage.getItem('bgr_history_shortcuts') !== 'false';
     let historyDetailsDefault = localStorage.getItem('bgr_history_details_default') === 'expanded' ? 'expanded' : 'collapsed';
     let focusedHistoryIndex = 0;
+    let focusedHistoryKey: string | null = null;
     let historyDetailState = new Map<string, boolean>();
     let logSearch = '';
     let logLinesRaw: string[] = [];  // Raw text (for search filtering)
@@ -2137,6 +2138,7 @@ export default function mount(): () => void {
         const rows = Array.from(list.querySelectorAll('.history-item')) as HTMLElement[];
         if (rows.length === 0) {
             focusedHistoryIndex = 0;
+            focusedHistoryKey = null;
             return;
         }
 
@@ -2146,6 +2148,9 @@ export default function mount(): () => void {
             row.classList.toggle('keyboard-focused', active);
             row.setAttribute('tabindex', active ? '0' : '-1');
             row.setAttribute('aria-selected', active ? 'true' : 'false');
+            if (active) {
+                focusedHistoryKey = row.dataset.historyKey || null;
+            }
         });
 
         const activeRow = rows[focusedHistoryIndex];
@@ -2203,7 +2208,7 @@ export default function mount(): () => void {
             const detailKey = getHistoryDetailKey(h);
             const detailsOpen = historyDetailState.get(detailKey) ?? (historyDetailsDefault === 'expanded');
             return (
-                <div className="history-item" data-history-process={h.process_name} data-history-event={h.event} data-history-index={String(index)} tabIndex={-1} role="button" aria-selected="false">
+                <div className="history-item" data-history-process={h.process_name} data-history-event={h.event} data-history-key={detailKey} data-history-index={String(index)} tabIndex={-1} role="button" aria-selected="false">
                     <span className="history-item-time">{timeStr}</span>
                     <div className="history-item-main">
                         <div className="history-item-meta">
@@ -2316,8 +2321,17 @@ export default function mount(): () => void {
                 match.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
                 setTimeout(() => match.classList.remove('jump-highlight'), 2200);
                 focusedHistoryIndex = Math.max(0, Array.from(list.querySelectorAll('.history-item')).indexOf(match));
+                focusedHistoryKey = match.dataset.historyKey || null;
                 pendingHistoryFocus = null;
             }
+        }
+
+        const rows = Array.from(list.querySelectorAll('.history-item')) as HTMLElement[];
+        const restoredIndex = focusedHistoryKey
+            ? rows.findIndex(row => row.dataset.historyKey === focusedHistoryKey)
+            : -1;
+        if (restoredIndex >= 0) {
+            focusedHistoryIndex = restoredIndex;
         }
 
         focusHistoryRow(focusedHistoryIndex);
