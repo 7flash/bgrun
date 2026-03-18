@@ -426,6 +426,7 @@ export default function mount(): () => void {
     let mutationUntil = 0; // Timestamp: ignore SSE updates until this time (after mutations)
     let configSubtab = 'toml'; // 'toml' | 'env'
     let logAutoScroll = localStorage.getItem('bgr_autoscroll') === 'true'; // OFF by default
+    let historyDensity = localStorage.getItem('bgr_history_density') === 'compact' ? 'compact' : 'cozy';
     let logSearch = '';
     let logLinesRaw: string[] = [];  // Raw text (for search filtering)
     let logLinesHtml: string[] = []; // Pre-converted HTML (cached ansiToHtml)
@@ -2088,6 +2089,15 @@ export default function mount(): () => void {
         } catch { }
     }
 
+    function applyHistoryDensity() {
+        const list = $('history-list');
+        const select = $('history-density-select') as HTMLSelectElement | null;
+        if (select) select.value = historyDensity;
+        if (!list) return;
+        list.classList.toggle('history-density-compact', historyDensity === 'compact');
+        list.classList.toggle('history-density-cozy', historyDensity !== 'compact');
+    }
+
     function updateHistoryClearButton() {
         const btn = $('history-clear-filters-btn') as HTMLButtonElement | null;
         const processFilter = $('history-process-filter') as HTMLSelectElement | null;
@@ -2134,6 +2144,7 @@ export default function mount(): () => void {
         }
 
         updateHistoryClearButton();
+        applyHistoryDensity();
 
         if (filtered.length === 0) {
             list.innerHTML = '<div class="history-empty">No history found</div>';
@@ -2283,6 +2294,14 @@ export default function mount(): () => void {
     $('history-process-filter')?.addEventListener('change', renderHistory);
     $('history-event-filter')?.addEventListener('change', renderHistory);
     $('history-metadata-filter')?.addEventListener('input', renderHistory);
+    $('history-density-select')?.addEventListener('change', () => {
+        const select = $('history-density-select') as HTMLSelectElement | null;
+        historyDensity = select?.value === 'compact' ? 'compact' : 'cozy';
+        localStorage.setItem('bgr_history_density', historyDensity);
+        applyHistoryDensity();
+        renderHistory();
+        showToast(`History density set to ${historyDensity}`, 'success');
+    });
     $('history-clear-filters-btn')?.addEventListener('click', () => {
         const processFilter = $('history-process-filter') as HTMLSelectElement | null;
         const eventFilter = $('history-event-filter') as HTMLSelectElement | null;

@@ -2987,6 +2987,24 @@ tr.keyboard-focus td:first-child .process-name span {
     cursor: not-allowed;
 }
 
+.history-density-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0 0.15rem;
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    font-weight: 600;
+}
+
+.history-density-label {
+    white-space: nowrap;
+}
+
+.history-density-select {
+    min-width: 88px;
+}
+
 .history-list {
     max-height: 400px;
     overflow-y: auto;
@@ -3014,6 +3032,37 @@ tr.keyboard-focus td:first-child .process-name span {
 .history-item.jump-highlight {
     background: rgba(96, 165, 250, 0.12);
     box-shadow: inset 0 0 0 1px rgba(96, 165, 250, 0.35);
+}
+
+.history-list.history-density-compact .history-item {
+    padding: 0.45rem 0.6rem;
+    gap: 0.55rem;
+    margin-bottom: 0.28rem;
+}
+
+.history-list.history-density-compact .history-item-main {
+    gap: 0.3rem;
+}
+
+.history-list.history-density-compact .history-item-meta {
+    gap: 0.4rem;
+}
+
+.history-list.history-density-compact .history-item-time,
+.history-list.history-density-compact .history-item-event,
+.history-list.history-density-compact .history-item-pid,
+.history-list.history-density-compact .history-item-details-summary,
+.history-list.history-density-compact .history-item-detail {
+    font-size: 0.68rem;
+}
+
+.history-list.history-density-compact .history-item-actions {
+    min-width: 200px;
+    padding: 0.4rem;
+}
+
+.history-list.history-density-compact .history-item-detail {
+    padding: 0.14rem 0.28rem 0.14rem 0.38rem;
 }
 
 .history-item-time {

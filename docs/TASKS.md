@@ -44,8 +44,9 @@
 - [x] ~~**Persistent history jump state**~~ — ✅ DONE. History jump targets now persist in session storage so reloads/reopenings can restore the highlighted target.
 - [x] ~~**History row action polish**~~ — ✅ DONE. History rows now use a more consistent action pattern with grouped process actions and unified button styling.
 - [x] ~~**History action grouping**~~ — ✅ DONE. History rows now use an explicit Actions menu so row content stays cleaner while controls remain available.
-- [ ] **History density modes** — Add compact/cozy display options for the History modal
+- [x] ~~**History density modes**~~ — ✅ DONE. The History modal now supports cozy/compact density modes and remembers the selected mode locally.
 - [ ] **History action shortcuts toggle** — Let users show or hide quick-action affordances in History rows
+- [ ] **History default details preference** — Let users choose whether History details start expanded or collapsed
 
 ## 📝 Architecture Notes
 - **Package**: `bgrun` on npm

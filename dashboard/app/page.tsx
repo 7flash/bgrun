@@ -302,6 +302,13 @@ export default function DashboardPage() {
                                 <option value="guard_off">Guard Off</option>
                             </select>
                             <input id="history-metadata-filter" className="history-select history-search" type="text" placeholder="Filter metadata (comma-separated)..." />
+                            <label className="history-density-wrap" title="History row density">
+                                <span className="history-density-label">Density</span>
+                                <select id="history-density-select" className="history-select history-density-select">
+                                    <option value="cozy">Cozy</option>
+                                    <option value="compact">Compact</option>
+                                </select>
+                            </label>
                             <button className="btn btn-ghost btn-sm" id="history-clear-filters-btn" title="Clear all history filters">Clear</button>
                         </div>
                         <div className="history-list" id="history-list">
