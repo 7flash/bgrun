@@ -334,6 +334,24 @@ export default function DashboardPage() {
                 </div>
             </div>
 
+            {/* Deploy Results Modal */}
+            <div className="modal-overlay" id="deploy-results-modal">
+                <div className="modal modal-wide">
+                    <div className="modal-header">
+                        <h3>🚀 Deploy Results</h3>
+                        <button className="modal-close" id="deploy-results-modal-close">✕</button>
+                    </div>
+                    <div className="modal-body">
+                        <div className="deploy-results-summary" id="deploy-results-summary">
+                            No deploy results yet
+                        </div>
+                        <div className="deploy-results-list" id="deploy-results-list">
+                            <div className="history-empty">Run a bulk deploy to see detailed results</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             {/* Keyboard Shortcuts Overlay */}
             <div className="shortcuts-overlay" id="shortcuts-overlay">
                 <div className="shortcuts-panel">

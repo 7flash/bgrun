@@ -1877,7 +1877,17 @@ export default function mount(): () => void {
         metadata: Record<string, any>;
     }
 
+    interface DeployResultEntry {
+        name: string;
+        ok: boolean;
+        skipped?: boolean;
+        reason?: string;
+        pullOutput?: string;
+        installOutput?: string;
+    }
+
     let allHistory: HistoryEntry[] = [];
+    let latestDeployResults: DeployResultEntry[] = [];
 
     async function loadHistory() {
         try {
@@ -1969,6 +1979,71 @@ export default function mount(): () => void {
     $('history-process-filter')?.addEventListener('change', renderHistory);
     $('history-event-filter')?.addEventListener('change', renderHistory);
 
+    // ─── Deploy Results Modal ───
+
+    function renderDeployResults(summary?: { group?: string | null; deployed?: number; skipped?: number; failed?: number; total?: number }) {
+        const summaryEl = $('deploy-results-summary');
+        const listEl = $('deploy-results-list');
+        if (!summaryEl || !listEl) return;
+
+        if (summary) {
+            const scope = summary.group ? `Group: ${summary.group}` : 'All deployable processes';
+            summaryEl.innerHTML = [
+                `<span><strong>${scope}</strong></span>`,
+                `<span>${summary.deployed || 0} deployed</span>`,
+                `<span>${summary.skipped || 0} skipped</span>`,
+                `<span>${summary.failed || 0} failed</span>`,
+                `<span>${summary.total || latestDeployResults.length} total</span>`,
+            ].join('');
+        } else {
+            summaryEl.textContent = 'No deploy results yet';
+        }
+
+        if (latestDeployResults.length === 0) {
+            listEl.innerHTML = '<div class="history-empty">Run a bulk deploy to see detailed results</div>';
+            return;
+        }
+
+        listEl.replaceChildren(...latestDeployResults.map(result => {
+            const statusClass = result.ok ? 'ok' : result.skipped ? 'skipped' : 'failed';
+            const statusLabel = result.ok ? 'Deployed' : result.skipped ? 'Skipped' : 'Failed';
+            const details = [result.reason, result.pullOutput, result.installOutput].filter(Boolean).join('\n\n');
+
+            return (
+                <div className={`deploy-result-item ${statusClass}`}>
+                    <div className="deploy-result-head">
+                        <span className="deploy-result-name">{result.name}</span>
+                        <span className={`deploy-result-status ${statusClass}`}>{statusLabel}</span>
+                    </div>
+                    {result.reason && <div className="deploy-result-reason">{result.reason}</div>}
+                    {(result.pullOutput || result.installOutput) && (
+                        <details className="deploy-result-details">
+                            <summary>Output</summary>
+                            <pre>{details}</pre>
+                        </details>
+                    )}
+                </div>
+            ) as unknown as Node;
+        }));
+    }
+
+    function openDeployResultsModal() {
+        const modal = $('deploy-results-modal');
+        if (modal) modal.classList.add('active');
+    }
+
+    function closeDeployResultsModal() {
+        const modal = $('deploy-results-modal');
+        if (modal) modal.classList.remove('active');
+    }
+
+    $('deploy-results-modal-close')?.addEventListener('click', closeDeployResultsModal);
+    $('deploy-results-modal')?.addEventListener('click', (e) => {
+        if ((e.target as Element).classList.contains('modal-overlay')) {
+            closeDeployResultsModal();
+        }
+    });
+
     // ─── Toolbar Actions ───
     $('refresh-btn')?.addEventListener('click', () => {
         loadProcesses();
@@ -2035,6 +2110,11 @@ export default function mount(): () => void {
                 body: JSON.stringify({ group: groupQuery || null }),
             });
             const data = await res.json();
+            if (Array.isArray(data.results)) {
+                latestDeployResults = data.results;
+                renderDeployResults(data);
+                openDeployResultsModal();
+            }
             if (res.ok) {
                 const parts = [];
                 if (data.deployed) parts.push(`${data.deployed} deployed`);

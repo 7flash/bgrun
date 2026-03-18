@@ -18,8 +18,9 @@
 - [ ] **Dashboard UI polish** — Theme toggle, process uptime stats, better mobile layout
 - [ ] **Sticky port allocation** — Auto-assign next available port when starting new processes
 - [ ] **Regression test for Windows liveness fallback** — Add coverage around detached/background processes so CLI and dashboard status stay consistent on Windows shells
-- [ ] **Deploy result details UI** — Show per-process success/skip/failure results after bulk deploy, not just aggregate toasts
+- [x] ~~**Deploy result details UI**~~ — ✅ DONE. Bulk deploy now opens a results modal with per-process deployed/skipped/failed status plus expandable git/install output.
 - [ ] **Package manager auto-detection for deploys** — Respect bun/npm/pnpm/yarn lockfiles when installing after git pull
+- [ ] **Deploy retry actions in results modal** — Retry failed or skipped processes directly from the deploy results view
 
 ## 📝 Architecture Notes
 - **Package**: `bgrun` on npm
