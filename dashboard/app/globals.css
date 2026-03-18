@@ -3131,6 +3131,20 @@ tr.keyboard-focus td:first-child .process-name span {
     min-width: 0;
 }
 
+.history-item-filter-chip {
+    border: none;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    padding: 0;
+    cursor: pointer;
+    text-align: left;
+}
+
+.history-item-filter-chip:hover {
+    color: #93c5fd;
+}
+
 .history-item-copy {
     border: none;
     background: rgba(139, 148, 158, 0.18);

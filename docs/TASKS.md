@@ -33,8 +33,9 @@
 - [x] ~~**Deploy preset source indicator**~~ — ✅ DONE. Deploy toolbar now displays whether the current concurrency comes from a saved preset or the default value.
 - [x] ~~**History metadata filtering**~~ — ✅ DONE. Added a metadata filter input to the History modal for matching package manager, directory, install command, and other metadata values.
 - [x] ~~**Preset scope visibility**~~ — ✅ DONE. Toolbar now renders chips for scopes that currently have saved deploy presets, highlighting the active one.
-- [ ] **History chip-to-filter interaction** — Clicking a metadata chip should populate the metadata filter for fast drill-down
+- [x] ~~**History chip-to-filter interaction**~~ — ✅ DONE. Clicking a metadata chip now populates the metadata filter and re-renders the History list immediately.
 - [ ] **Preset scope quick-switch** — Clicking a preset scope chip should switch the group filter to that scope
+- [ ] **Multi-value history filters** — Allow stacking multiple metadata chip filters instead of replacing the current one
 
 ## 📝 Architecture Notes
 - **Package**: `bgrun` on npm

@@ -2102,7 +2102,14 @@ export default function mount(): () => void {
                             <div className="history-item-details">
                                 {details.map(detail => (
                                     <span className="history-item-detail">
-                                        <span className="history-item-detail-text">{detail.label}: {detail.value}</span>
+                                        <button
+                                            className="history-item-detail-text history-item-filter-chip"
+                                            data-action="filter-history-detail"
+                                            data-filter={detail.value}
+                                            title={`Filter history by ${detail.label}: ${detail.value}`}
+                                        >
+                                            {detail.label}: {detail.value}
+                                        </button>
                                         {detail.copyable && (
                                             <button
                                                 className="history-item-copy"
@@ -2145,14 +2152,28 @@ export default function mount(): () => void {
     $('history-event-filter')?.addEventListener('change', renderHistory);
     $('history-metadata-filter')?.addEventListener('input', renderHistory);
     $('history-list')?.addEventListener('click', async (e) => {
-        const btn = (e.target as Element).closest('[data-action="copy-history-detail"]') as HTMLElement | null;
-        const value = btn?.dataset.copy;
-        if (!value) return;
-        try {
-            await navigator.clipboard.writeText(value);
-            showToast('Copied to clipboard', 'success');
-        } catch {
-            showToast('Failed to copy', 'error');
+        const target = e.target as Element;
+        const copyBtn = target.closest('[data-action="copy-history-detail"]') as HTMLElement | null;
+        if (copyBtn) {
+            const value = copyBtn.dataset.copy;
+            if (!value) return;
+            try {
+                await navigator.clipboard.writeText(value);
+                showToast('Copied to clipboard', 'success');
+            } catch {
+                showToast('Failed to copy', 'error');
+            }
+            return;
+        }
+
+        const filterBtn = target.closest('[data-action="filter-history-detail"]') as HTMLElement | null;
+        if (filterBtn) {
+            const value = filterBtn.dataset.filter || '';
+            const input = $('history-metadata-filter') as HTMLInputElement | null;
+            if (!input) return;
+            input.value = value;
+            renderHistory();
+            showToast(`Filtering history by "${value}"`, 'info');
         }
     });
 
