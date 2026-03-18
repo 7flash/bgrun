@@ -621,6 +621,13 @@ body::after {
     color: var(--text-muted);
     font-size: 0.7rem;
     font-weight: 700;
+    border: none;
+    cursor: pointer;
+}
+
+.deploy-preset-scope:hover {
+    color: var(--text);
+    background: rgba(139, 148, 158, 0.22);
 }
 
 .deploy-preset-scope.active {

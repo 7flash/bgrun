@@ -616,9 +616,14 @@ export default function mount(): () => void {
 
         scopesEl.replaceChildren(
             ...visibleScopes.map(scope => (
-                <span className={`deploy-preset-scope ${scope === groupQuery ? 'active' : ''}`} title={scope ? `Saved preset for ${scope}` : 'Saved preset for All Groups'}>
+                <button
+                    className={`deploy-preset-scope ${scope === groupQuery ? 'active' : ''}`}
+                    data-action="switch-preset-scope"
+                    data-scope={scope}
+                    title={scope ? `Switch to group ${scope}` : 'Switch to All Groups'}
+                >
                     {scope || 'All'}
-                </span>
+                </button>
             ) as unknown as Node)
         );
     }
@@ -863,6 +868,22 @@ export default function mount(): () => void {
         applyDeployConcurrencyPreset(groupQuery);
         updateDeployPresetResetButton();
         renderFilteredProcesses();
+    });
+
+    $('deploy-preset-scopes')?.addEventListener('click', (e) => {
+        const btn = (e.target as Element).closest('[data-action="switch-preset-scope"]') as HTMLElement | null;
+        const scope = btn?.dataset.scope;
+        if (scope === undefined) return;
+
+        const groupFilter = $('group-filter') as HTMLSelectElement | null;
+        if (groupFilter) {
+            groupFilter.value = scope;
+        }
+        groupQuery = scope;
+        applyDeployConcurrencyPreset(groupQuery);
+        updateDeployPresetResetButton();
+        renderFilteredProcesses();
+        showToast(`Switched to ${scope || 'All Groups'} preset`, 'info');
     });
 
     /** Fetch with cache-bust to force fresh data after mutations */
