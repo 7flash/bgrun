@@ -11,6 +11,8 @@ export interface DeployResult {
     installOutput?: string;
 }
 
+export type PackageManager = 'bun' | 'pnpm' | 'yarn' | 'npm' | null;
+
 function isInternalProcess(name: string): boolean {
     return name === 'bgr-dashboard' || name === 'bgr-guard';
 }
@@ -21,6 +23,38 @@ async function pathExists(path: string): Promise<boolean> {
 
 async function isGitRepo(dir: string): Promise<boolean> {
     return await pathExists(`${dir}/.git`) || await pathExists(`${dir}/.git/HEAD`);
+}
+
+export async function detectPackageManager(dir: string): Promise<PackageManager> {
+    const hasPackageJson = await pathExists(`${dir}/package.json`);
+    if (!hasPackageJson) return null;
+
+    if (await pathExists(`${dir}/bun.lock`) || await pathExists(`${dir}/bun.lockb`)) return 'bun';
+    if (await pathExists(`${dir}/pnpm-lock.yaml`)) return 'pnpm';
+    if (await pathExists(`${dir}/yarn.lock`)) return 'yarn';
+    if (await pathExists(`${dir}/package-lock.json`) || await pathExists(`${dir}/npm-shrinkwrap.json`)) return 'npm';
+
+    return 'bun';
+}
+
+async function installDependencies(dir: string): Promise<{ manager: PackageManager; output: string }> {
+    const manager = await detectPackageManager(dir);
+    if (!manager) return { manager: null, output: '' };
+
+    $.cwd(dir);
+
+    switch (manager) {
+        case 'bun':
+            return { manager, output: (await $`bun install`.text()).trim() };
+        case 'pnpm':
+            return { manager, output: (await $`pnpm install --frozen-lockfile`.text()).trim() };
+        case 'yarn':
+            return { manager, output: (await $`yarn install --frozen-lockfile`.text()).trim() };
+        case 'npm':
+            return { manager, output: (await $`npm ci`.text()).trim() };
+        default:
+            return { manager: null, output: '' };
+    }
 }
 
 export async function deployProcess(name: string): Promise<DeployResult> {
@@ -43,11 +77,8 @@ export async function deployProcess(name: string): Promise<DeployResult> {
 
         const pullOutput = (await $`git pull`.text()).trim();
 
-        let installOutput = '';
-        const hasPackageJson = await pathExists(`${dir}/package.json`);
-        if (hasPackageJson) {
-            installOutput = (await $`bun install`.text()).trim();
-        }
+        const install = await installDependencies(dir);
+        const installOutput = install.output;
 
         await handleRun({
             action: 'run',
@@ -58,7 +89,8 @@ export async function deployProcess(name: string): Promise<DeployResult> {
 
         addHistoryEntry(name, 'deploy', proc.pid, {
             directory: dir,
-            installed: hasPackageJson,
+            installed: Boolean(install.manager),
+            packageManager: install.manager,
         });
 
         return { name, ok: true, pullOutput, installOutput };

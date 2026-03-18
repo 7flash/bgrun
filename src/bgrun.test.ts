@@ -9,6 +9,8 @@
 import { describe, expect, test } from 'bun:test'
 import { parseEnvString, calculateRuntime } from './utils'
 import { stripAnsi, truncateString, truncatePath } from './table'
+import { detectPackageManager } from './deploy'
+import { mkdirSync, rmSync } from 'fs'
 
 // ─── parseEnvString ─────────────────────────────────────
 
@@ -105,5 +107,68 @@ describe('truncatePath', () => {
         const result = truncatePath(longPath, 30)
         expect(result.length).toBeLessThanOrEqual(30)
         expect(result).toContain('…')
+    })
+})
+
+// ─── detectPackageManager ───────────────────────────────
+
+describe('detectPackageManager', () => {
+    test('returns null when no package.json exists', async () => {
+        const dir = `${process.cwd()}/tmp-no-package-${Date.now()}`
+        mkdirSync(dir, { recursive: true })
+        try {
+            expect(await detectPackageManager(dir)).toBeNull()
+        } finally {
+            rmSync(dir, { recursive: true, force: true })
+        }
+    })
+
+    test('prefers bun lockfiles', async () => {
+        const dir = `${process.cwd()}/tmp-bun-${Date.now()}`
+        mkdirSync(dir, { recursive: true })
+        try {
+            await Bun.write(`${dir}/package.json`, '{}')
+            await Bun.write(`${dir}/bun.lock`, '')
+            expect(await detectPackageManager(dir)).toBe('bun')
+        } finally {
+            rmSync(dir, { recursive: true, force: true })
+        }
+    })
+
+    test('detects pnpm, yarn, and npm lockfiles', async () => {
+        const base = `${process.cwd()}/tmp-pm-${Date.now()}`
+
+        const pnpmDir = `${base}-pnpm`
+        mkdirSync(pnpmDir, { recursive: true })
+        await Bun.write(`${pnpmDir}/package.json`, '{}')
+        await Bun.write(`${pnpmDir}/pnpm-lock.yaml`, '')
+        expect(await detectPackageManager(pnpmDir)).toBe('pnpm')
+
+        const yarnDir = `${base}-yarn`
+        mkdirSync(yarnDir, { recursive: true })
+        await Bun.write(`${yarnDir}/package.json`, '{}')
+        await Bun.write(`${yarnDir}/yarn.lock`, '')
+        expect(await detectPackageManager(yarnDir)).toBe('yarn')
+
+        const npmDir = `${base}-npm`
+        mkdirSync(npmDir, { recursive: true })
+        await Bun.write(`${npmDir}/package.json`, '{}')
+        await Bun.write(`${npmDir}/package-lock.json`, '{}')
+        expect(await detectPackageManager(npmDir)).toBe('npm')
+
+        rmSync(pnpmDir, { recursive: true, force: true })
+        rmSync(yarnDir, { recursive: true, force: true })
+        rmSync(npmDir, { recursive: true, force: true })
+    })
+
+    test('defaults to bun for package.json projects without a lockfile', async () => {
+        const dir = `${process.cwd()}/tmp-default-bun-${Date.now()}`
+        mkdirSync(dir, { recursive: true })
+        try {
+            await Bun.write(`${dir}/package.json`, '{}')
+            expect(await detectPackageManager(dir)).toBe('bun')
+        } finally {
+            rmSync(dir, { recursive: true, force: true })
+        }
     })
 })
