@@ -1884,10 +1884,12 @@ export default function mount(): () => void {
         reason?: string;
         pullOutput?: string;
         installOutput?: string;
+        retrying?: boolean;
     }
 
     let allHistory: HistoryEntry[] = [];
     let latestDeployResults: DeployResultEntry[] = [];
+    let latestDeploySummary: { group?: string | null; deployed?: number; skipped?: number; failed?: number; total?: number } | undefined;
 
     async function loadHistory() {
         try {
@@ -1986,14 +1988,19 @@ export default function mount(): () => void {
         const listEl = $('deploy-results-list');
         if (!summaryEl || !listEl) return;
 
-        if (summary) {
-            const scope = summary.group ? `Group: ${summary.group}` : 'All deployable processes';
+        latestDeploySummary = summary || latestDeploySummary;
+
+        if (latestDeploySummary) {
+            const deployed = latestDeployResults.filter(r => r.ok).length;
+            const skipped = latestDeployResults.filter(r => !r.ok && r.skipped).length;
+            const failed = latestDeployResults.filter(r => !r.ok && !r.skipped).length;
+            const scope = latestDeploySummary.group ? `Group: ${latestDeploySummary.group}` : 'All deployable processes';
             summaryEl.innerHTML = [
                 `<span><strong>${scope}</strong></span>`,
-                `<span>${summary.deployed || 0} deployed</span>`,
-                `<span>${summary.skipped || 0} skipped</span>`,
-                `<span>${summary.failed || 0} failed</span>`,
-                `<span>${summary.total || latestDeployResults.length} total</span>`,
+                `<span>${deployed} deployed</span>`,
+                `<span>${skipped} skipped</span>`,
+                `<span>${failed} failed</span>`,
+                `<span>${latestDeployResults.length || latestDeploySummary.total || 0} total</span>`,
             ].join('');
         } else {
             summaryEl.textContent = 'No deploy results yet';
@@ -2013,7 +2020,14 @@ export default function mount(): () => void {
                 <div className={`deploy-result-item ${statusClass}`}>
                     <div className="deploy-result-head">
                         <span className="deploy-result-name">{result.name}</span>
-                        <span className={`deploy-result-status ${statusClass}`}>{statusLabel}</span>
+                        <div className="deploy-result-head-right">
+                            <span className={`deploy-result-status ${statusClass}`}>{statusLabel}</span>
+                            {!result.ok && (
+                                <button className="btn btn-ghost btn-sm deploy-retry-btn" data-action="deploy-retry" data-name={result.name} disabled={result.retrying ? true : undefined}>
+                                    {result.retrying ? 'Retrying…' : 'Retry'}
+                                </button>
+                            )}
+                        </div>
                     </div>
                     {result.reason && <div className="deploy-result-reason">{result.reason}</div>}
                     {(result.pullOutput || result.installOutput) && (
@@ -2037,11 +2051,53 @@ export default function mount(): () => void {
         if (modal) modal.classList.remove('active');
     }
 
+    async function retryDeployResult(name: string) {
+        const index = latestDeployResults.findIndex(r => r.name === name);
+        if (index === -1) return;
+
+        latestDeployResults[index] = { ...latestDeployResults[index], retrying: true };
+        renderDeployResults();
+
+        try {
+            const res = await fetch(`/api/deploy/${encodeURIComponent(name)}`, { method: 'POST' });
+            const data = await res.json();
+            latestDeployResults[index] = {
+                name,
+                ok: !!res.ok,
+                skipped: data.skipped,
+                reason: res.ok ? undefined : (data.error || data.reason || `Failed to deploy '${name}'`),
+                pullOutput: data.pullOutput || '',
+                installOutput: data.installOutput || '',
+                retrying: false,
+            };
+            showToast(res.ok ? `Deployed "${name}" successfully` : `Retry failed for "${name}"`, res.ok ? 'success' : 'error');
+        } catch {
+            latestDeployResults[index] = {
+                ...latestDeployResults[index],
+                ok: false,
+                skipped: false,
+                reason: `Failed to deploy '${name}'`,
+                retrying: false,
+            };
+            showToast(`Retry failed for "${name}"`, 'error');
+        }
+
+        renderDeployResults();
+        await loadProcessesFresh();
+        mutationUntil = Date.now() + 5000;
+    }
+
     $('deploy-results-modal-close')?.addEventListener('click', closeDeployResultsModal);
     $('deploy-results-modal')?.addEventListener('click', (e) => {
         if ((e.target as Element).classList.contains('modal-overlay')) {
             closeDeployResultsModal();
         }
+    });
+    $('deploy-results-list')?.addEventListener('click', (e) => {
+        const btn = (e.target as Element).closest('[data-action="deploy-retry"]') as HTMLElement | null;
+        const name = btn?.dataset.name;
+        if (!name || btn?.hasAttribute('disabled')) return;
+        retryDeployResult(name);
     });
 
     // ─── Toolbar Actions ───
@@ -2112,6 +2168,7 @@ export default function mount(): () => void {
             const data = await res.json();
             if (Array.isArray(data.results)) {
                 latestDeployResults = data.results;
+                latestDeploySummary = data;
                 renderDeployResults(data);
                 openDeployResultsModal();
             }

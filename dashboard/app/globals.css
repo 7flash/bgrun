@@ -3013,6 +3013,12 @@ tr.keyboard-focus td:first-child .process-name span {
     margin-bottom: 0.5rem;
 }
 
+.deploy-result-head-right {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
 .deploy-result-name {
     font-weight: 700;
     color: var(--text-primary);
@@ -3064,4 +3070,13 @@ tr.keyboard-focus td:first-child .process-name span {
     color: var(--text-secondary);
     font-size: 0.8rem;
     font-family: var(--font-mono);
+}
+
+.deploy-retry-btn {
+    min-width: 78px;
+}
+
+.deploy-retry-btn[disabled] {
+    opacity: 0.6;
+    cursor: wait;
 }
