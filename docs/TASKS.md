@@ -38,8 +38,9 @@
 - [x] ~~**Multi-value history filters**~~ — ✅ DONE. Metadata filtering now supports comma-separated stacked values, and chip clicks append instead of replacing.
 - [x] ~~**Clickable history process/event badges**~~ — ✅ DONE. Existing History process and event labels now populate the corresponding filters when clicked.
 - [x] ~~**History filter clear controls**~~ — ✅ DONE. History modal now has a clear button that resets all active filters at once.
-- [ ] **Deploy result → history shortcut** — Open History pre-filtered from deploy result cards
+- [x] ~~**Deploy result → history shortcut**~~ — ✅ DONE. Deploy result cards now have a History action that opens the History modal pre-filtered to that process’s deploy events.
 - [ ] **Deploy result history jump** — Add direct navigation from result cards to matching History entries
+- [ ] **History → process jump** — Open the related process drawer directly from History entries
 
 ## 📝 Architecture Notes
 - **Package**: `bgrun` on npm

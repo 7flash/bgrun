@@ -3322,6 +3322,7 @@ tr.keyboard-focus td:first-child .process-name span {
     font-family: var(--font-mono);
 }
 
+.deploy-history-btn,
 .deploy-retry-btn {
     min-width: 78px;
 }

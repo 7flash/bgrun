@@ -2184,11 +2184,25 @@ export default function mount(): () => void {
         }));
     }
 
-    function openHistoryModal() {
+    async function openHistoryModalWithFilters(filters?: { process?: string; event?: string; metadata?: string }) {
         const modal = $('history-modal');
+        const processFilter = $('history-process-filter') as HTMLSelectElement | null;
+        const eventFilter = $('history-event-filter') as HTMLSelectElement | null;
+        const metadataFilter = $('history-metadata-filter') as HTMLInputElement | null;
+
         if (modal) modal.classList.add('active');
+        await loadHistory();
+
+        if (processFilter) processFilter.value = filters?.process || '';
+        if (eventFilter) eventFilter.value = filters?.event || '';
+        if (metadataFilter) metadataFilter.value = filters?.metadata || '';
+
         updateHistoryClearButton();
-        loadHistory();
+        renderHistory();
+    }
+
+    function openHistoryModal() {
+        openHistoryModalWithFilters();
     }
 
     function closeHistoryModal() {
@@ -2343,6 +2357,9 @@ export default function mount(): () => void {
                     <div className="deploy-result-meta">
                         <span><strong>Package manager:</strong> {result.packageManager || 'none'}</span>
                         <span><strong>Install step:</strong> {result.installAttempted ? (result.installCommand || 'attempted') : 'skipped'}</span>
+                        <button className="btn btn-ghost btn-sm deploy-history-btn" data-action="deploy-history" data-name={result.name} title={`Open History for ${result.name}`}>
+                            History
+                        </button>
                     </div>
                     {result.reason && <div className="deploy-result-reason">{result.reason}</div>}
                     {(result.pullOutput || result.installOutput) && (
@@ -2414,7 +2431,18 @@ export default function mount(): () => void {
         }
     });
     $('deploy-results-list')?.addEventListener('click', (e) => {
-        const btn = (e.target as Element).closest('[data-action="deploy-retry"]') as HTMLElement | null;
+        const target = e.target as Element;
+        const historyBtn = target.closest('[data-action="deploy-history"]') as HTMLElement | null;
+        if (historyBtn) {
+            const name = historyBtn.dataset.name;
+            if (!name) return;
+            closeDeployResultsModal();
+            openHistoryModalWithFilters({ process: name, event: 'deploy' });
+            showToast(`Opened History for "${name}"`, 'info');
+            return;
+        }
+
+        const btn = target.closest('[data-action="deploy-retry"]') as HTMLElement | null;
         const name = btn?.dataset.name;
         if (!name || btn?.hasAttribute('disabled')) return;
         retryDeployResult(name);
