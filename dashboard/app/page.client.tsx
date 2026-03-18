@@ -2019,7 +2019,15 @@ export default function mount(): () => void {
     let allHistory: HistoryEntry[] = [];
     let latestDeployResults: DeployResultEntry[] = [];
     let latestDeploySummary: { group?: string | null; deployed?: number; skipped?: number; failed?: number; total?: number } | undefined;
-    let pendingHistoryFocus: { process?: string; event?: string } | null = null;
+    const historyFocusStorageKey = 'bgr_history_focus_target';
+    let pendingHistoryFocus: { process?: string; event?: string } | null = (() => {
+        try {
+            const raw = sessionStorage.getItem(historyFocusStorageKey);
+            return raw ? JSON.parse(raw) : null;
+        } catch {
+            return null;
+        }
+    })();
 
     async function loadHistory() {
         try {
@@ -2070,6 +2078,14 @@ export default function mount(): () => void {
         }
 
         return parts;
+    }
+
+    function setHistoryFocusTarget(target: { process?: string; event?: string } | null) {
+        pendingHistoryFocus = target;
+        try {
+            if (target) sessionStorage.setItem(historyFocusStorageKey, JSON.stringify(target));
+            else sessionStorage.removeItem(historyFocusStorageKey);
+        } catch { }
     }
 
     function updateHistoryClearButton() {
@@ -2202,8 +2218,8 @@ export default function mount(): () => void {
                 match.classList.add('jump-highlight');
                 match.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
                 setTimeout(() => match.classList.remove('jump-highlight'), 2200);
+                pendingHistoryFocus = null;
             }
-            pendingHistoryFocus = null;
         }
     }
 
@@ -2219,7 +2235,7 @@ export default function mount(): () => void {
         if (processFilter) processFilter.value = filters?.process || '';
         if (eventFilter) eventFilter.value = filters?.event || '';
         if (metadataFilter) metadataFilter.value = filters?.metadata || '';
-        pendingHistoryFocus = filters?.focus || null;
+        setHistoryFocusTarget(filters?.focus || pendingHistoryFocus || null);
 
         updateHistoryClearButton();
         renderHistory();
@@ -2251,6 +2267,7 @@ export default function mount(): () => void {
         if (processFilter) processFilter.value = '';
         if (eventFilter) eventFilter.value = '';
         if (metadataFilter) metadataFilter.value = '';
+        setHistoryFocusTarget(null);
         renderHistory();
         showToast('History filters cleared', 'success');
     });
