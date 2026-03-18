@@ -3027,7 +3027,7 @@ tr.keyboard-focus td:first-child .process-name span {
 .history-item-process-wrap {
     display: inline-flex;
     align-items: center;
-    gap: 0.4rem;
+    gap: 0.55rem;
     flex: 1;
     min-width: 0;
 }
@@ -3040,6 +3040,13 @@ tr.keyboard-focus td:first-child .process-name span {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.history-item-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    flex-shrink: 0;
 }
 
 .history-filter-shortcut {
@@ -3056,7 +3063,8 @@ tr.keyboard-focus td:first-child .process-name span {
     text-decoration: underline;
 }
 
-.history-inline-filter-btn {
+.history-action-btn,
+.history-item-copy {
     border: 1px solid rgba(139, 148, 158, 0.18);
     background: rgba(139, 148, 158, 0.1);
     color: var(--text-muted);
@@ -3068,7 +3076,8 @@ tr.keyboard-focus td:first-child .process-name span {
     flex-shrink: 0;
 }
 
-.history-inline-filter-btn:hover {
+.history-action-btn:hover,
+.history-item-copy:hover {
     background: rgba(96, 165, 250, 0.18);
     color: #93c5fd;
 }
@@ -3202,21 +3211,6 @@ tr.keyboard-focus td:first-child .process-name span {
     color: #93c5fd;
 }
 
-.history-item-copy {
-    border: none;
-    background: rgba(139, 148, 158, 0.18);
-    color: var(--text-secondary);
-    border-radius: 999px;
-    padding: 0.12rem 0.42rem;
-    font-size: 0.66rem;
-    font-weight: 700;
-    cursor: pointer;
-}
-
-.history-item-copy:hover {
-    background: rgba(96, 165, 250, 0.18);
-    color: #93c5fd;
-}
 
 /* Deploy Results Modal */
 .deploy-results-summary {

@@ -42,8 +42,9 @@
 - [x] ~~**Deploy result history jump**~~ — ✅ DONE. Deploy result cards now jump into filtered History, scroll to the matching entry, and highlight it.
 - [x] ~~**History → process jump**~~ — ✅ DONE. History process labels now open the related process drawer directly, while a small inline Filter action preserves filtering.
 - [x] ~~**Persistent history jump state**~~ — ✅ DONE. History jump targets now persist in session storage so reloads/reopenings can restore the highlighted target.
-- [ ] **History row action polish** — Clean up the mix of open/filter/copy controls in each History row
+- [x] ~~**History row action polish**~~ — ✅ DONE. History rows now use a more consistent action pattern with grouped process actions and unified button styling.
 - [ ] **History action grouping** — Group row actions more cleanly to reduce visual clutter
+- [ ] **History density modes** — Add compact/cozy display options for the History modal
 
 ## 📝 Architecture Notes
 - **Package**: `bgrun` on npm

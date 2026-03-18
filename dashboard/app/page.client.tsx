@@ -2156,14 +2156,24 @@ export default function mount(): () => void {
                         >
                             {h.process_name}
                         </button>
-                        <button
-                            className="history-inline-filter-btn"
-                            data-action="filter-history-process"
-                            data-process={h.process_name}
-                            title={`Filter history to process ${h.process_name}`}
-                        >
-                            Filter
-                        </button>
+                        <div className="history-item-actions">
+                            <button
+                                className="history-action-btn"
+                                data-action="open-history-process"
+                                data-process={h.process_name}
+                                title={`Open process drawer for ${h.process_name}`}
+                            >
+                                Open
+                            </button>
+                            <button
+                                className="history-action-btn"
+                                data-action="filter-history-process"
+                                data-process={h.process_name}
+                                title={`Filter history to process ${h.process_name}`}
+                            >
+                                Filter
+                            </button>
+                        </div>
                     </div>
                     <button
                         className={`history-item-event history-filter-shortcut ${h.event}`}
