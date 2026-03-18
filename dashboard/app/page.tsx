@@ -325,7 +325,11 @@ export default function DashboardPage() {
                         <div className="history-hints-bar">
                             <div className="history-hints-bar-left">
                                 <span className="history-hints-title">Keyboard shortcuts</span>
-                                <span className="history-focus-status" id="history-focus-status">No row selected</span>
+                                <div className="history-focus-controls">
+                                    <button className="history-focus-jump" id="history-focus-prev" type="button" title="Focus previous History row">←</button>
+                                    <span className="history-focus-status" id="history-focus-status">No row selected</span>
+                                    <button className="history-focus-jump" id="history-focus-next" type="button" title="Focus next History row">→</button>
+                                </div>
                             </div>
                             <div className="history-hints-actions">
                                 <label className="history-hint-density-wrap" title="Keyboard hint density">

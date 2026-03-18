@@ -3066,6 +3066,37 @@ tr.keyboard-focus td:first-child .process-name span {
     letter-spacing: 0.04em;
 }
 
+.history-focus-controls {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.history-focus-jump {
+    width: 1.7rem;
+    height: 1.7rem;
+    border-radius: 999px;
+    border: 1px solid rgba(139, 148, 158, 0.18);
+    background: rgba(139, 148, 158, 0.1);
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    font-weight: 700;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.history-focus-jump:hover:not(:disabled) {
+    background: rgba(96, 165, 250, 0.18);
+    color: #93c5fd;
+}
+
+.history-focus-jump:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
 .history-focus-status {
     display: inline-flex;
     align-items: center;

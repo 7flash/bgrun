@@ -54,8 +54,9 @@
 - [x] ~~**History hints minimization**~~ — ✅ DONE. The History keyboard hint strip can now be hidden or shown, and that preference is remembered locally.
 - [x] ~~**History focus status indicator**~~ — ✅ DONE. The History modal now shows a live status pill for the currently keyboard-active row and its position in the filtered list.
 - [x] ~~**History hint density**~~ — ✅ DONE. The History keyboard hint strip now supports persistent compact and full display modes.
-- [ ] **History focus jump actions** — Add next/previous controls near the focus status pill for mouse users
+- [x] ~~**History focus jump actions**~~ — ✅ DONE. The History chrome now includes previous/next focus controls for mouse users navigating the active row.
 - [ ] **History hint personalization** — Let users choose which hint groups appear in the shortcut strip
+- [ ] **History focus auto-open** — Optional mode to open the drawer automatically when stepping through History rows
 
 ## 📝 Architecture Notes
 - **Package**: `bgrun` on npm

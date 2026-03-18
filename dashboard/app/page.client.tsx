@@ -2136,26 +2136,35 @@ export default function mount(): () => void {
 
     function updateHistoryFocusStatus() {
         const status = $('history-focus-status');
+        const prevBtn = $('history-focus-prev') as HTMLButtonElement | null;
+        const nextBtn = $('history-focus-next') as HTMLButtonElement | null;
         const list = $('history-list');
         if (!status || !list) return;
         const rows = Array.from(list.querySelectorAll('.history-item')) as HTMLElement[];
         if (rows.length === 0) {
             status.textContent = 'No row selected';
             status.classList.remove('active');
+            if (prevBtn) prevBtn.disabled = true;
+            if (nextBtn) nextBtn.disabled = true;
             return;
         }
 
-        const row = rows[Math.max(0, Math.min(focusedHistoryIndex, rows.length - 1))];
+        const boundedIndex = Math.max(0, Math.min(focusedHistoryIndex, rows.length - 1));
+        const row = rows[boundedIndex];
         if (!row) {
             status.textContent = 'No row selected';
             status.classList.remove('active');
+            if (prevBtn) prevBtn.disabled = true;
+            if (nextBtn) nextBtn.disabled = true;
             return;
         }
 
         const processName = row.dataset.historyProcess || 'Unknown';
         const eventName = row.dataset.historyEvent || 'event';
-        status.textContent = `${focusedHistoryIndex + 1}/${rows.length} · ${processName} · ${eventName}`;
+        status.textContent = `${boundedIndex + 1}/${rows.length} · ${processName} · ${eventName}`;
         status.classList.add('active');
+        if (prevBtn) prevBtn.disabled = boundedIndex <= 0;
+        if (nextBtn) nextBtn.disabled = boundedIndex >= rows.length - 1;
     }
 
     function getHistoryDetailKey(h: HistoryEntry) {
@@ -2445,6 +2454,12 @@ export default function mount(): () => void {
         applyHistoryDetailsPreference();
         renderHistory();
         showToast(`History details default set to ${historyDetailsDefault}`, 'success');
+    });
+    $('history-focus-prev')?.addEventListener('click', () => {
+        focusHistoryRow(focusedHistoryIndex - 1);
+    });
+    $('history-focus-next')?.addEventListener('click', () => {
+        focusHistoryRow(focusedHistoryIndex + 1);
     });
     $('history-hint-density-select')?.addEventListener('change', () => {
         const select = $('history-hint-density-select') as HTMLSelectElement | null;
