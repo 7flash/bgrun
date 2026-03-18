@@ -3093,6 +3093,22 @@ tr.keyboard-focus td:first-child .process-name span {
     flex-wrap: wrap;
 }
 
+.history-auto-open-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    font-weight: 600;
+    user-select: none;
+    cursor: pointer;
+}
+
+.history-auto-open-toggle input {
+    margin: 0;
+    accent-color: var(--accent-primary);
+}
+
 .history-hints-title {
     font-size: 0.72rem;
     font-weight: 700;

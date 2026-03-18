@@ -56,8 +56,9 @@
 - [x] ~~**History hint density**~~ — ✅ DONE. The History keyboard hint strip now supports persistent compact and full display modes.
 - [x] ~~**History focus jump actions**~~ — ✅ DONE. The History chrome now includes previous/next focus controls for mouse users navigating the active row.
 - [x] ~~**History hint personalization**~~ — ✅ DONE. The History shortcut strip now supports per-group visibility controls for each hint category.
-- [ ] **History focus auto-open** — Optional mode to open the drawer automatically when stepping through History rows
+- [x] ~~**History focus auto-open**~~ — ✅ DONE. The History modal now has an Auto-open mode that keeps the process drawer synced while stepping through focused rows.
 - [ ] **History hint presets** — Add preset visibility modes like Minimal / Navigation / All for the hint strip
+- [ ] **History focus scope modes** — Let auto-open choose between syncing the drawer only or closing the modal for direct inspection
 
 ## 📝 Architecture Notes
 - **Package**: `bgrun` on npm

@@ -431,6 +431,7 @@ export default function mount(): () => void {
     let historyDetailsDefault = localStorage.getItem('bgr_history_details_default') === 'expanded' ? 'expanded' : 'collapsed';
     let historyHintsVisible = localStorage.getItem('bgr_history_hints_visible') !== 'false';
     let historyHintDensity = localStorage.getItem('bgr_history_hint_density') === 'compact' ? 'compact' : 'full';
+    let historyAutoOpen = localStorage.getItem('bgr_history_auto_open') === 'true';
     let historyHintGroups = (() => {
         try {
             const raw = JSON.parse(localStorage.getItem('bgr_history_hint_groups') || 'null');
@@ -2200,6 +2201,21 @@ export default function mount(): () => void {
         return `${h.timestamp}::${h.process_name}::${h.event}::${h.pid || ''}`;
     }
 
+    function syncDrawerToFocusedHistoryRow() {
+        const list = $('history-list');
+        if (!list) return;
+        const rows = Array.from(list.querySelectorAll('.history-item')) as HTMLElement[];
+        const row = rows[Math.max(0, Math.min(focusedHistoryIndex, rows.length - 1))];
+        const processName = row?.dataset.historyProcess || '';
+        if (!processName || drawerProcess === processName) return;
+        openDrawer(processName);
+    }
+
+    function applyHistoryAutoOpenPreference() {
+        const toggle = $('history-auto-open-toggle') as HTMLInputElement | null;
+        if (toggle) toggle.checked = historyAutoOpen;
+    }
+
     function updateHistoryClearButton() {
         const btn = $('history-clear-filters-btn') as HTMLButtonElement | null;
         const processFilter = $('history-process-filter') as HTMLSelectElement | null;
@@ -2212,7 +2228,7 @@ export default function mount(): () => void {
         btn.style.opacity = active ? '' : '0.5';
     }
 
-    function focusHistoryRow(index: number) {
+    function focusHistoryRow(index: number, options?: { syncDrawer?: boolean }) {
         const list = $('history-list');
         if (!list) return;
         const rows = Array.from(list.querySelectorAll('.history-item')) as HTMLElement[];
@@ -2238,6 +2254,9 @@ export default function mount(): () => void {
         activeRow?.focus({ preventScroll: true });
         activeRow?.scrollIntoView({ block: 'nearest' });
         updateHistoryFocusStatus();
+        if (options?.syncDrawer && historyAutoOpen) {
+            syncDrawerToFocusedHistoryRow();
+        }
     }
 
     function renderHistory() {
@@ -2437,6 +2456,7 @@ export default function mount(): () => void {
         setHistoryFocusTarget(filters?.focus || pendingHistoryFocus || null);
 
         updateHistoryClearButton();
+        applyHistoryAutoOpenPreference();
         applyHistoryHintsPreference();
         renderHistory();
     }
@@ -2484,11 +2504,18 @@ export default function mount(): () => void {
         renderHistory();
         showToast(`History details default set to ${historyDetailsDefault}`, 'success');
     });
+    $('history-auto-open-toggle')?.addEventListener('change', () => {
+        const toggle = $('history-auto-open-toggle') as HTMLInputElement | null;
+        historyAutoOpen = !!toggle?.checked;
+        localStorage.setItem('bgr_history_auto_open', String(historyAutoOpen));
+        applyHistoryAutoOpenPreference();
+        showToast(`History auto-open ${historyAutoOpen ? 'enabled' : 'disabled'}`, 'success');
+    });
     $('history-focus-prev')?.addEventListener('click', () => {
-        focusHistoryRow(focusedHistoryIndex - 1);
+        focusHistoryRow(focusedHistoryIndex - 1, { syncDrawer: true });
     });
     $('history-focus-next')?.addEventListener('click', () => {
-        focusHistoryRow(focusedHistoryIndex + 1);
+        focusHistoryRow(focusedHistoryIndex + 1, { syncDrawer: true });
     });
     ['nav', 'open', 'filter', 'details', 'close'].forEach(group => {
         $(`history-hint-group-${group}`)?.addEventListener('change', () => {
@@ -2997,12 +3024,12 @@ export default function mount(): () => void {
             const activeRow = rows[focusedHistoryIndex] || null;
             if (e.key === 'ArrowDown' || e.key === 'j') {
                 e.preventDefault();
-                focusHistoryRow(focusedHistoryIndex + 1);
+                focusHistoryRow(focusedHistoryIndex + 1, { syncDrawer: true });
                 return;
             }
             if (e.key === 'ArrowUp' || e.key === 'k') {
                 e.preventDefault();
-                focusHistoryRow(focusedHistoryIndex - 1);
+                focusHistoryRow(focusedHistoryIndex - 1, { syncDrawer: true });
                 return;
             }
             if ((e.key === 'Enter' || e.key === 'o' || e.key === 'O') && activeRow) {

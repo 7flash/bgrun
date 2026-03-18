@@ -330,6 +330,10 @@ export default function DashboardPage() {
                                     <span className="history-focus-status" id="history-focus-status">No row selected</span>
                                     <button className="history-focus-jump" id="history-focus-next" type="button" title="Focus next History row">→</button>
                                 </div>
+                                <label className="history-auto-open-toggle" title="Automatically sync the process drawer while stepping through History rows">
+                                    <input id="history-auto-open-toggle" type="checkbox" />
+                                    <span>Auto-open</span>
+                                </label>
                             </div>
                             <div className="history-hints-actions">
                                 <label className="history-hint-density-wrap" title="Keyboard hint density">
