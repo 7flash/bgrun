@@ -415,6 +415,7 @@ export default function mount(): () => void {
     let allProcesses: ProcessData[] = [];
     let searchQuery = '';
     let groupQuery = '';
+    let deployConcurrency = Math.max(1, Math.min(4, parseInt(localStorage.getItem('bgr_deploy_concurrency') || '1') || 1));
     let searchDebounce: ReturnType<typeof setTimeout> | null = null;
     let collapsedGroups: Set<string> = new Set(JSON.parse(localStorage.getItem('bgr_collapsed_groups') || '[]'));
     let drawerProcess: string | null = null;
@@ -466,6 +467,15 @@ export default function mount(): () => void {
         }
     }
     loadVersion();
+
+    const deployConcurrencySelect = $('deploy-concurrency-select') as HTMLSelectElement | null;
+    if (deployConcurrencySelect) {
+        deployConcurrencySelect.value = String(deployConcurrency);
+        deployConcurrencySelect.addEventListener('change', () => {
+            deployConcurrency = Math.max(1, Math.min(4, parseInt(deployConcurrencySelect.value) || 1));
+            localStorage.setItem('bgr_deploy_concurrency', String(deployConcurrency));
+        });
+    }
 
     // ─── Guard Activity Feed ───
     interface GuardEvent {
@@ -2003,6 +2013,7 @@ export default function mount(): () => void {
             const scope = latestDeploySummary.group ? `Group: ${latestDeploySummary.group}` : 'All deployable processes';
             summaryEl.innerHTML = [
                 `<span><strong>${scope}</strong></span>`,
+                `<span>mode ${deployConcurrency}×</span>`,
                 `<span>${deployed} deployed</span>`,
                 `<span>${skipped} skipped</span>`,
                 `<span>${failed} failed</span>`,
@@ -2195,9 +2206,11 @@ export default function mount(): () => void {
         if (targets.length === 0) return;
 
         const scope = groupQuery ? `group "${groupQuery}"` : 'all deployable processes';
+        const concurrency = Math.max(1, Math.min(4, deployConcurrency));
         deployAllBtn.disabled = true;
         deployAllBtn.style.opacity = '0.5';
-        showToast(`Deploying ${scope}...`, 'info');
+        if (deployConcurrencySelect) deployConcurrencySelect.disabled = true;
+        showToast(`Deploying ${scope} (${concurrency}×)...`, 'info');
 
         latestDeploySummary = { group: groupQuery || null, total: targets.length };
         latestDeployResults = targets.map(p => ({
@@ -2216,7 +2229,7 @@ export default function mount(): () => void {
         openDeployResultsModal();
 
         try {
-            for (let i = 0; i < latestDeployResults.length; i++) {
+            async function runDeployAtIndex(i: number) {
                 const target = latestDeployResults[i];
                 latestDeployResults[i] = { ...target, phase: 'running' };
                 renderDeployResults();
@@ -2244,11 +2257,23 @@ export default function mount(): () => void {
                         reason: `Failed to deploy '${target.name}'`,
                         pullOutput: '',
                         installOutput: '',
+                        packageManager: null,
+                        installCommand: '',
+                        installAttempted: false,
                         phase: 'done',
                     };
                 }
                 renderDeployResults();
             }
+
+            let cursor = 0;
+            const workers = Array.from({ length: Math.min(concurrency, latestDeployResults.length) }, async () => {
+                while (cursor < latestDeployResults.length) {
+                    const current = cursor++;
+                    await runDeployAtIndex(current);
+                }
+            });
+            await Promise.all(workers);
 
             const deployed = latestDeployResults.filter(r => r.ok).length;
             const skipped = latestDeployResults.filter(r => !r.ok && r.skipped).length;
@@ -2264,6 +2289,7 @@ export default function mount(): () => void {
 
         deployAllBtn.disabled = false;
         deployAllBtn.style.opacity = '';
+        if (deployConcurrencySelect) deployConcurrencySelect.disabled = false;
         await loadProcessesFresh();
         mutationUntil = Date.now() + 5000;
     });

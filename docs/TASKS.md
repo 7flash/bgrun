@@ -24,8 +24,9 @@
 - [x] ~~**Missing package-manager UX**~~ — ✅ DONE. Deploy helper now turns missing pnpm/yarn/npm/bun executables into clear install/PATH errors instead of generic command failures.
 - [x] ~~**Bulk deploy progress UI**~~ — ✅ DONE. Bulk deploy now opens the results modal immediately and shows pending/running/completed states plus live summary counts as each process deploy finishes.
 - [x] ~~**Deploy environment diagnostics**~~ — ✅ DONE. Deploy results now include detected package manager plus install command/skip context in the dashboard result cards.
-- [ ] **Parallel bulk deploy mode** — Optional concurrent deploy execution with a safe concurrency limit for larger groups
+- [x] ~~**Parallel bulk deploy mode**~~ — ✅ DONE. Added a 1×–4× bulk deploy concurrency selector in the dashboard and bounded parallel workers for faster group rollouts.
 - [ ] **Deploy history diagnostics** — Surface deploy package-manager/install metadata in the history view for past runs
+- [ ] **Per-group deploy presets** — Remember preferred deploy concurrency per group for repeated rollouts
 
 ## 📝 Architecture Notes
 - **Package**: `bgrun` on npm

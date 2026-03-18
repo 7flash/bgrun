@@ -542,6 +542,38 @@ body::after {
     border-color: var(--text-muted);
 }
 
+.deploy-concurrency-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.35rem 0.55rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+}
+
+.deploy-concurrency-label {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    font-weight: 600;
+}
+
+.deploy-concurrency-select {
+    border: none;
+    background: transparent;
+    color: var(--text);
+    font-size: 0.82rem;
+    font-weight: 700;
+    cursor: pointer;
+    outline: none;
+}
+
+.deploy-concurrency-select:disabled {
+    opacity: 0.6;
+    cursor: wait;
+}
+
 /* Guard action button styling */
 .action-btn.guard {
     color: var(--text-muted);

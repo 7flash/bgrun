@@ -91,6 +91,15 @@ export default function DashboardPage() {
                         </svg>
                         <span id="deploy-all-label">Deploy All</span>
                     </button>
+                    <label className="deploy-concurrency-wrap" title="Bulk deploy concurrency">
+                        <span className="deploy-concurrency-label">Deploy</span>
+                        <select className="deploy-concurrency-select" id="deploy-concurrency-select">
+                            <option value="1">1×</option>
+                            <option value="2">2×</option>
+                            <option value="3">3×</option>
+                            <option value="4">4×</option>
+                        </select>
+                    </label>
                     <span className="guard-sentinel-pill" id="guard-sentinel-pill" title="Standalone guard process status">
                         <span className="guard-sentinel-dot" id="guard-sentinel-dot" />
                         <span id="guard-sentinel-label">Guard: –</span>
