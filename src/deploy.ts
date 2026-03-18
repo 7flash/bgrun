@@ -9,6 +9,9 @@ export interface DeployResult {
     reason?: string;
     pullOutput?: string;
     installOutput?: string;
+    packageManager?: PackageManager;
+    installCommand?: string;
+    installAttempted?: boolean;
 }
 
 export type PackageManager = 'bun' | 'pnpm' | 'yarn' | 'npm' | null;
@@ -53,24 +56,34 @@ export async function detectPackageManager(dir: string): Promise<PackageManager>
     return 'bun';
 }
 
-async function installDependencies(dir: string): Promise<{ manager: PackageManager; output: string }> {
+function getInstallCommand(manager: Exclude<PackageManager, null>): string {
+    switch (manager) {
+        case 'bun': return 'bun install';
+        case 'pnpm': return 'pnpm install --frozen-lockfile';
+        case 'yarn': return 'yarn install --frozen-lockfile';
+        case 'npm': return 'npm ci';
+    }
+}
+
+async function installDependencies(dir: string): Promise<{ manager: PackageManager; output: string; command: string }> {
     const manager = await detectPackageManager(dir);
-    if (!manager) return { manager: null, output: '' };
+    if (!manager) return { manager: null, output: '', command: '' };
 
     $.cwd(dir);
+    const command = getInstallCommand(manager);
 
     try {
         switch (manager) {
             case 'bun':
-                return { manager, output: (await $`bun install`.text()).trim() };
+                return { manager, command, output: (await $`bun install`.text()).trim() };
             case 'pnpm':
-                return { manager, output: (await $`pnpm install --frozen-lockfile`.text()).trim() };
+                return { manager, command, output: (await $`pnpm install --frozen-lockfile`.text()).trim() };
             case 'yarn':
-                return { manager, output: (await $`yarn install --frozen-lockfile`.text()).trim() };
+                return { manager, command, output: (await $`yarn install --frozen-lockfile`.text()).trim() };
             case 'npm':
-                return { manager, output: (await $`npm ci`.text()).trim() };
+                return { manager, command, output: (await $`npm ci`.text()).trim() };
             default:
-                return { manager: null, output: '' };
+                return { manager: null, output: '', command: '' };
         }
     } catch (error) {
         throw new Error(formatDeployToolError(manager, error));
@@ -111,11 +124,24 @@ export async function deployProcess(name: string): Promise<DeployResult> {
             directory: dir,
             installed: Boolean(install.manager),
             packageManager: install.manager,
+            installCommand: install.command,
         });
 
-        return { name, ok: true, pullOutput, installOutput };
+        return {
+            name,
+            ok: true,
+            pullOutput,
+            installOutput,
+            packageManager: install.manager,
+            installCommand: install.command,
+            installAttempted: Boolean(install.manager),
+        };
     } catch (e: any) {
-        return { name, ok: false, reason: e?.message || String(e) };
+        return {
+            name,
+            ok: false,
+            reason: e?.message || String(e),
+        };
     }
 }
 

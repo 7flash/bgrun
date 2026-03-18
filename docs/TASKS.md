@@ -23,8 +23,9 @@
 - [x] ~~**Deploy retry actions in results modal**~~ — ✅ DONE. Failed/skipped entries in the deploy results modal can now be retried inline and update their own result card after completion.
 - [x] ~~**Missing package-manager UX**~~ — ✅ DONE. Deploy helper now turns missing pnpm/yarn/npm/bun executables into clear install/PATH errors instead of generic command failures.
 - [x] ~~**Bulk deploy progress UI**~~ — ✅ DONE. Bulk deploy now opens the results modal immediately and shows pending/running/completed states plus live summary counts as each process deploy finishes.
-- [ ] **Deploy environment diagnostics** — Show detected package manager and install-step context in deploy result details for easier debugging
+- [x] ~~**Deploy environment diagnostics**~~ — ✅ DONE. Deploy results now include detected package manager plus install command/skip context in the dashboard result cards.
 - [ ] **Parallel bulk deploy mode** — Optional concurrent deploy execution with a safe concurrency limit for larger groups
+- [ ] **Deploy history diagnostics** — Surface deploy package-manager/install metadata in the history view for past runs
 
 ## 📝 Architecture Notes
 - **Package**: `bgrun` on npm

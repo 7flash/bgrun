@@ -1884,6 +1884,9 @@ export default function mount(): () => void {
         reason?: string;
         pullOutput?: string;
         installOutput?: string;
+        packageManager?: string | null;
+        installCommand?: string;
+        installAttempted?: boolean;
         retrying?: boolean;
         phase?: 'pending' | 'running' | 'done';
     }
@@ -2050,6 +2053,10 @@ export default function mount(): () => void {
                             )}
                         </div>
                     </div>
+                    <div className="deploy-result-meta">
+                        <span><strong>Package manager:</strong> {result.packageManager || 'none'}</span>
+                        <span><strong>Install step:</strong> {result.installAttempted ? (result.installCommand || 'attempted') : 'skipped'}</span>
+                    </div>
                     {result.reason && <div className="deploy-result-reason">{result.reason}</div>}
                     {(result.pullOutput || result.installOutput) && (
                         <details className="deploy-result-details">
@@ -2089,6 +2096,9 @@ export default function mount(): () => void {
                 reason: res.ok ? undefined : (data.error || data.reason || `Failed to deploy '${name}'`),
                 pullOutput: data.pullOutput || '',
                 installOutput: data.installOutput || '',
+                packageManager: data.packageManager || null,
+                installCommand: data.installCommand || '',
+                installAttempted: !!data.installAttempted,
                 retrying: false,
                 phase: 'done',
             };
@@ -2197,6 +2207,9 @@ export default function mount(): () => void {
             reason: '',
             pullOutput: '',
             installOutput: '',
+            packageManager: null,
+            installCommand: '',
+            installAttempted: false,
             phase: 'pending',
         }));
         renderDeployResults(latestDeploySummary);
@@ -2218,6 +2231,9 @@ export default function mount(): () => void {
                         reason: res.ok ? undefined : (data.error || data.reason || `Failed to deploy '${target.name}'`),
                         pullOutput: data.pullOutput || '',
                         installOutput: data.installOutput || '',
+                        packageManager: data.packageManager || null,
+                        installCommand: data.installCommand || '',
+                        installAttempted: !!data.installAttempted,
                         phase: 'done',
                     };
                 } catch {

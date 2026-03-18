@@ -3065,6 +3065,15 @@ tr.keyboard-focus td:first-child .process-name span {
     color: #8b949e;
 }
 
+.deploy-result-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1rem;
+    margin-bottom: 0.55rem;
+    color: var(--text-muted);
+    font-size: 0.82rem;
+}
+
 .deploy-result-reason {
     color: var(--text-secondary);
     font-size: 0.9rem;
