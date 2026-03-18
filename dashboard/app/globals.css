@@ -605,6 +605,29 @@ body::after {
     color: #86efac;
 }
 
+.deploy-preset-scopes {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+}
+
+.deploy-preset-scope {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.18rem 0.45rem;
+    border-radius: 999px;
+    background: rgba(139, 148, 158, 0.14);
+    color: var(--text-muted);
+    font-size: 0.7rem;
+    font-weight: 700;
+}
+
+.deploy-preset-scope.active {
+    background: rgba(34, 197, 94, 0.18);
+    color: #86efac;
+}
+
 /* Guard action button styling */
 .action-btn.guard {
     color: var(--text-muted);
@@ -668,6 +691,7 @@ body::after {
     align-items: center;
     gap: 1rem;
     flex: 1;
+    flex-wrap: wrap;
 }
 
 .toolbar-right {

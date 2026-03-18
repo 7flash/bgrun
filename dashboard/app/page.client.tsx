@@ -491,6 +491,7 @@ export default function mount(): () => void {
         localStorage.setItem(deployPresetKey, JSON.stringify(deployPresets));
         localStorage.setItem('bgr_deploy_concurrency', String(concurrency));
         updateDeployPresetResetButton();
+        updateDeployPresetScopes();
     }
 
     function resetDeployConcurrencyPreset(group: string) {
@@ -498,6 +499,7 @@ export default function mount(): () => void {
         localStorage.setItem(deployPresetKey, JSON.stringify(deployPresets));
         applyDeployConcurrencyPreset(group);
         updateDeployPresetResetButton();
+        updateDeployPresetScopes();
     }
 
     function updateDeployPresetIndicator() {
@@ -597,6 +599,30 @@ export default function mount(): () => void {
         }
     }
 
+    function updateDeployPresetScopes() {
+        const scopesEl = $('deploy-preset-scopes');
+        if (!scopesEl) return;
+
+        const allGroups = new Set(allProcesses.map(p => p.group).filter(Boolean) as string[]);
+        const presetKeys = Object.keys(deployPresets);
+        const visibleScopes = presetKeys
+            .map(key => key === '__all__' ? '' : key.replace(/^group:/, ''))
+            .filter(scope => scope === '' || allGroups.has(scope));
+
+        if (visibleScopes.length === 0) {
+            scopesEl.innerHTML = '';
+            return;
+        }
+
+        scopesEl.replaceChildren(
+            ...visibleScopes.map(scope => (
+                <span className={`deploy-preset-scope ${scope === groupQuery ? 'active' : ''}`} title={scope ? `Saved preset for ${scope}` : 'Saved preset for All Groups'}>
+                    {scope || 'All'}
+                </span>
+            ) as unknown as Node)
+        );
+    }
+
     function updateGroupFilter() {
         const groupFilter = $('group-filter') as HTMLSelectElement;
         if (!groupFilter) return;
@@ -617,6 +643,7 @@ export default function mount(): () => void {
             groupQuery = '';
         }
         applyDeployConcurrencyPreset(groupFilter.value || '');
+        updateDeployPresetScopes();
     }
 
     function renderFilteredProcesses() {

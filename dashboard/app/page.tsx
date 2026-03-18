@@ -68,6 +68,7 @@ export default function DashboardPage() {
                     <select className="group-filter" id="group-filter">
                         <option value="">All Groups</option>
                     </select>
+                    <div className="deploy-preset-scopes" id="deploy-preset-scopes"></div>
                 </div>
                 <div className="toolbar-right">
                     <button className="btn btn-ghost btn-icon" id="refresh-btn" title="Refresh">
