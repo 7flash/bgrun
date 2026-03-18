@@ -2982,6 +2982,11 @@ tr.keyboard-focus td:first-child .process-name span {
     cursor: text;
 }
 
+#history-clear-filters-btn[disabled] {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
 .history-list {
     max-height: 400px;
     overflow-y: auto;

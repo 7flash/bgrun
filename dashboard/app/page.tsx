@@ -302,6 +302,7 @@ export default function DashboardPage() {
                                 <option value="guard_off">Guard Off</option>
                             </select>
                             <input id="history-metadata-filter" className="history-select history-search" type="text" placeholder="Filter metadata (comma-separated)..." />
+                            <button className="btn btn-ghost btn-sm" id="history-clear-filters-btn" title="Clear all history filters">Clear</button>
                         </div>
                         <div className="history-list" id="history-list">
                             <div className="history-empty">No history yet</div>

@@ -2071,6 +2071,18 @@ export default function mount(): () => void {
         return parts;
     }
 
+    function updateHistoryClearButton() {
+        const btn = $('history-clear-filters-btn') as HTMLButtonElement | null;
+        const processFilter = $('history-process-filter') as HTMLSelectElement | null;
+        const eventFilter = $('history-event-filter') as HTMLSelectElement | null;
+        const metadataFilter = $('history-metadata-filter') as HTMLInputElement | null;
+        if (!btn) return;
+
+        const active = !!(processFilter?.value || eventFilter?.value || metadataFilter?.value.trim());
+        btn.disabled = !active;
+        btn.style.opacity = active ? '' : '0.5';
+    }
+
     function renderHistory() {
         const list = $('history-list');
         const processFilter = $('history-process-filter') as HTMLSelectElement;
@@ -2103,6 +2115,8 @@ export default function mount(): () => void {
                 );
             });
         }
+
+        updateHistoryClearButton();
 
         if (filtered.length === 0) {
             list.innerHTML = '<div class="history-empty">No history found</div>';
@@ -2173,6 +2187,7 @@ export default function mount(): () => void {
     function openHistoryModal() {
         const modal = $('history-modal');
         if (modal) modal.classList.add('active');
+        updateHistoryClearButton();
         loadHistory();
     }
 
@@ -2191,6 +2206,16 @@ export default function mount(): () => void {
     $('history-process-filter')?.addEventListener('change', renderHistory);
     $('history-event-filter')?.addEventListener('change', renderHistory);
     $('history-metadata-filter')?.addEventListener('input', renderHistory);
+    $('history-clear-filters-btn')?.addEventListener('click', () => {
+        const processFilter = $('history-process-filter') as HTMLSelectElement | null;
+        const eventFilter = $('history-event-filter') as HTMLSelectElement | null;
+        const metadataFilter = $('history-metadata-filter') as HTMLInputElement | null;
+        if (processFilter) processFilter.value = '';
+        if (eventFilter) eventFilter.value = '';
+        if (metadataFilter) metadataFilter.value = '';
+        renderHistory();
+        showToast('History filters cleared', 'success');
+    });
     $('history-list')?.addEventListener('click', async (e) => {
         const target = e.target as Element;
         const copyBtn = target.closest('[data-action="copy-history-detail"]') as HTMLElement | null;

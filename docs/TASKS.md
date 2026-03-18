@@ -37,8 +37,9 @@
 - [x] ~~**Preset scope quick-switch**~~ — ✅ DONE. Clicking a saved preset scope chip now switches the group filter and restores that scope’s deploy settings immediately.
 - [x] ~~**Multi-value history filters**~~ — ✅ DONE. Metadata filtering now supports comma-separated stacked values, and chip clicks append instead of replacing.
 - [x] ~~**Clickable history process/event badges**~~ — ✅ DONE. Existing History process and event labels now populate the corresponding filters when clicked.
-- [ ] **History filter clear controls** — Quick reset/clear buttons for active History filters
+- [x] ~~**History filter clear controls**~~ — ✅ DONE. History modal now has a clear button that resets all active filters at once.
 - [ ] **Deploy result → history shortcut** — Open History pre-filtered from deploy result cards
+- [ ] **Deploy result history jump** — Add direct navigation from result cards to matching History entries
 
 ## 📝 Architecture Notes
 - **Package**: `bgrun` on npm
