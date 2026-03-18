@@ -357,6 +357,7 @@ export default function DashboardPage() {
                                             <button className="history-hint-preset" type="button" data-history-hint-preset="minimal">Minimal</button>
                                             <button className="history-hint-preset" type="button" data-history-hint-preset="navigation">Navigation</button>
                                             <button className="history-hint-preset" type="button" data-history-hint-preset="all">All</button>
+                                            <span className="history-hint-preset-state" id="history-hint-preset-state">Custom</span>
                                         </div>
                                         <label className="history-hint-group-option"><input id="history-hint-group-nav" type="checkbox" /> <span>Navigation</span></label>
                                         <label className="history-hint-group-option"><input id="history-hint-group-open" type="checkbox" /> <span>Open</span></label>

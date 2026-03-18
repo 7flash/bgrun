@@ -2134,6 +2134,14 @@ export default function mount(): () => void {
         if (select) select.value = historyDetailsDefault;
     }
 
+    function getMatchingHistoryHintPreset(): 'minimal' | 'navigation' | 'all' | 'custom' {
+        const { nav, open, filter, details, close } = historyHintGroups;
+        if (nav && open && !filter && !details && !close) return 'minimal';
+        if (nav && open && filter && !details && close) return 'navigation';
+        if (nav && open && filter && details && close) return 'all';
+        return 'custom';
+    }
+
     function setHistoryHintPreset(preset: 'minimal' | 'navigation' | 'all') {
         if (preset === 'minimal') {
             historyHintGroups = { nav: true, open: true, filter: false, details: false, close: false };
@@ -2150,6 +2158,8 @@ export default function mount(): () => void {
         const hints = $('history-keyboard-hints');
         const toggle = $('history-hints-toggle') as HTMLButtonElement | null;
         const densitySelect = $('history-hint-density-select') as HTMLSelectElement | null;
+        const presetState = $('history-hint-preset-state');
+        const matchedPreset = getMatchingHistoryHintPreset();
         const groups = {
             nav: $('history-hint-group-nav') as HTMLInputElement | null,
             open: $('history-hint-group-open') as HTMLInputElement | null,
@@ -2171,6 +2181,16 @@ export default function mount(): () => void {
         (Object.entries(groups) as Array<[keyof typeof groups, HTMLInputElement | null]>).forEach(([group, input]) => {
             if (input) input.checked = !!historyHintGroups[group];
         });
+        document.querySelectorAll('[data-history-hint-preset]').forEach(el => {
+            const preset = (el as HTMLElement).dataset.historyHintPreset;
+            el.classList.toggle('active', preset === matchedPreset);
+        });
+        if (presetState) {
+            presetState.textContent = matchedPreset === 'custom'
+                ? 'Custom'
+                : `Preset: ${matchedPreset}`;
+            presetState.classList.toggle('custom', matchedPreset === 'custom');
+        }
         if (toggle) {
             toggle.textContent = historyHintsVisible ? 'Hide' : 'Show';
             toggle.title = historyHintsVisible ? 'Hide keyboard shortcut hints' : 'Show keyboard shortcut hints';

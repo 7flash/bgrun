@@ -3075,9 +3075,28 @@ tr.keyboard-focus td:first-child .process-name span {
     cursor: pointer;
 }
 
-.history-hint-preset:hover {
+.history-hint-preset:hover,
+.history-hint-preset.active {
     background: rgba(96, 165, 250, 0.18);
     color: #93c5fd;
+}
+
+.history-hint-preset-state {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.16rem 0.48rem;
+    border-radius: 999px;
+    border: 1px solid rgba(139, 148, 158, 0.14);
+    background: rgba(139, 148, 158, 0.08);
+    color: var(--text-dim);
+    font-size: 0.66rem;
+    font-weight: 700;
+}
+
+.history-hint-preset-state.custom {
+    color: #fbbf24;
+    border-color: rgba(251, 191, 36, 0.22);
+    background: rgba(251, 191, 36, 0.12);
 }
 
 .history-hint-group-option {
