@@ -542,6 +542,12 @@ body::after {
     border-color: var(--text-muted);
 }
 
+.deploy-controls {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
 .deploy-concurrency-wrap {
     display: inline-flex;
     align-items: center;
@@ -572,6 +578,11 @@ body::after {
 .deploy-concurrency-select:disabled {
     opacity: 0.6;
     cursor: wait;
+}
+
+#deploy-preset-reset-btn[disabled] {
+    opacity: 0.45;
+    cursor: not-allowed;
 }
 
 /* Guard action button styling */

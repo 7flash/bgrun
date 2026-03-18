@@ -91,15 +91,23 @@ export default function DashboardPage() {
                         </svg>
                         <span id="deploy-all-label">Deploy All</span>
                     </button>
-                    <label className="deploy-concurrency-wrap" title="Bulk deploy concurrency (saved per group)">
-                        <span className="deploy-concurrency-label">Deploy</span>
-                        <select className="deploy-concurrency-select" id="deploy-concurrency-select">
-                            <option value="1">1×</option>
-                            <option value="2">2×</option>
-                            <option value="3">3×</option>
-                            <option value="4">4×</option>
-                        </select>
-                    </label>
+                    <div className="deploy-controls">
+                        <label className="deploy-concurrency-wrap" title="Bulk deploy concurrency (saved per group)">
+                            <span className="deploy-concurrency-label">Deploy</span>
+                            <select className="deploy-concurrency-select" id="deploy-concurrency-select">
+                                <option value="1">1×</option>
+                                <option value="2">2×</option>
+                                <option value="3">3×</option>
+                                <option value="4">4×</option>
+                            </select>
+                        </label>
+                        <button className="btn btn-ghost btn-icon" id="deploy-preset-reset-btn" title="Reset saved deploy preset for current group">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <polyline points="1 4 1 10 7 10" />
+                                <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+                            </svg>
+                        </button>
+                    </div>
                     <span className="guard-sentinel-pill" id="guard-sentinel-pill" title="Standalone guard process status">
                         <span className="guard-sentinel-dot" id="guard-sentinel-dot" />
                         <span id="guard-sentinel-label">Guard: –</span>

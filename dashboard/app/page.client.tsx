@@ -471,6 +471,7 @@ export default function mount(): () => void {
     loadVersion();
 
     const deployConcurrencySelect = $('deploy-concurrency-select') as HTMLSelectElement | null;
+    const deployPresetResetBtn = $('deploy-preset-reset-btn') as HTMLButtonElement | null;
 
     function getDeployPresetKey(group: string): string {
         return group ? `group:${group}` : '__all__';
@@ -488,6 +489,24 @@ export default function mount(): () => void {
         deployPresets[getDeployPresetKey(group)] = concurrency;
         localStorage.setItem(deployPresetKey, JSON.stringify(deployPresets));
         localStorage.setItem('bgr_deploy_concurrency', String(concurrency));
+        updateDeployPresetResetButton();
+    }
+
+    function resetDeployConcurrencyPreset(group: string) {
+        delete deployPresets[getDeployPresetKey(group)];
+        localStorage.setItem(deployPresetKey, JSON.stringify(deployPresets));
+        applyDeployConcurrencyPreset(group);
+        updateDeployPresetResetButton();
+    }
+
+    function updateDeployPresetResetButton() {
+        if (!deployPresetResetBtn) return;
+        const hasPreset = Object.prototype.hasOwnProperty.call(deployPresets, getDeployPresetKey(groupQuery));
+        deployPresetResetBtn.disabled = !hasPreset;
+        deployPresetResetBtn.style.opacity = hasPreset ? '' : '0.45';
+        deployPresetResetBtn.title = hasPreset
+            ? `Reset saved deploy preset for ${groupQuery || 'All Groups'}`
+            : `No saved deploy preset for ${groupQuery || 'All Groups'}`;
     }
 
     if (deployConcurrencySelect) {
@@ -497,6 +516,13 @@ export default function mount(): () => void {
             saveDeployConcurrencyPreset(groupQuery, deployConcurrency);
         });
     }
+
+    deployPresetResetBtn?.addEventListener('click', () => {
+        resetDeployConcurrencyPreset(groupQuery);
+        showToast(`Reset deploy preset for ${groupQuery || 'All Groups'}`, 'success');
+        updateDeployAllButton();
+    });
+    updateDeployPresetResetButton();
 
     // ─── Guard Activity Feed ───
     interface GuardEvent {
@@ -637,6 +663,7 @@ export default function mount(): () => void {
 
         btn.disabled = targetCount === 0;
         btn.style.opacity = targetCount === 0 ? '0.5' : '';
+        updateDeployPresetResetButton();
     }
 
     function updateStats(processes: ProcessData[]) {
@@ -794,6 +821,7 @@ export default function mount(): () => void {
     groupFilter?.addEventListener('change', () => {
         groupQuery = groupFilter.value;
         applyDeployConcurrencyPreset(groupQuery);
+        updateDeployPresetResetButton();
         renderFilteredProcesses();
     });
 
