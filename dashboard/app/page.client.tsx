@@ -431,6 +431,20 @@ export default function mount(): () => void {
     let historyDetailsDefault = localStorage.getItem('bgr_history_details_default') === 'expanded' ? 'expanded' : 'collapsed';
     let historyHintsVisible = localStorage.getItem('bgr_history_hints_visible') !== 'false';
     let historyHintDensity = localStorage.getItem('bgr_history_hint_density') === 'compact' ? 'compact' : 'full';
+    let historyHintGroups = (() => {
+        try {
+            const raw = JSON.parse(localStorage.getItem('bgr_history_hint_groups') || 'null');
+            return {
+                nav: raw?.nav !== false,
+                open: raw?.open !== false,
+                filter: raw?.filter !== false,
+                details: raw?.details !== false,
+                close: raw?.close !== false,
+            };
+        } catch {
+            return { nav: true, open: true, filter: true, details: true, close: true };
+        }
+    })();
     let focusedHistoryIndex = 0;
     let focusedHistoryKey: string | null = null;
     let historyDetailState = new Map<string, boolean>();
@@ -2122,12 +2136,27 @@ export default function mount(): () => void {
         const hints = $('history-keyboard-hints');
         const toggle = $('history-hints-toggle') as HTMLButtonElement | null;
         const densitySelect = $('history-hint-density-select') as HTMLSelectElement | null;
+        const groups = {
+            nav: $('history-hint-group-nav') as HTMLInputElement | null,
+            open: $('history-hint-group-open') as HTMLInputElement | null,
+            filter: $('history-hint-group-filter') as HTMLInputElement | null,
+            details: $('history-hint-group-details') as HTMLInputElement | null,
+            close: $('history-hint-group-close') as HTMLInputElement | null,
+        };
         if (hints) {
             hints.style.display = historyHintsVisible ? '' : 'none';
             hints.classList.toggle('compact', historyHintDensity === 'compact');
             hints.classList.toggle('full', historyHintDensity !== 'compact');
+            (Object.entries(historyHintGroups) as Array<[string, boolean]>).forEach(([group, enabled]) => {
+                hints.querySelectorAll(`[data-hint-group="${group}"]`).forEach(el => {
+                    (el as HTMLElement).style.display = enabled ? '' : 'none';
+                });
+            });
         }
         if (densitySelect) densitySelect.value = historyHintDensity;
+        (Object.entries(groups) as Array<[keyof typeof groups, HTMLInputElement | null]>).forEach(([group, input]) => {
+            if (input) input.checked = !!historyHintGroups[group];
+        });
         if (toggle) {
             toggle.textContent = historyHintsVisible ? 'Hide' : 'Show';
             toggle.title = historyHintsVisible ? 'Hide keyboard shortcut hints' : 'Show keyboard shortcut hints';
@@ -2460,6 +2489,15 @@ export default function mount(): () => void {
     });
     $('history-focus-next')?.addEventListener('click', () => {
         focusHistoryRow(focusedHistoryIndex + 1);
+    });
+    ['nav', 'open', 'filter', 'details', 'close'].forEach(group => {
+        $(`history-hint-group-${group}`)?.addEventListener('change', () => {
+            const input = $(`history-hint-group-${group}`) as HTMLInputElement | null;
+            (historyHintGroups as Record<string, boolean>)[group] = !!input?.checked;
+            localStorage.setItem('bgr_history_hint_groups', JSON.stringify(historyHintGroups));
+            applyHistoryHintsPreference();
+            showToast(`History hint group ${group} ${input?.checked ? 'shown' : 'hidden'}`, 'success');
+        });
     });
     $('history-hint-density-select')?.addEventListener('change', () => {
         const select = $('history-hint-density-select') as HTMLSelectElement | null;

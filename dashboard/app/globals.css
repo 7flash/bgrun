@@ -3037,6 +3037,41 @@ tr.keyboard-focus td:first-child .process-name span {
     justify-content: flex-end;
 }
 
+.history-hint-groups-menu {
+    position: relative;
+}
+
+.history-hint-groups-panel {
+    position: absolute;
+    top: calc(100% + 0.35rem);
+    right: 0;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    min-width: 150px;
+    padding: 0.6rem;
+    border-radius: 0.7rem;
+    border: 1px solid var(--border-glass);
+    background: rgba(15, 23, 42, 0.96);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+}
+
+.history-hint-group-option {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    color: var(--text-secondary);
+    font-size: 0.72rem;
+    user-select: none;
+    white-space: nowrap;
+}
+
+.history-hint-group-option input {
+    margin: 0;
+    accent-color: var(--accent-primary);
+}
+
 .history-hint-density-wrap {
     display: inline-flex;
     align-items: center;

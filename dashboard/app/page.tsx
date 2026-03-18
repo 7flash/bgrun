@@ -339,16 +339,26 @@ export default function DashboardPage() {
                                         <option value="compact">Compact</option>
                                     </select>
                                 </label>
+                                <details className="history-hint-groups-menu">
+                                    <summary className="history-hints-toggle" title="Choose which History hint groups to show">Groups</summary>
+                                    <div className="history-hint-groups-panel">
+                                        <label className="history-hint-group-option"><input id="history-hint-group-nav" type="checkbox" /> <span>Navigation</span></label>
+                                        <label className="history-hint-group-option"><input id="history-hint-group-open" type="checkbox" /> <span>Open</span></label>
+                                        <label className="history-hint-group-option"><input id="history-hint-group-filter" type="checkbox" /> <span>Filters</span></label>
+                                        <label className="history-hint-group-option"><input id="history-hint-group-details" type="checkbox" /> <span>Details</span></label>
+                                        <label className="history-hint-group-option"><input id="history-hint-group-close" type="checkbox" /> <span>Close</span></label>
+                                    </div>
+                                </details>
                                 <button className="history-hints-toggle" id="history-hints-toggle" type="button" title="Hide keyboard shortcut hints">Hide</button>
                             </div>
                         </div>
                         <div className="history-keyboard-hints" id="history-keyboard-hints" aria-label="History keyboard shortcuts">
-                            <span className="history-keyboard-hint"><kbd>↑</kbd><kbd>↓</kbd><span>Move</span></span>
-                            <span className="history-keyboard-hint"><kbd>Enter</kbd><span>Open</span></span>
-                            <span className="history-keyboard-hint"><kbd>F</kbd><span>Process filter</span></span>
-                            <span className="history-keyboard-hint"><kbd>E</kbd><span>Event filter</span></span>
-                            <span className="history-keyboard-hint"><kbd>Space</kbd><span>Toggle details</span></span>
-                            <span className="history-keyboard-hint"><kbd>Esc</kbd><span>Close</span></span>
+                            <span className="history-keyboard-hint" data-hint-group="nav"><kbd>↑</kbd><kbd>↓</kbd><span>Move</span></span>
+                            <span className="history-keyboard-hint" data-hint-group="open"><kbd>Enter</kbd><span>Open</span></span>
+                            <span className="history-keyboard-hint" data-hint-group="filter"><kbd>F</kbd><span>Process filter</span></span>
+                            <span className="history-keyboard-hint" data-hint-group="filter"><kbd>E</kbd><span>Event filter</span></span>
+                            <span className="history-keyboard-hint" data-hint-group="details"><kbd>Space</kbd><span>Toggle details</span></span>
+                            <span className="history-keyboard-hint" data-hint-group="close"><kbd>Esc</kbd><span>Close</span></span>
                         </div>
                         <div className="history-list" id="history-list">
                             <div className="history-empty">No history yet</div>
