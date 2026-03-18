@@ -3005,6 +3005,14 @@ tr.keyboard-focus td:first-child .process-name span {
     border-color: rgba(239, 68, 68, 0.35);
 }
 
+.deploy-result-item.running {
+    border-color: rgba(59, 130, 246, 0.35);
+}
+
+.deploy-result-item.pending {
+    border-color: rgba(139, 148, 158, 0.35);
+}
+
 .deploy-result-head {
     display: flex;
     align-items: center;
@@ -3045,6 +3053,16 @@ tr.keyboard-focus td:first-child .process-name span {
 .deploy-result-status.failed {
     background: rgba(239, 68, 68, 0.15);
     color: #ef4444;
+}
+
+.deploy-result-status.running {
+    background: rgba(59, 130, 246, 0.15);
+    color: #3b82f6;
+}
+
+.deploy-result-status.pending {
+    background: rgba(139, 148, 158, 0.15);
+    color: #8b949e;
 }
 
 .deploy-result-reason {

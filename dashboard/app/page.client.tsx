@@ -1885,6 +1885,7 @@ export default function mount(): () => void {
         pullOutput?: string;
         installOutput?: string;
         retrying?: boolean;
+        phase?: 'pending' | 'running' | 'done';
     }
 
     let allHistory: HistoryEntry[] = [];
@@ -1992,14 +1993,18 @@ export default function mount(): () => void {
 
         if (latestDeploySummary) {
             const deployed = latestDeployResults.filter(r => r.ok).length;
-            const skipped = latestDeployResults.filter(r => !r.ok && r.skipped).length;
-            const failed = latestDeployResults.filter(r => !r.ok && !r.skipped).length;
+            const skipped = latestDeployResults.filter(r => !r.ok && r.skipped && r.phase === 'done').length;
+            const failed = latestDeployResults.filter(r => !r.ok && !r.skipped && r.phase === 'done').length;
+            const running = latestDeployResults.filter(r => r.phase === 'running').length;
+            const pending = latestDeployResults.filter(r => r.phase === 'pending').length;
             const scope = latestDeploySummary.group ? `Group: ${latestDeploySummary.group}` : 'All deployable processes';
             summaryEl.innerHTML = [
                 `<span><strong>${scope}</strong></span>`,
                 `<span>${deployed} deployed</span>`,
                 `<span>${skipped} skipped</span>`,
                 `<span>${failed} failed</span>`,
+                `<span>${running} running</span>`,
+                `<span>${pending} pending</span>`,
                 `<span>${latestDeployResults.length || latestDeploySummary.total || 0} total</span>`,
             ].join('');
         } else {
@@ -2012,8 +2017,24 @@ export default function mount(): () => void {
         }
 
         listEl.replaceChildren(...latestDeployResults.map(result => {
-            const statusClass = result.ok ? 'ok' : result.skipped ? 'skipped' : 'failed';
-            const statusLabel = result.ok ? 'Deployed' : result.skipped ? 'Skipped' : 'Failed';
+            const statusClass = result.phase === 'running'
+                ? 'running'
+                : result.phase === 'pending'
+                    ? 'pending'
+                    : result.ok
+                        ? 'ok'
+                        : result.skipped
+                            ? 'skipped'
+                            : 'failed';
+            const statusLabel = result.phase === 'running'
+                ? 'Deploying…'
+                : result.phase === 'pending'
+                    ? 'Pending'
+                    : result.ok
+                        ? 'Deployed'
+                        : result.skipped
+                            ? 'Skipped'
+                            : 'Failed';
             const details = [result.reason, result.pullOutput, result.installOutput].filter(Boolean).join('\n\n');
 
             return (
@@ -2022,7 +2043,7 @@ export default function mount(): () => void {
                         <span className="deploy-result-name">{result.name}</span>
                         <div className="deploy-result-head-right">
                             <span className={`deploy-result-status ${statusClass}`}>{statusLabel}</span>
-                            {!result.ok && (
+                            {!result.ok && result.phase !== 'pending' && result.phase !== 'running' && (
                                 <button className="btn btn-ghost btn-sm deploy-retry-btn" data-action="deploy-retry" data-name={result.name} disabled={result.retrying ? true : undefined}>
                                     {result.retrying ? 'Retrying…' : 'Retry'}
                                 </button>
@@ -2055,7 +2076,7 @@ export default function mount(): () => void {
         const index = latestDeployResults.findIndex(r => r.name === name);
         if (index === -1) return;
 
-        latestDeployResults[index] = { ...latestDeployResults[index], retrying: true };
+        latestDeployResults[index] = { ...latestDeployResults[index], retrying: true, phase: 'running' };
         renderDeployResults();
 
         try {
@@ -2069,6 +2090,7 @@ export default function mount(): () => void {
                 pullOutput: data.pullOutput || '',
                 installOutput: data.installOutput || '',
                 retrying: false,
+                phase: 'done',
             };
             showToast(res.ok ? `Deployed "${name}" successfully` : `Retry failed for "${name}"`, res.ok ? 'success' : 'error');
         } catch {
@@ -2078,6 +2100,7 @@ export default function mount(): () => void {
                 skipped: false,
                 reason: `Failed to deploy '${name}'`,
                 retrying: false,
+                phase: 'done',
             };
             showToast(`Retry failed for "${name}"`, 'error');
         }
@@ -2154,33 +2177,71 @@ export default function mount(): () => void {
         const deployAllBtn = $('deploy-all-btn') as HTMLButtonElement;
         if (!deployAllBtn || deployAllBtn.disabled) return;
 
+        const targets = allProcesses.filter(p => {
+            if (p.name === 'bgr-dashboard' || p.name === 'bgr-guard') return false;
+            if (groupQuery && p.group !== groupQuery) return false;
+            return true;
+        });
+        if (targets.length === 0) return;
+
         const scope = groupQuery ? `group "${groupQuery}"` : 'all deployable processes';
         deployAllBtn.disabled = true;
         deployAllBtn.style.opacity = '0.5';
         showToast(`Deploying ${scope}...`, 'info');
 
+        latestDeploySummary = { group: groupQuery || null, total: targets.length };
+        latestDeployResults = targets.map(p => ({
+            name: p.name,
+            ok: false,
+            skipped: false,
+            reason: '',
+            pullOutput: '',
+            installOutput: '',
+            phase: 'pending',
+        }));
+        renderDeployResults(latestDeploySummary);
+        openDeployResultsModal();
+
         try {
-            const res = await fetch('/api/deploy-all', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ group: groupQuery || null }),
-            });
-            const data = await res.json();
-            if (Array.isArray(data.results)) {
-                latestDeployResults = data.results;
-                latestDeploySummary = data;
-                renderDeployResults(data);
-                openDeployResultsModal();
+            for (let i = 0; i < latestDeployResults.length; i++) {
+                const target = latestDeployResults[i];
+                latestDeployResults[i] = { ...target, phase: 'running' };
+                renderDeployResults();
+
+                try {
+                    const res = await fetch(`/api/deploy/${encodeURIComponent(target.name)}`, { method: 'POST' });
+                    const data = await res.json();
+                    latestDeployResults[i] = {
+                        name: target.name,
+                        ok: !!res.ok,
+                        skipped: data.skipped,
+                        reason: res.ok ? undefined : (data.error || data.reason || `Failed to deploy '${target.name}'`),
+                        pullOutput: data.pullOutput || '',
+                        installOutput: data.installOutput || '',
+                        phase: 'done',
+                    };
+                } catch {
+                    latestDeployResults[i] = {
+                        name: target.name,
+                        ok: false,
+                        skipped: false,
+                        reason: `Failed to deploy '${target.name}'`,
+                        pullOutput: '',
+                        installOutput: '',
+                        phase: 'done',
+                    };
+                }
+                renderDeployResults();
             }
-            if (res.ok) {
-                const parts = [];
-                if (data.deployed) parts.push(`${data.deployed} deployed`);
-                if (data.skipped) parts.push(`${data.skipped} skipped`);
-                if (data.failed) parts.push(`${data.failed} failed`);
-                showToast(parts.length > 0 ? `Deploy complete: ${parts.join(', ')}` : 'Deploy complete', 'success');
-            } else {
-                showToast(data.error || 'Failed to deploy processes', 'error');
-            }
+
+            const deployed = latestDeployResults.filter(r => r.ok).length;
+            const skipped = latestDeployResults.filter(r => !r.ok && r.skipped).length;
+            const failed = latestDeployResults.filter(r => !r.ok && !r.skipped).length;
+            const parts = [];
+            if (deployed) parts.push(`${deployed} deployed`);
+            if (skipped) parts.push(`${skipped} skipped`);
+            if (failed) parts.push(`${failed} failed`);
+            showToast(parts.length > 0 ? `Deploy complete: ${parts.join(', ')}` : 'Deploy complete', failed > 0 ? 'error' : 'success');
         } catch {
             showToast('Failed to deploy processes', 'error');
         }
