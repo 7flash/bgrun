@@ -409,6 +409,21 @@ function showToast(message: string, type: 'success' | 'error' | 'info' = 'info')
 
 export default function mount(): () => void {
     const $ = (id: string) => document.getElementById(id);
+
+    // ─── Theme Toggle ───
+    let currentTheme = localStorage.getItem('bgr_theme') || 'dark';
+    function applyTheme(theme: string) {
+        currentTheme = theme;
+        document.documentElement.setAttribute('data-theme', theme);
+        localStorage.setItem('bgr_theme', theme);
+        const icon = $('theme-toggle-icon');
+        if (icon) icon.textContent = theme === 'light' ? '☀️' : '🌙';
+    }
+    applyTheme(currentTheme);
+    $('theme-toggle-btn')?.addEventListener('click', () => {
+        applyTheme(currentTheme === 'dark' ? 'light' : 'dark');
+    });
+
     let selectedProcess: string | null = null;
     let isFetching = false;
     let isFirstLoad = true;

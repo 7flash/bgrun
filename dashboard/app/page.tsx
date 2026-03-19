@@ -114,6 +114,9 @@ export default function DashboardPage() {
                         <span className="guard-sentinel-dot" id="guard-sentinel-dot" />
                         <span id="guard-sentinel-label">Guard: –</span>
                     </span>
+                    <button className="btn btn-ghost btn-icon" id="theme-toggle-btn" title="Toggle light/dark theme">
+                        <span id="theme-toggle-icon" style={{ fontSize: '0.85rem' }}>🌙</span>
+                    </button>
                     <button className="btn btn-ghost btn-icon" id="shortcuts-btn" title="Keyboard Shortcuts (?)">
                         <span style={{ fontSize: '0.85rem', fontWeight: '700' }}>?</span>
                     </button>
