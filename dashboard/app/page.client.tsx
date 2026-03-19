@@ -1940,6 +1940,29 @@ export default function mount(): () => void {
     if (portRangeMin && savedPortRange?.min) portRangeMin.value = String(savedPortRange.min);
     if (portRangeMax && savedPortRange?.max) portRangeMax.value = String(savedPortRange.max);
 
+    function validatePortRange() {
+        const min = parseInt(portRangeMin?.value || '') || 0;
+        const max = parseInt(portRangeMax?.value || '') || 0;
+        const hasMin = min > 0;
+        const hasMax = max > 0;
+        const effectiveMin = min || 3001;
+        const effectiveMax = max || 65535;
+
+        portRangeMin?.classList.remove('port-conflict');
+        portRangeMax?.classList.remove('port-conflict');
+
+        if (hasMin && hasMax && effectiveMin > effectiveMax) {
+            portRangeMin?.classList.add('port-conflict');
+            portRangeMax?.classList.add('port-conflict');
+            showToast(`⚠️ Port range invalid: min (${effectiveMin}) > max (${effectiveMax})`, 'error');
+            return false;
+        }
+        if (hasMin && hasMax && effectiveMax - effectiveMin < 5) {
+            showToast(`Port range is very narrow (${effectiveMax - effectiveMin + 1} ports)`, 'info');
+        }
+        return true;
+    }
+
     function savePortRange() {
         const min = parseInt(portRangeMin?.value || '') || 0;
         const max = parseInt(portRangeMax?.value || '') || 0;
@@ -1948,6 +1971,7 @@ export default function mount(): () => void {
         } else {
             localStorage.removeItem('bgr_port_range');
         }
+        validatePortRange();
     }
 
     portRangeMin?.addEventListener('change', savePortRange);
@@ -1956,6 +1980,7 @@ export default function mount(): () => void {
     $('suggest-port-btn')?.addEventListener('click', async () => {
         const portInput = $('process-port-input') as HTMLInputElement | null;
         if (!portInput) return;
+        if (!validatePortRange()) return;
         const base = parseInt(portRangeMin?.value || '') || 3001;
         const max = parseInt(portRangeMax?.value || '') || 65535;
         try {

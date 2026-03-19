@@ -66,6 +66,7 @@
 - [x] ~~**Port range suggestions**~~ — ✅ DONE. Users can set a preferred port range for auto-assignment, persisted in localStorage.
 - [x] ~~**Stats filter keyboard shortcut**~~ — ✅ DONE. Press `T` to cycle through stat filters (all → running → stopped → guarded).
 - [x] ~~**Stat filter persistence**~~ — ✅ DONE. The active stat filter now persists across page reloads.
+- [x] ~~**Port range validation**~~ — ✅ DONE. Port range inputs validate min > max and narrow ranges, blocking Suggest when invalid.
 - [x] ~~**History hint presets**~~ — ✅ DONE. The History hint strip now supports one-click Minimal / Navigation / All visibility presets.
 - [x] ~~**History focus scope modes**~~ — ✅ DONE. Auto-open can now either sync the drawer while History stays open or close History for direct inspection mode.
 - [x] ~~**History preset discoverability**~~ — ✅ DONE. The History hint preset UI now highlights matching presets and shows a Custom state for manual combinations.
