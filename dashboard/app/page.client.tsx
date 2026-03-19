@@ -1841,26 +1841,47 @@ export default function mount(): () => void {
         const nameInput = $('process-name-input') as HTMLInputElement;
         const cmdInput = $('process-command-input') as HTMLInputElement;
         const dirInput = $('process-directory-input') as HTMLInputElement;
+        const portInput = $('process-port-input') as HTMLInputElement;
         if (nameInput) nameInput.value = '';
         if (cmdInput) cmdInput.value = '';
         if (dirInput) dirInput.value = '';
+        if (portInput) portInput.value = '';
     }
+
+    $('suggest-port-btn')?.addEventListener('click', async () => {
+        const portInput = $('process-port-input') as HTMLInputElement | null;
+        if (!portInput) return;
+        try {
+            const res = await fetch('/api/next-port');
+            const data = await res.json();
+            portInput.value = String(data.port);
+            showToast(`Suggested port ${data.port}`, 'success');
+        } catch {
+            showToast('Failed to fetch next port', 'error');
+        }
+    });
 
     async function createProcess() {
         const name = ($('process-name-input') as HTMLInputElement)?.value?.trim();
         const command = ($('process-command-input') as HTMLInputElement)?.value?.trim();
         const directory = ($('process-directory-input') as HTMLInputElement)?.value?.trim();
+        const portValue = ($('process-port-input') as HTMLInputElement)?.value?.trim();
 
         if (!name || !command || !directory) {
             showToast('Please fill in all fields', 'error');
             return;
         }
 
+        const body: Record<string, any> = { name, command, directory };
+        if (portValue) {
+            body.env = { PORT: portValue };
+        }
+
         try {
             const res = await fetch('/api/start', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, command, directory }),
+                body: JSON.stringify(body),
             });
 
             if (res.ok) {

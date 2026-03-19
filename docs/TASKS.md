@@ -19,7 +19,7 @@
 - [x] ~~**Better mobile layout**~~ — ✅ DONE. Improved responsive breakpoints for stats grid, toolbar, modals, History filters/hints, shortcuts overlay, and guard activity on small screens.
 - [x] ~~**Theme toggle**~~ — ✅ DONE. Added a persistent dark/light theme toggle with CSS custom property overrides and toolbar button.
 - [x] ~~**Process uptime stats**~~ — ✅ DONE. Added Longest Uptime and Total Uptime stat cards to the dashboard stats grid.
-- [ ] **Sticky port allocation** — Auto-assign next available port when starting new processes
+- [x] ~~**Sticky port allocation**~~ — ✅ DONE. Added `/api/next-port` endpoint, port field with Suggest button in new process modal, and env passthrough in `/api/start`.
 - [ ] **Regression test for Windows liveness fallback** — Add coverage around detached/background processes so CLI and dashboard status stay consistent on Windows shells
 - [x] ~~**Deploy result details UI**~~ — ✅ DONE. Bulk deploy now opens a results modal with per-process deployed/skipped/failed status plus expandable git/install output.
 - [x] ~~**Package manager auto-detection for deploys**~~ — ✅ DONE. Deploy helper now inspects lockfiles and runs `bun install`, `pnpm install --frozen-lockfile`, `yarn install --frozen-lockfile`, or `npm ci` as appropriate.

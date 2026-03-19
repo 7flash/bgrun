@@ -1634,6 +1634,21 @@ a.port-link:hover {
     color: var(--text-muted);
 }
 
+.port-input-wrap {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.port-input-wrap input {
+    flex: 1;
+}
+
+.port-input-wrap .btn {
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
 .modal-footer {
     padding: 1rem 1.5rem;
     border-top: 1px solid var(--border-glass);

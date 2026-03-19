@@ -283,6 +283,13 @@ export default function DashboardPage() {
                             <label htmlFor="process-directory-input">Working Directory</label>
                             <input type="text" id="process-directory-input" placeholder="/path/to/project" />
                         </div>
+                        <div className="form-group">
+                            <label htmlFor="process-port-input">Port <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>(optional)</span></label>
+                            <div className="port-input-wrap">
+                                <input type="number" id="process-port-input" placeholder="auto" min="1" max="65535" />
+                                <button className="btn btn-ghost btn-sm" id="suggest-port-btn" type="button" title="Auto-assign next available port">Suggest</button>
+                            </div>
+                        </div>
                     </div>
                     <div className="modal-footer">
                         <button className="btn btn-ghost" id="modal-cancel-btn">Cancel</button>
