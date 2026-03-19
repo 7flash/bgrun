@@ -12,20 +12,20 @@ export default function DashboardPage() {
             <div className="toast-container" id="toast-container"></div>
 
             {/* Stats Grid */}
-            <div className="stats-grid">
-                <div className="stat-card">
+            <div className="stats-grid" id="stats-grid">
+                <div className="stat-card stat-clickable" data-stat-filter="all">
                     <div className="stat-label">Total Processes</div>
                     <div className="stat-value" id="total-count">–</div>
                 </div>
-                <div className="stat-card running">
+                <div className="stat-card running stat-clickable" data-stat-filter="running">
                     <div className="stat-label">Running</div>
                     <div className="stat-value" id="running-count">–</div>
                 </div>
-                <div className="stat-card stopped">
+                <div className="stat-card stopped stat-clickable" data-stat-filter="stopped">
                     <div className="stat-label">Stopped</div>
                     <div className="stat-value" id="stopped-count">–</div>
                 </div>
-                <div className="stat-card guarded">
+                <div className="stat-card guarded stat-clickable" data-stat-filter="guarded">
                     <div className="stat-label">Guarded</div>
                     <div className="stat-value" id="guarded-count">–</div>
                 </div>

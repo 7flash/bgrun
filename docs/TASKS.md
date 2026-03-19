@@ -60,6 +60,7 @@
 - [x] ~~**History focus jump actions**~~ — ✅ DONE. The History chrome now includes previous/next focus controls for mouse users navigating the active row.
 - [x] ~~**History hint personalization**~~ — ✅ DONE. The History shortcut strip now supports per-group visibility controls for each hint category.
 - [x] ~~**History focus auto-open**~~ — ✅ DONE. The History modal now has an Auto-open mode that keeps the process drawer synced while stepping through focused rows.
+- [x] ~~**Stats grid click-to-filter**~~ — ✅ DONE. Clicking stat cards now filters the process list by status (running/stopped/guarded). Clicking again clears the filter.
 - [x] ~~**History hint presets**~~ — ✅ DONE. The History hint strip now supports one-click Minimal / Navigation / All visibility presets.
 - [x] ~~**History focus scope modes**~~ — ✅ DONE. Auto-open can now either sync the drawer while History stays open or close History for direct inspection mode.
 - [x] ~~**History preset discoverability**~~ — ✅ DONE. The History hint preset UI now highlights matching presets and shows a Custom state for manual combinations.

@@ -430,6 +430,7 @@ export default function mount(): () => void {
     let allProcesses: ProcessData[] = [];
     let searchQuery = '';
     let groupQuery = '';
+    let statusFilter: 'all' | 'running' | 'stopped' | 'guarded' = 'all';
     const deployPresetKey = 'bgr_deploy_concurrency_presets';
     const deployPresets = JSON.parse(localStorage.getItem(deployPresetKey) || '{}') as Record<string, number>;
     let deployConcurrency = Math.max(1, Math.min(4, parseInt(localStorage.getItem('bgr_deploy_concurrency') || '1') || 1));
@@ -711,6 +712,14 @@ export default function mount(): () => void {
         if (groupQuery) {
             filtered = filtered.filter(p => p.group === groupQuery);
         }
+        // Apply status filter from stat card clicks
+        if (statusFilter === 'running') {
+            filtered = filtered.filter(p => p.running);
+        } else if (statusFilter === 'stopped') {
+            filtered = filtered.filter(p => !p.running);
+        } else if (statusFilter === 'guarded') {
+            filtered = filtered.filter(p => isGuarded(p));
+        }
         renderProcesses(filtered);
         updateDeployAllButton();
 
@@ -919,6 +928,23 @@ export default function mount(): () => void {
         applyDeployConcurrencyPreset(groupQuery);
         updateDeployPresetResetButton();
         renderFilteredProcesses();
+    });
+
+    function updateStatFilterUI() {
+        document.querySelectorAll('[data-stat-filter]').forEach(el => {
+            el.classList.toggle('stat-active', (el as HTMLElement).dataset.statFilter === statusFilter);
+        });
+    }
+
+    $('stats-grid')?.addEventListener('click', (e) => {
+        const card = (e.target as Element).closest('[data-stat-filter]') as HTMLElement | null;
+        if (!card) return;
+        const filter = card.dataset.statFilter as typeof statusFilter;
+        statusFilter = statusFilter === filter ? 'all' : filter;
+        updateStatFilterUI();
+        renderFilteredProcesses();
+        const labels: Record<string, string> = { all: 'all processes', running: 'running', stopped: 'stopped', guarded: 'guarded' };
+        showToast(`Showing ${labels[statusFilter] || statusFilter}`, 'info');
     });
 
     $('deploy-preset-scopes')?.addEventListener('click', (e) => {
