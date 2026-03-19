@@ -574,6 +574,15 @@ async function run() {
     return;
   }
 
+  // Explicit "list" command
+  if (name === 'list') {
+    await showAll({
+      json: values.json as boolean | undefined,
+      filter: values.filter as string | undefined
+    });
+    return;
+  }
+
   // List or Run or Details
   if (name) {
     if (!values.command && !values.directory) {

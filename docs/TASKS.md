@@ -70,15 +70,24 @@
 - [x] ~~**History hint presets**~~ — ✅ DONE. The History hint strip now supports one-click Minimal / Navigation / All visibility presets.
 - [x] ~~**History focus scope modes**~~ — ✅ DONE. Auto-open can now either sync the drawer while History stays open or close History for direct inspection mode.
 - [x] ~~**History preset discoverability**~~ — ✅ DONE. The History hint preset UI now highlights matching presets and shows a Custom state for manual combinations.
-- [ ] **History auto-open preview delay** — Add an optional debounce before auto-open reacts to rapid row stepping
-- [ ] **History preset reset action** — Add a quick reset from custom hint selections back to a default preset
+## 🟢 Priority: Next Features
+- [ ] **Process dependency graph** — Visualize process start-order dependencies in the dashboard
+- [ ] **Log export** — Add CSV/JSON export for History entries and process logs
+- [ ] **Process resource alerts** — Notify when CPU/memory exceeds configurable thresholds
+- [ ] **Config hot-reload** — Watch `.config.toml` for changes and auto-restart the process
+- [ ] **Deploy rollback** — Store previous git commit hash before deploy, add one-click rollback
+
+## 🟡 Priority: Improve
+- [ ] **Light theme refinement** — Audit all UI components for contrast/readability in light mode
+- [ ] **Dashboard performance** — Profile and optimize rendering with 50+ processes
+- [ ] **CLI process search** — Add `bgrun list --filter running` and `bgrun list --group mygroup`
 
 ## 📝 Architecture Notes
 - **Package**: `bgrun` on npm
-- **DB**: SQLite at `~/.bgr/bgr_v2.sqlite` (sqlite-zod-orm)
+- **DB**: SQLite at `~/.bgr/bgrun.sqlite` (sqlite-zod-orm)
 - **Dashboard**: Melina.js on port 3000 (file-based routing in `dashboard/app/`)
 - **Guard**: Built into dashboard — monitors `BGR_KEEP_ALIVE=true` processes
-- **Tests**: 22 passing, 45 expect() calls — `bun test`
+- **Tests**: 32 passing, 59 expect() calls — `bun test`
 - **Build**: `bun run build` → `dist/index.js`
 - **Dev**: `bun run src/index.ts --help`
 
