@@ -2493,7 +2493,7 @@ a.port-link:hover {
 
 @media (max-width: 768px) {
     .container {
-        padding: 1rem;
+        padding: 0.75rem;
     }
 
     .header {
@@ -2503,20 +2503,56 @@ a.port-link:hover {
     }
 
     .stats-grid {
-        grid-template-columns: repeat(3, 1fr);
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.6rem;
+        margin-bottom: 1rem;
+    }
+
+    .stat-card {
+        padding: 0.85rem 1rem;
+        border-radius: var(--radius-md);
+    }
+
+    .stat-label {
+        font-size: 0.62rem;
+    }
+
+    .stat-value {
+        font-size: 1.2rem;
     }
 
     .toolbar {
         flex-direction: column;
+        gap: 0.6rem;
     }
 
     .toolbar-left {
         flex-direction: column;
         width: 100%;
+        gap: 0.5rem;
+    }
+
+    .toolbar-right {
+        flex-wrap: wrap;
+        gap: 0.4rem;
+        justify-content: center;
+    }
+
+    .toolbar-brand h2 {
+        font-size: 1rem;
     }
 
     .search-wrapper {
         max-width: 100%;
+    }
+
+    .deploy-controls {
+        flex-wrap: wrap;
+    }
+
+    .guard-sentinel-pill {
+        font-size: 0.62rem;
+        padding: 3px 8px;
     }
 
     /* Hide table, show cards */
@@ -2533,6 +2569,61 @@ a.port-link:hover {
     .detail-drawer {
         width: 100%;
         max-width: 100%;
+    }
+
+    /* Modals full-width on mobile */
+    .modal {
+        width: 95vw;
+        max-width: 95vw;
+        max-height: 90vh;
+    }
+
+    .modal-wide {
+        width: 95vw;
+        max-width: 95vw;
+    }
+
+    /* History filters stack vertically */
+    .history-filters {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .history-search {
+        min-width: unset;
+    }
+
+    .history-hints-bar {
+        flex-direction: column;
+        gap: 0.4rem;
+        align-items: flex-start;
+    }
+
+    .history-hints-bar-left {
+        flex-direction: column;
+        gap: 0.4rem;
+        align-items: flex-start;
+    }
+
+    .history-keyboard-hints {
+        gap: 0.35rem;
+    }
+
+    /* Guard activity compact */
+    .guard-activity {
+        padding: 8px 10px;
+    }
+
+    /* Shortcuts overlay compact */
+    .shortcuts-panel {
+        min-width: unset;
+        max-width: 95vw;
+        padding: 1rem;
+    }
+
+    .shortcuts-grid {
+        grid-template-columns: 1fr;
+        gap: 1rem;
     }
 
     /* ─── Process Card ─── */
