@@ -10,6 +10,7 @@ import { describe, expect, test } from 'bun:test'
 import { parseEnvString, calculateRuntime } from './utils'
 import { stripAnsi, truncateString, truncatePath } from './table'
 import { detectPackageManager, formatDeployToolError } from './deploy'
+import { isProcessRunning } from './platform'
 import { mkdirSync, rmSync } from 'fs'
 
 // ─── parseEnvString ─────────────────────────────────────
@@ -107,6 +108,32 @@ describe('truncatePath', () => {
         const result = truncatePath(longPath, 30)
         expect(result.length).toBeLessThanOrEqual(30)
         expect(result).toContain('…')
+    })
+})
+
+// ─── detectPackageManager ───────────────────────────────
+
+// ─── isProcessRunning (Windows liveness fallback) ───────
+
+describe('isProcessRunning', () => {
+    test('returns true for the current process PID', async () => {
+        const alive = await isProcessRunning(process.pid)
+        expect(alive).toBe(true)
+    })
+
+    test('returns false for PID 0 (intentionally stopped)', async () => {
+        const alive = await isProcessRunning(0)
+        expect(alive).toBe(false)
+    })
+
+    test('returns false for a very high unlikely PID', async () => {
+        const alive = await isProcessRunning(999999)
+        expect(alive).toBe(false)
+    })
+
+    test('returns false for negative PID', async () => {
+        const alive = await isProcessRunning(-1)
+        expect(alive).toBe(false)
     })
 })
 

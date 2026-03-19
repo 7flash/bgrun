@@ -20,7 +20,7 @@
 - [x] ~~**Theme toggle**~~ — ✅ DONE. Added a persistent dark/light theme toggle with CSS custom property overrides and toolbar button.
 - [x] ~~**Process uptime stats**~~ — ✅ DONE. Added Longest Uptime and Total Uptime stat cards to the dashboard stats grid.
 - [x] ~~**Sticky port allocation**~~ — ✅ DONE. Added `/api/next-port` endpoint, port field with Suggest button in new process modal, and env passthrough in `/api/start`.
-- [ ] **Regression test for Windows liveness fallback** — Add coverage around detached/background processes so CLI and dashboard status stay consistent on Windows shells
+- [x] ~~**Regression test for Windows liveness fallback**~~ — ✅ DONE. Added 4 tests for `isProcessRunning`: current PID (alive), PID 0 (dead), high PID (dead), negative PID (dead). Covers the signal-0 → Get-Process fallback path on Windows.
 - [x] ~~**Deploy result details UI**~~ — ✅ DONE. Bulk deploy now opens a results modal with per-process deployed/skipped/failed status plus expandable git/install output.
 - [x] ~~**Package manager auto-detection for deploys**~~ — ✅ DONE. Deploy helper now inspects lockfiles and runs `bun install`, `pnpm install --frozen-lockfile`, `yarn install --frozen-lockfile`, or `npm ci` as appropriate.
 - [x] ~~**Deploy retry actions in results modal**~~ — ✅ DONE. Failed/skipped entries in the deploy results modal can now be retried inline and update their own result card after completion.
