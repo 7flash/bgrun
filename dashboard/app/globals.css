@@ -1658,6 +1658,11 @@ a.port-link:hover {
     white-space: nowrap;
 }
 
+.port-conflict {
+    border-color: var(--danger) !important;
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15) !important;
+}
+
 .modal-footer {
     padding: 1rem 1.5rem;
     border-top: 1px solid var(--border-glass);

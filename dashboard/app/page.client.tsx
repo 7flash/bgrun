@@ -1874,6 +1874,37 @@ export default function mount(): () => void {
         if (portInput) portInput.value = '';
     }
 
+    let portCheckDebounce: ReturnType<typeof setTimeout> | null = null;
+
+    async function checkPortConflict(port: number) {
+        const portInput = $('process-port-input') as HTMLInputElement | null;
+        if (!portInput || !port || port < 1 || port > 65535) return;
+        try {
+            const res = await fetch(`/api/check-port?port=${port}`);
+            const data = await res.json();
+            if (data.inUse) {
+                portInput.classList.add('port-conflict');
+                portInput.title = `Port ${port} is already in use`;
+                showToast(`⚠️ Port ${port} is already in use`, 'error');
+            } else {
+                portInput.classList.remove('port-conflict');
+                portInput.title = '';
+            }
+        } catch { /* best effort */ }
+    }
+
+    $('process-port-input')?.addEventListener('input', () => {
+        const portInput = $('process-port-input') as HTMLInputElement | null;
+        if (!portInput) return;
+        portInput.classList.remove('port-conflict');
+        portInput.title = '';
+        if (portCheckDebounce) clearTimeout(portCheckDebounce);
+        const val = parseInt(portInput.value);
+        if (val && val > 0 && val <= 65535) {
+            portCheckDebounce = setTimeout(() => checkPortConflict(val), 500);
+        }
+    });
+
     $('suggest-port-btn')?.addEventListener('click', async () => {
         const portInput = $('process-port-input') as HTMLInputElement | null;
         if (!portInput) return;
@@ -1881,7 +1912,10 @@ export default function mount(): () => void {
             const res = await fetch('/api/next-port');
             const data = await res.json();
             portInput.value = String(data.port);
+            portInput.classList.remove('port-conflict');
+            portInput.title = '';
             showToast(`Suggested port ${data.port}`, 'success');
+            await checkPortConflict(data.port);
         } catch {
             showToast('Failed to fetch next port', 'error');
         }
