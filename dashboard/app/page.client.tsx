@@ -430,7 +430,10 @@ export default function mount(): () => void {
     let allProcesses: ProcessData[] = [];
     let searchQuery = '';
     let groupQuery = '';
-    let statusFilter: 'all' | 'running' | 'stopped' | 'guarded' = 'all';
+    let statusFilter: 'all' | 'running' | 'stopped' | 'guarded' = (() => {
+        const saved = localStorage.getItem('bgr_status_filter');
+        return (saved === 'running' || saved === 'stopped' || saved === 'guarded') ? saved : 'all';
+    })();
     const deployPresetKey = 'bgr_deploy_concurrency_presets';
     const deployPresets = JSON.parse(localStorage.getItem(deployPresetKey) || '{}') as Record<string, number>;
     let deployConcurrency = Math.max(1, Math.min(4, parseInt(localStorage.getItem('bgr_deploy_concurrency') || '1') || 1));
@@ -947,10 +950,17 @@ export default function mount(): () => void {
         }
     }
 
-    $('stat-filter-badge-clear')?.addEventListener('click', () => {
-        statusFilter = 'all';
+    function setStatusFilter(filter: typeof statusFilter) {
+        statusFilter = filter;
+        localStorage.setItem('bgr_status_filter', filter);
         updateStatFilterUI();
         renderFilteredProcesses();
+    }
+
+    updateStatFilterUI();
+
+    $('stat-filter-badge-clear')?.addEventListener('click', () => {
+        setStatusFilter('all');
         showToast('Status filter cleared', 'success');
     });
 
@@ -958,9 +968,7 @@ export default function mount(): () => void {
         const card = (e.target as Element).closest('[data-stat-filter]') as HTMLElement | null;
         if (!card) return;
         const filter = card.dataset.statFilter as typeof statusFilter;
-        statusFilter = statusFilter === filter ? 'all' : filter;
-        updateStatFilterUI();
-        renderFilteredProcesses();
+        setStatusFilter(statusFilter === filter ? 'all' : filter);
         const labels: Record<string, string> = { all: 'all processes', running: 'running', stopped: 'stopped', guarded: 'guarded' };
         showToast(`Showing ${labels[statusFilter] || statusFilter}`, 'info');
     });
@@ -3363,9 +3371,7 @@ export default function mount(): () => void {
             e.preventDefault();
             const cycle: Array<typeof statusFilter> = ['all', 'running', 'stopped', 'guarded'];
             const idx = cycle.indexOf(statusFilter);
-            statusFilter = cycle[(idx + 1) % cycle.length];
-            updateStatFilterUI();
-            renderFilteredProcesses();
+            setStatusFilter(cycle[(idx + 1) % cycle.length]);
             const labels: Record<string, string> = { all: 'all processes', running: 'running', stopped: 'stopped', guarded: 'guarded' };
             showToast(`Showing ${labels[statusFilter]}`, 'info');
             return;
