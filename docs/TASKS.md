@@ -15,8 +15,9 @@
 - [x] ~~**Process history**~~ — ✅ DONE. Added history schema and functions in db.ts, `/api/history` endpoint, History button in toolbar, modal UI with process/event filters, and history entries recorded on start/stop/restart/guard events. Shows timestamp, process name, event type, and PID.
 - [x] ~~**Windows detached-process liveness mismatch**~~ — ✅ DONE. Reproduced a CLI/dashboard disagreement for `bgr-guard`; fixed `isProcessRunning()` to fall back to `Get-Process` when signal-0 checks fail under Git Bash/MSYS or detached wrapper scenarios.
 - [x] ~~**Deploy all processes**~~ — ✅ DONE. Added shared deploy helper in `src/deploy.ts`, refactored single deploy API to use it, and added `/api/deploy-all` plus a toolbar button that deploys either all deployable processes or the currently selected group.
-- [ ] **Dashboard UI polish** — Process uptime stats, better mobile layout
+- [ ] **Dashboard UI polish** — Better mobile layout
 - [x] ~~**Theme toggle**~~ — ✅ DONE. Added a persistent dark/light theme toggle with CSS custom property overrides and toolbar button.
+- [x] ~~**Process uptime stats**~~ — ✅ DONE. Added Longest Uptime and Total Uptime stat cards to the dashboard stats grid.
 - [ ] **Sticky port allocation** — Auto-assign next available port when starting new processes
 - [ ] **Regression test for Windows liveness fallback** — Add coverage around detached/background processes so CLI and dashboard status stay consistent on Windows shells
 - [x] ~~**Deploy result details UI**~~ — ✅ DONE. Bulk deploy now opens a results modal with per-process deployed/skipped/failed status plus expandable git/install output.

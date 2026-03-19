@@ -497,6 +497,40 @@ body::after {
     color: var(--warning);
 }
 
+.stat-card.uptime {
+    border-left: 3px solid var(--info);
+}
+
+.stat-card.uptime::before {
+    background: var(--info);
+    opacity: 0.08;
+}
+
+.stat-card.uptime:hover::before {
+    opacity: 0.12;
+}
+
+.stat-card.uptime .stat-value {
+    color: var(--info);
+}
+
+.stat-card.uptime-total {
+    border-left: 3px solid var(--accent-secondary);
+}
+
+.stat-card.uptime-total::before {
+    background: var(--accent-secondary);
+    opacity: 0.08;
+}
+
+.stat-card.uptime-total:hover::before {
+    opacity: 0.12;
+}
+
+.stat-card.uptime-total .stat-value {
+    color: var(--accent-secondary);
+}
+
 /* ─── Guard Toggle (inline shield icon in process name) ─── */
 .guard-toggle {
     display: inline-flex;

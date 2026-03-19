@@ -37,6 +37,14 @@ export default function DashboardPage() {
                     <div className="stat-label">Guard Restarts</div>
                     <div className="stat-value" id="restarts-count">0</div>
                 </div>
+                <div className="stat-card uptime">
+                    <div className="stat-label">Longest Uptime</div>
+                    <div className="stat-value" id="uptime-longest">–</div>
+                </div>
+                <div className="stat-card uptime-total">
+                    <div className="stat-label">Total Uptime</div>
+                    <div className="stat-value" id="uptime-total">–</div>
+                </div>
             </div>
 
             {/* Guard Activity Feed */}

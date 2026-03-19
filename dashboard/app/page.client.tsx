@@ -772,6 +772,18 @@ export default function mount(): () => void {
         const totalRestarts = processes.reduce((sum, p) => sum + (p.guardRestarts || 0), 0);
         if (rrc) rrc.textContent = String(totalRestarts);
 
+        const uptimeLongest = $('uptime-longest');
+        const uptimeTotal = $('uptime-total');
+        const runningProcesses = processes.filter(p => p.running && p.runtime > 0);
+        if (uptimeLongest) {
+            const longest = runningProcesses.reduce((max, p) => Math.max(max, p.runtime), 0);
+            uptimeLongest.textContent = longest > 0 ? formatRuntime(`${longest} minutes`) : '–';
+        }
+        if (uptimeTotal) {
+            const totalMinutes = runningProcesses.reduce((sum, p) => sum + p.runtime, 0);
+            uptimeTotal.textContent = totalMinutes > 0 ? formatRuntime(`${totalMinutes} minutes`) : '–';
+        }
+
         // Update Guard All button state
         const guardAllBtn = $('guard-all-btn');
         const guardAllLabel = $('guard-all-label');
