@@ -1693,6 +1693,41 @@ a.port-link:hover {
     white-space: nowrap;
 }
 
+.port-range-wrap {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-top: 0.45rem;
+}
+
+.port-range-label {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.port-range-input {
+    width: 80px;
+    padding: 0.3rem 0.5rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-glass);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    font-size: 0.78rem;
+    font-family: var(--font-mono);
+}
+
+.port-range-input:focus {
+    border-color: var(--accent-primary);
+    outline: none;
+}
+
+.port-range-sep {
+    color: var(--text-dim);
+    font-size: 0.8rem;
+}
+
 .port-conflict {
     border-color: var(--danger) !important;
     box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15) !important;

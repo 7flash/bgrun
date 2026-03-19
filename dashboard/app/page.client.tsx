@@ -1923,12 +1923,40 @@ export default function mount(): () => void {
         }
     });
 
+    // Port range preference
+    const savedPortRange = (() => {
+        try { return JSON.parse(localStorage.getItem('bgr_port_range') || 'null'); } catch { return null; }
+    })();
+    const portRangeMin = $('port-range-min') as HTMLInputElement | null;
+    const portRangeMax = $('port-range-max') as HTMLInputElement | null;
+    if (portRangeMin && savedPortRange?.min) portRangeMin.value = String(savedPortRange.min);
+    if (portRangeMax && savedPortRange?.max) portRangeMax.value = String(savedPortRange.max);
+
+    function savePortRange() {
+        const min = parseInt(portRangeMin?.value || '') || 0;
+        const max = parseInt(portRangeMax?.value || '') || 0;
+        if (min > 0 || max > 0) {
+            localStorage.setItem('bgr_port_range', JSON.stringify({ min: min || 3001, max: max || 65535 }));
+        } else {
+            localStorage.removeItem('bgr_port_range');
+        }
+    }
+
+    portRangeMin?.addEventListener('change', savePortRange);
+    portRangeMax?.addEventListener('change', savePortRange);
+
     $('suggest-port-btn')?.addEventListener('click', async () => {
         const portInput = $('process-port-input') as HTMLInputElement | null;
         if (!portInput) return;
+        const base = parseInt(portRangeMin?.value || '') || 3001;
+        const max = parseInt(portRangeMax?.value || '') || 65535;
         try {
-            const res = await fetch('/api/next-port');
+            const res = await fetch(`/api/next-port?base=${base}`);
             const data = await res.json();
+            if (data.port > max) {
+                showToast(`⚠️ No available port in range ${base}–${max}`, 'error');
+                return;
+            }
             portInput.value = String(data.port);
             portInput.classList.remove('port-conflict');
             portInput.title = '';

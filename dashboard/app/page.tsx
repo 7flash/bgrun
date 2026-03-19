@@ -293,6 +293,12 @@ export default function DashboardPage() {
                                 <input type="number" id="process-port-input" placeholder="auto" min="1" max="65535" />
                                 <button className="btn btn-ghost btn-sm" id="suggest-port-btn" type="button" title="Auto-assign next available port">Suggest</button>
                             </div>
+                            <div className="port-range-wrap">
+                                <span className="port-range-label">Range</span>
+                                <input type="number" id="port-range-min" className="port-range-input" placeholder="3001" min="1" max="65535" />
+                                <span className="port-range-sep">–</span>
+                                <input type="number" id="port-range-max" className="port-range-input" placeholder="4000" min="1" max="65535" />
+                            </div>
                         </div>
                     </div>
                     <div className="modal-footer">
