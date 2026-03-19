@@ -934,7 +934,25 @@ export default function mount(): () => void {
         document.querySelectorAll('[data-stat-filter]').forEach(el => {
             el.classList.toggle('stat-active', (el as HTMLElement).dataset.statFilter === statusFilter);
         });
+        const badge = $('stat-filter-badge');
+        const badgeLabel = $('stat-filter-badge-label');
+        if (badge && badgeLabel) {
+            if (statusFilter !== 'all') {
+                const labels: Record<string, string> = { running: 'Running', stopped: 'Stopped', guarded: 'Guarded' };
+                badgeLabel.textContent = labels[statusFilter] || statusFilter;
+                badge.style.display = '';
+            } else {
+                badge.style.display = 'none';
+            }
+        }
     }
+
+    $('stat-filter-badge-clear')?.addEventListener('click', () => {
+        statusFilter = 'all';
+        updateStatFilterUI();
+        renderFilteredProcesses();
+        showToast('Status filter cleared', 'success');
+    });
 
     $('stats-grid')?.addEventListener('click', (e) => {
         const card = (e.target as Element).closest('[data-stat-filter]') as HTMLElement | null;

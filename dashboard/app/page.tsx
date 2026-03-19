@@ -73,6 +73,10 @@ export default function DashboardPage() {
                         <span className="search-count" id="search-count" style={{ display: 'none' }}></span>
                         <span className="search-shortcut">/</span>
                     </div>
+                    <span className="stat-filter-badge" id="stat-filter-badge" style={{ display: 'none' }}>
+                        <span id="stat-filter-badge-label"></span>
+                        <button className="stat-filter-badge-clear" id="stat-filter-badge-clear" type="button" title="Clear status filter">✕</button>
+                    </span>
                     <select className="group-filter" id="group-filter">
                         <option value="">All Groups</option>
                     </select>
