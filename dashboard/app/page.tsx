@@ -496,6 +496,7 @@ export default function DashboardPage() {
                             <div className="shortcut-row"><kbd>G</kbd><span>Toggle guard</span></div>
                             <div className="shortcut-row"><kbd>D</kbd><span>Delete process</span></div>
                             <div className="shortcut-row"><kbd>N</kbd><span>New process</span></div>
+                            <div className="shortcut-row"><kbd>T</kbd><span>Cycle stat filter</span></div>
                             <div className="shortcut-row"><kbd>?</kbd><span>This help</span></div>
                         </div>
                     </div>

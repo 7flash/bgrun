@@ -3358,6 +3358,19 @@ export default function mount(): () => void {
             return;
         }
 
+        // T — cycle stat filter
+        if (e.key === 't' || e.key === 'T') {
+            e.preventDefault();
+            const cycle: Array<typeof statusFilter> = ['all', 'running', 'stopped', 'guarded'];
+            const idx = cycle.indexOf(statusFilter);
+            statusFilter = cycle[(idx + 1) % cycle.length];
+            updateStatFilterUI();
+            renderFilteredProcesses();
+            const labels: Record<string, string> = { all: 'all processes', running: 'running', stopped: 'stopped', guarded: 'guarded' };
+            showToast(`Showing ${labels[statusFilter]}`, 'info');
+            return;
+        }
+
         // Process actions — require a focused row
         if (!focusedProcessName) return;
 
