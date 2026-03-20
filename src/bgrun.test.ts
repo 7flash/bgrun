@@ -13,6 +13,10 @@ import { detectPackageManager, formatDeployToolError } from './deploy'
 import { isProcessRunning } from './platform'
 import { mkdirSync, rmSync } from 'fs'
 
+// Use a test-specific database to avoid polluting real data
+process.env.BGRUN_DB = `bgrun-test-${Date.now()}.sqlite`
+import { addDependency, removeDependency, getDependencyGraph, getDependencies, getDependents, getStartOrder, removeAllDependencies } from './db'
+
 // ─── parseEnvString ─────────────────────────────────────
 
 describe('parseEnvString', () => {
@@ -211,5 +215,66 @@ describe('detectPackageManager', () => {
         } finally {
             rmSync(dir, { recursive: true, force: true })
         }
+    })
+})
+
+// ─── Dependencies ───────────────────────────────────────
+
+describe('addDependency', () => {
+    test('adds a valid dependency', () => {
+        removeAllDependencies('web-server');
+        removeAllDependencies('database');
+        const ok = addDependency('web-server', 'database');
+        expect(ok).toBe(true);
+        expect(getDependencies('web-server')).toContain('database');
+    })
+
+    test('prevents self-dependency', () => {
+        expect(addDependency('api', 'api')).toBe(false);
+    })
+
+    test('prevents duplicate dependency', () => {
+        removeAllDependencies('app');
+        addDependency('app', 'db');
+        expect(addDependency('app', 'db')).toBe(false);
+    })
+
+    test('prevents circular dependency', () => {
+        removeAllDependencies('a');
+        removeAllDependencies('b');
+        removeAllDependencies('c');
+        addDependency('a', 'b');
+        addDependency('b', 'c');
+        // c -> a would create a cycle
+        expect(addDependency('c', 'a')).toBe(false);
+    })
+})
+
+describe('getDependencyGraph', () => {
+    test('returns full graph', () => {
+        removeAllDependencies('svc-a');
+        removeAllDependencies('svc-b');
+        addDependency('svc-a', 'svc-b');
+        const graph = getDependencyGraph();
+        expect(graph['svc-a']).toContain('svc-b');
+    })
+})
+
+describe('getDependents', () => {
+    test('finds processes that depend on a target', () => {
+        removeAllDependencies('frontend');
+        removeAllDependencies('backend');
+        addDependency('frontend', 'backend');
+        expect(getDependents('backend')).toContain('frontend');
+    })
+})
+
+describe('removeDependency', () => {
+    test('removes an existing dependency', () => {
+        removeAllDependencies('x');
+        addDependency('x', 'y');
+        expect(getDependencies('x')).toContain('y');
+        removeDependency('x', 'y');
+        expect(getDependencies('x')).not.toContain('y');
     })
 })

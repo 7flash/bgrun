@@ -2048,6 +2048,312 @@ export default function mount(): () => void {
         }
     });
 
+    // ─── Dependencies Modal ───
+
+    interface DepGraphData {
+        graph: Record<string, string[]>;
+        startOrder: string[];
+        processes: { name: string; group: string; pid: number }[];
+    }
+
+    let depsData: DepGraphData | null = null;
+
+    function openDepsModal() {
+        const modal = $('deps-modal');
+        if (modal) modal.classList.add('active');
+        loadDepsGraph();
+    }
+
+    function closeDepsModal() {
+        const modal = $('deps-modal');
+        if (modal) modal.classList.remove('active');
+    }
+
+    async function loadDepsGraph() {
+        try {
+            const res = await fetch('/api/dependencies');
+            depsData = await res.json();
+            if (depsData) {
+                populateDepsSelects(depsData.processes);
+                renderDepsGraph(depsData);
+                renderDepsList(depsData);
+                renderDepsStartOrder(depsData);
+            }
+        } catch (e) {
+            console.error('Failed to load dependencies', e);
+        }
+    }
+
+    function populateDepsSelects(processes: { name: string }[]) {
+        const procSelect = $('deps-process-select') as HTMLSelectElement;
+        const targetSelect = $('deps-target-select') as HTMLSelectElement;
+        if (!procSelect || !targetSelect) return;
+
+        const names = processes.map(p => p.name).sort();
+        for (const sel of [procSelect, targetSelect]) {
+            const val = sel.value;
+            sel.innerHTML = `<option value="">Select process...</option>`;
+            for (const name of names) {
+                sel.innerHTML += `<option value="${name}">${name}</option>`;
+            }
+            sel.value = val;
+        }
+    }
+
+    function renderDepsGraph(data: DepGraphData) {
+        const container = $('deps-graph-container');
+        const svg = document.getElementById('deps-graph-svg');
+        if (!svg || !container) return;
+
+        const processes = data.processes;
+        const graph = data.graph;
+        if (processes.length === 0) {
+            svg.innerHTML = `<text x="50%" y="50%" text-anchor="middle" fill="var(--text-secondary)" font-size="14">No processes registered</text>`;
+            return;
+        }
+
+        // Build adjacency for layout
+        const names = processes.map(p => p.name);
+        const nameSet = new Set(names);
+
+        // Topological layers using BFS from roots
+        const inDeg: Record<string, number> = {};
+        for (const n of names) inDeg[n] = 0;
+        for (const [proc, deps] of Object.entries(graph)) {
+            if (nameSet.has(proc)) {
+                for (const d of deps) {
+                    if (nameSet.has(d)) inDeg[proc] = (inDeg[proc] || 0) + 1;
+                }
+            }
+        }
+
+        // Assign layers (depth from roots)
+        const layers: string[][] = [];
+        const assigned = new Set<string>();
+        let currentLayer = names.filter(n => (inDeg[n] || 0) === 0);
+
+        while (currentLayer.length > 0) {
+            currentLayer.sort();
+            layers.push(currentLayer);
+            for (const n of currentLayer) assigned.add(n);
+
+            const nextLayer: string[] = [];
+            for (const n of currentLayer) {
+                // Find processes that depend on n
+                for (const [proc, deps] of Object.entries(graph)) {
+                    if (deps.includes(n) && nameSet.has(proc) && !assigned.has(proc)) {
+                        // Check if all deps of proc are assigned
+                        const allDepsAssigned = (graph[proc] || []).every(d => !nameSet.has(d) || assigned.has(d));
+                        if (allDepsAssigned && !nextLayer.includes(proc)) {
+                            nextLayer.push(proc);
+                        }
+                    }
+                }
+            }
+            currentLayer = nextLayer;
+        }
+
+        // Add unassigned (isolated or in cycles)
+        const remaining = names.filter(n => !assigned.has(n));
+        if (remaining.length > 0) layers.push(remaining);
+
+        // Layout: horizontal layers, left to right
+        const nodeW = 130, nodeH = 36;
+        const layerGap = 180, nodeGap = 52;
+        const padX = 40, padY = 30;
+
+        const positions: Record<string, { x: number; y: number }> = {};
+        const maxLayerSize = Math.max(...layers.map(l => l.length));
+        const totalW = padX * 2 + layers.length * layerGap;
+        const totalH = padY * 2 + maxLayerSize * nodeGap;
+
+        for (let li = 0; li < layers.length; li++) {
+            const layer = layers[li];
+            const layerH = layer.length * nodeGap;
+            const offsetY = (totalH - layerH) / 2;
+            for (let ni = 0; ni < layer.length; ni++) {
+                positions[layer[ni]] = {
+                    x: padX + li * layerGap,
+                    y: offsetY + ni * nodeGap,
+                };
+            }
+        }
+
+        svg.setAttribute('width', String(Math.max(totalW, 600)));
+        svg.setAttribute('height', String(Math.max(totalH, 300)));
+        svg.setAttribute('viewBox', `0 0 ${Math.max(totalW, 600)} ${Math.max(totalH, 300)}`);
+
+        // Find running processes
+        const runningNames = new Set(
+            (allProcesses || []).filter((p: ProcessData) => p.running).map((p: ProcessData) => p.name)
+        );
+
+        let svgContent = `
+            <defs>
+                <marker id="deps-arrowhead" viewBox="0 0 10 7" refX="10" refY="3.5"
+                    markerWidth="8" markerHeight="6" orient="auto-start-reverse">
+                    <polygon points="0 0, 10 3.5, 0 7" fill="var(--text-secondary)" opacity="0.6" />
+                </marker>
+                <marker id="deps-arrowhead-hl" viewBox="0 0 10 7" refX="10" refY="3.5"
+                    markerWidth="8" markerHeight="6" orient="auto-start-reverse">
+                    <polygon points="0 0, 10 3.5, 0 7" fill="var(--accent)" />
+                </marker>
+            </defs>
+        `;
+
+        // Draw edges (dependency arrows: depends_on ← process, so arrow from dep → process)
+        for (const [proc, deps] of Object.entries(graph)) {
+            if (!positions[proc]) continue;
+            for (const dep of deps) {
+                if (!positions[dep]) continue;
+                const from = positions[dep];
+                const to = positions[proc];
+                const x1 = from.x + nodeW;
+                const y1 = from.y + nodeH / 2;
+                const x2 = to.x;
+                const y2 = to.y + nodeH / 2;
+                const cx1 = x1 + (x2 - x1) * 0.4;
+                const cx2 = x2 - (x2 - x1) * 0.4;
+                svgContent += `<path class="deps-edge" d="M${x1},${y1} C${cx1},${y1} ${cx2},${y2} ${x2},${y2}" data-from="${dep}" data-to="${proc}" />`;
+            }
+        }
+
+        // Draw nodes
+        for (const name of names) {
+            const pos = positions[name];
+            if (!pos) continue;
+            const isRunning = runningNames.has(name);
+            const fillColor = isRunning ? 'rgba(34,197,94,0.18)' : 'rgba(100,100,120,0.15)';
+            const strokeColor = isRunning ? 'rgba(34,197,94,0.6)' : 'rgba(100,100,120,0.3)';
+            const statusDot = isRunning ? '🟢' : '⚫';
+
+            svgContent += `
+                <g class="deps-node" data-name="${name}">
+                    <rect x="${pos.x}" y="${pos.y}" width="${nodeW}" height="${nodeH}" 
+                          fill="${fillColor}" stroke="${strokeColor}" />
+                    <text x="${pos.x + 22}" y="${pos.y + nodeH / 2 + 4}" font-size="11">${name.length > 14 ? name.slice(0, 13) + '…' : name}</text>
+                    <text x="${pos.x + 6}" y="${pos.y + nodeH / 2 + 5}" font-size="10">${statusDot}</text>
+                </g>
+            `;
+        }
+
+        svg.innerHTML = svgContent;
+
+        // Hover highlighting
+        svg.querySelectorAll('.deps-node').forEach(node => {
+            node.addEventListener('mouseenter', () => {
+                const name = (node as Element).getAttribute('data-name');
+                svg.querySelectorAll('.deps-edge').forEach(edge => {
+                    const from = edge.getAttribute('data-from');
+                    const to = edge.getAttribute('data-to');
+                    if (from === name || to === name) {
+                        edge.classList.add('deps-edge-highlight');
+                        (edge as SVGElement).style.markerEnd = 'url(#deps-arrowhead-hl)';
+                    }
+                });
+            });
+            node.addEventListener('mouseleave', () => {
+                svg.querySelectorAll('.deps-edge').forEach(edge => {
+                    edge.classList.remove('deps-edge-highlight');
+                    (edge as SVGElement).style.markerEnd = 'url(#deps-arrowhead)';
+                });
+            });
+        });
+    }
+
+    function renderDepsList(data: DepGraphData) {
+        const container = $('deps-list');
+        if (!container) return;
+
+        const entries: { process: string; dep: string }[] = [];
+        for (const [proc, deps] of Object.entries(data.graph)) {
+            for (const dep of deps) {
+                entries.push({ process: proc, dep });
+            }
+        }
+
+        if (entries.length === 0) {
+            container.innerHTML = `<div class="deps-empty">No dependencies configured. Use the dropdowns above to add one.</div>`;
+            return;
+        }
+
+        container.innerHTML = entries.map(e => `
+            <div class="deps-list-item">
+                <span class="deps-item-process">${e.process}</span>
+                <span class="deps-item-arrow">→ depends on →</span>
+                <span class="deps-item-target">${e.dep}</span>
+                <button class="deps-remove-btn" data-process="${e.process}" data-dep="${e.dep}" title="Remove dependency">✕</button>
+            </div>
+        `).join('');
+
+        // Remove buttons
+        container.querySelectorAll('.deps-remove-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const proc = btn.getAttribute('data-process');
+                const dep = btn.getAttribute('data-dep');
+                await fetch('/api/dependencies', {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ process: proc, depends_on: dep }),
+                });
+                loadDepsGraph();
+            });
+        });
+    }
+
+    function renderDepsStartOrder(data: DepGraphData) {
+        const container = $('deps-start-order');
+        if (!container) return;
+
+        if (data.startOrder.length === 0) {
+            container.innerHTML = '';
+            return;
+        }
+
+        container.innerHTML = `
+            <div class="deps-order-title">⚡ Recommended Start Order</div>
+            <div class="deps-order-list">
+                ${data.startOrder.map((name, i) => `
+                    <span class="deps-order-badge">
+                        <span class="deps-order-num">${i + 1}</span>
+                        ${name}
+                    </span>
+                `).join('')}
+            </div>
+        `;
+    }
+
+    $('deps-btn')?.addEventListener('click', openDepsModal);
+    $('deps-modal-close')?.addEventListener('click', closeDepsModal);
+    $('deps-modal')?.addEventListener('click', (e) => {
+        if ((e.target as Element).classList.contains('modal-overlay')) closeDepsModal();
+    });
+
+    $('deps-add-btn')?.addEventListener('click', async () => {
+        const proc = ($('deps-process-select') as HTMLSelectElement)?.value;
+        const dep = ($('deps-target-select') as HTMLSelectElement)?.value;
+        if (!proc || !dep) {
+            showToast('Select both a process and its dependency', 'error');
+            return;
+        }
+        if (proc === dep) {
+            showToast('A process cannot depend on itself', 'error');
+            return;
+        }
+        const res = await fetch('/api/dependencies', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ process: proc, depends_on: dep }),
+        });
+        const result = await res.json();
+        if (!res.ok) {
+            showToast(result.error || 'Failed to add dependency', 'error');
+            return;
+        }
+        showToast(`${proc} → ${dep} dependency added`, 'success');
+        loadDepsGraph();
+    });
+
     // ─── Templates Modal ───
 
     interface TemplateData {

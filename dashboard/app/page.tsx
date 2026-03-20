@@ -139,6 +139,17 @@ export default function DashboardPage() {
                         </svg>
                         Templates
                     </button>
+                    <button className="btn btn-ghost" id="deps-btn" title="Process Dependencies">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="6" cy="6" r="3" />
+                            <circle cx="18" cy="6" r="3" />
+                            <circle cx="18" cy="18" r="3" />
+                            <line x1="9" y1="6" x2="15" y2="6" />
+                            <path d="M18 9v6" />
+                            <path d="M9 6l6 9" />
+                        </svg>
+                        Deps
+                    </button>
                     <button className="btn btn-ghost" id="history-btn">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                             <circle cx="12" cy="12" r="10" />
@@ -309,6 +320,33 @@ export default function DashboardPage() {
             </div>
 
             {/* History Modal */}
+            {/* Dependencies Modal */}
+            <div className="modal-overlay" id="deps-modal">
+                <div className="modal modal-wide">
+                    <div className="modal-header">
+                        <h3>🔗 Process Dependencies</h3>
+                        <button className="modal-close" id="deps-modal-close">✕</button>
+                    </div>
+                    <div className="modal-body">
+                        <div className="deps-controls">
+                            <select id="deps-process-select" className="history-select">
+                                <option value="">Select process...</option>
+                            </select>
+                            <span className="deps-arrow">depends on →</span>
+                            <select id="deps-target-select" className="history-select">
+                                <option value="">Select dependency...</option>
+                            </select>
+                            <button className="btn btn-primary btn-sm" id="deps-add-btn">Add</button>
+                        </div>
+                        <div className="deps-graph-container" id="deps-graph-container">
+                            <svg id="deps-graph-svg" width="100%" height="400"></svg>
+                        </div>
+                        <div className="deps-list" id="deps-list"></div>
+                        <div className="deps-start-order" id="deps-start-order"></div>
+                    </div>
+                </div>
+            </div>
+
             <div className="modal-overlay" id="history-modal">
                 <div className="modal modal-wide">
                     <div className="modal-header">
