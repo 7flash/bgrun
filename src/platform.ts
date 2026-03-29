@@ -642,14 +642,12 @@ export async function getProcessPorts(pid: number): Promise<number[]> {
         if (ports.size > 0) return Array.from(ports);
       } catch { /* ss not available, try lsof */ }
 
-      const result = await $`lsof -i -P -n -p ${pid}`.nothrow().quiet().text();
+      const result = await $`lsof -Pan -p ${pid} -iTCP -sTCP:LISTEN`.nothrow().quiet().text();
       const ports = new Set<number>();
       for (const line of result.split('\n')) {
-        if (line.includes('LISTEN')) {
-          const portMatch = line.match(/:(\d+)\s+\(LISTEN\)/);
-          if (portMatch) {
-            ports.add(parseInt(portMatch[1]));
-          }
+        const portMatch = line.match(/:(\d+)\s+\(LISTEN\)/);
+        if (portMatch) {
+          ports.add(parseInt(portMatch[1]));
         }
       }
       return Array.from(ports);

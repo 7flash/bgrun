@@ -14,7 +14,8 @@
 - [ ] **Deploy rollback** — Store previous git commit hash before deploy, add one-click rollback
 
 ## 🔴 Priority: Fix
-- (none currently)
+- [x] ~~**Fix Unix no-port restart false-positive listener detection**~~ — ✅ DONE. Updated the Unix `getProcessPorts(pid)` lsof fallback to use `lsof -Pan -p <pid> -iTCP -sTCP:LISTEN` so worker processes without configured ports no longer report unrelated listeners during restart checks.
+- [ ] **Add Unix process-port regression coverage** — Add focused tests around the `getProcessPorts(pid)` fallback parsing so future refactors do not reintroduce false-positive listener detection on no-port worker processes.
 
 ## 📝 Architecture Notes
 - **Package**: `bgrun` on npm
