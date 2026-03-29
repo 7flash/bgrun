@@ -1,0 +1,5 @@
+tests/
+src/*.test.ts
+src/index_copy.ts
+examples/test-worker.js
+*.tgz

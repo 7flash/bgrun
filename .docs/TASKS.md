@@ -17,7 +17,8 @@
 - [x] ~~**Fix Unix no-port restart false-positive listener detection**~~ — ✅ DONE. Updated the Unix `getProcessPorts(pid)` lsof fallback to use `lsof -Pan -p <pid> -iTCP -sTCP:LISTEN` so worker processes without configured ports no longer report unrelated listeners during restart checks.
 - [x] ~~**Add Unix process-port regression coverage**~~ — ✅ DONE. Extracted Unix `lsof` LISTEN parsing into a dedicated helper and added focused tests covering true LISTEN sockets, broad `lsof` output with ESTABLISHED noise, and no-port worker output.
 - [x] ~~**Normalize npm publish metadata warnings**~~ — ✅ DONE. Updated `package.json` metadata via `npm pkg fix` (`bin` path + `repository.url`) and verified with `npm publish --dry-run` that publishes are warning-free.
-- [ ] **Trim published package contents further** — The package is cleanly publishing now, but `src/index_copy.ts` and other low-value files still ship in the tarball and should likely be excluded.
+- [x] ~~**Trim published package contents further**~~ — ✅ DONE. Tightened `package.json` `files` to ship only the runtime `src/` files plus required assets, which removes `src/bgrun.test.ts`, `src/index_copy.ts`, and other low-value publish artifacts from the tarball.
+- [ ] **Decide whether runtime `src/` files should keep shipping at all** — The package still intentionally includes non-test `src/` files for API/import compatibility; decide whether to preserve that contract or move consumers fully onto built `dist/` entrypoints.
 
 ## 📝 Architecture Notes
 - **Package**: `bgrun` on npm
