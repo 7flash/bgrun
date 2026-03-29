@@ -12,8 +12,16 @@
 - [x] ~~**Add built-API compatibility smoke tests**~~ — ✅ DONE. Added `tests/dist-api.test.ts` to build the package, import both `src/api.ts` and `dist/api.js`, compare the named/default export surfaces, and verify core utility/db metadata behavior matches.
 - [x] ~~**Flip `main`/`exports` to `dist/api.js` behind a compatibility release**~~ — ✅ DONE. Switched the package entrypoints from `src/api.ts` to `dist/api.js`, while still temporarily publishing the runtime `src/` subset during the migration window.
 - [x] ~~**Migrate dashboard API routes off `src/*` imports**~~ — ✅ DONE. Added `dashboard/lib/runtime.ts` as a built-artifact compatibility layer, emitted the extra `dist` runtime modules needed by the dashboard, and rewired all dashboard API routes off direct `src/*` imports.
-- [ ] **Stop publishing runtime `src/` files after dashboard migration** — The package now has built entrypoints plus dashboard compatibility through `dist/*`, so the remaining cleanup step is removing temporary runtime `src/` publishing from the package.
-- [ ] **Add dashboard route smoke coverage through the new compatibility layer** — The route migration works in the full suite, but add a focused smoke test that directly validates the `dashboard/lib/runtime.ts` layer and a couple of representative route imports.
+- [x] ~~**Stop publishing runtime `src/` files after dashboard migration**~~ — ✅ DONE. Removed the temporary runtime `src/` publish entries from `package.json`, added `dashboard/lib/runtime.ts` to the tarball, and verified via `npm pack --dry-run` that the published package is now `dist`-first.
+- [x] ~~**Add dashboard route smoke coverage through the new compatibility layer**~~ — ✅ DONE. Added publish-level coverage in `tests/package-files.test.ts` so the tarball now proves it includes `dashboard/lib/runtime.ts` plus the required `dist/*` artifacts while excluding `src/*`.
+- [x] ~~**Publish packaging hotfix for missing `dashboard/lib/runtime.ts` in 3.12.12**~~ — ✅ DONE. Published `bgrun@3.12.13`, which ships `dashboard/lib/runtime.ts`, the required `dist/*` runtime modules, and no longer publishes runtime `src/*`.
+- [x] ~~**Add installed-package smoke test for dashboard route imports**~~ — ✅ DONE. Added `tests/installed-package-routes.test.ts`, which packs the repo, installs the tarball into a temp project, and imports packaged `dashboard/lib/runtime.ts` plus representative packaged dashboard routes to prove installed-route resolution works outside the repo.
+- [ ] **Update production installs to `bgrun@3.12.13`** — Server environments should move off `3.12.12` because that tarball missed the dashboard runtime bridge.
+- [x] ~~**Add packaged dashboard route smoke coverage for a DB-backed route**~~ — ✅ DONE. Extended `tests/installed-package-routes.test.ts` to hit the packaged `dashboard/app/api/history/route.ts` with POST+GET, proving installed dashboard routes can write/read through the packaged DB runtime outside the repo.
+- [x] ~~**Publish smoke-test coverage patch release**~~ — ✅ DONE. Published `bgrun@3.12.14` with the installed-package dashboard route smoke coverage so the registry includes the new tarball/import verification work.
+- [x] ~~**Stabilize installed-package smoke test hook timeout**~~ — ✅ DONE. Raised the default timeout in `tests/installed-package-routes.test.ts` so the temp pack/install/import workflow remains stable inside the full suite, not just in isolated test runs.
+- [x] ~~**Publish hook-timeout stabilization patch release**~~ — ✅ DONE. Published `bgrun@3.12.15`, which includes the installed-package smoke-test timeout stabilization so the full suite and published release are back in sync.
+- [ ] **Update production installs to `bgrun@3.12.15`** — Server environments should move past `3.12.13/3.12.14` so deployed installs match the current stable packaged-route smoke coverage and timeout fix.
 - [ ] **Process resource alerts** — Notify when CPU/memory exceeds configurable thresholds
 - [ ] **Config hot-reload** — Watch `.config.toml` for changes and auto-restart the process
 - [ ] **Multi-node support** — Manage processes across multiple machines from one dashboard
@@ -36,8 +44,9 @@
 - **Dashboard**: Melina.js on port 3000 (file-based routing in `dashboard/app/`)
 - **Dashboard runtime bridge**: `dashboard/lib/runtime.ts` now routes dashboard backend imports through built `dist/*` artifacts instead of direct `src/*` imports.
 - **Guard**: Built into dashboard — monitors `BGR_KEEP_ALIVE=true` processes
-- **Tests**: 32 passing, 59 expect() calls — `bun test`
+- **Tests**: 59 passing, 118 expect() calls — `bun test`
 - **Build**: `bun run build` → `dist/index.js` + `dist/api.js` + `dist/server.js` + `dist/deploy.js` + `dist/deps.js` + `dist/log-rotation.js`
+- **Published package**: ships `dist/*`, `dashboard/app`, and `dashboard/lib/runtime.ts`; runtime `src/*` is no longer published.
 - **Dev**: `bun run src/index.ts --help`
 
 ## ⚠️ Security Reminders
