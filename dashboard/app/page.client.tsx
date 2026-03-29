@@ -1292,6 +1292,23 @@ export default function mount(): () => void {
         else renderEnvPanel();
     }
 
+    function updateLogExportLinks() {
+        const textBtn = $('log-export-text-btn') as HTMLAnchorElement | null;
+        const jsonBtn = $('log-export-json-btn') as HTMLAnchorElement | null;
+        const csvBtn = $('log-export-csv-btn') as HTMLAnchorElement | null;
+        const disabledHref = '#';
+        if (!drawerProcess) {
+            if (textBtn) textBtn.href = disabledHref;
+            if (jsonBtn) jsonBtn.href = disabledHref;
+            if (csvBtn) csvBtn.href = disabledHref;
+            return;
+        }
+        const base = `/api/logs/${encodeURIComponent(drawerProcess)}?tab=${drawerTab}&offset=0&download=1`;
+        if (textBtn) textBtn.href = `${base}&format=text`;
+        if (jsonBtn) jsonBtn.href = `${base}&format=json`;
+        if (csvBtn) csvBtn.href = `${base}&format=csv`;
+    }
+
     function switchLogSubtab(subtab: string, skipRefresh = false) {
         drawerTab = subtab as 'stdout' | 'stderr';
         $('log-subtabs')?.querySelectorAll('.accordion-subtab').forEach(btn => {
@@ -1305,6 +1322,7 @@ export default function mount(): () => void {
         logNeedsFullRebuild = true;
         logVirtualActive = false;
         logFilteredIndices = [];
+        updateLogExportLinks();
         if (!skipRefresh) refreshDrawerLogs();
     }
 
@@ -1354,6 +1372,7 @@ export default function mount(): () => void {
     function openDrawer(name: string) {
         drawerProcess = name;
         drawerTab = 'stdout';
+        updateLogExportLinks();
 
         // Update header
         const nameEl = $('drawer-process-name');
@@ -1501,6 +1520,7 @@ export default function mount(): () => void {
         drawer?.classList.remove('open');
         backdrop?.classList.remove('active');
         drawerProcess = null;
+        updateLogExportLinks();
         tbody?.querySelectorAll('tr.selected').forEach(r => r.classList.remove('selected'));
     }
 
@@ -2559,6 +2579,21 @@ export default function mount(): () => void {
         }
     }
 
+    function updateHistoryExportLinks() {
+        const processFilter = $('history-process-filter') as HTMLSelectElement | null;
+        const eventFilter = $('history-event-filter') as HTMLSelectElement | null;
+        const metadataFilter = $('history-metadata-filter') as HTMLInputElement | null;
+        const params = new URLSearchParams({ limit: '100', download: '1' });
+        if (processFilter?.value) params.set('name', processFilter.value);
+        if (eventFilter?.value) params.set('event', eventFilter.value);
+        if (metadataFilter?.value.trim()) params.set('metadata', metadataFilter.value.trim());
+
+        const jsonBtn = $('history-export-json-btn') as HTMLAnchorElement | null;
+        const csvBtn = $('history-export-csv-btn') as HTMLAnchorElement | null;
+        if (jsonBtn) jsonBtn.href = `/api/history?${params.toString()}&format=json`;
+        if (csvBtn) csvBtn.href = `/api/history?${params.toString()}&format=csv`;
+    }
+
     function updateHistoryFilters() {
         const processFilter = $('history-process-filter') as HTMLSelectElement;
         const eventFilter = $('history-event-filter') as HTMLSelectElement;
@@ -2827,6 +2862,7 @@ export default function mount(): () => void {
         }
 
         updateHistoryClearButton();
+        updateHistoryExportLinks();
         applyHistoryDensity();
         applyHistoryShortcutPreference();
         applyHistoryDetailsPreference();

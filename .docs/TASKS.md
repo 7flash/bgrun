@@ -2,7 +2,8 @@
 
 ## 🟢 Priority: Features
 - [x] ~~**Process dependency graph**~~ — ✅ DONE. Added `dependency` table to SQLite schema with cycle detection (DFS), topological start-order (Kahn's algorithm), and full CRUD API at `/api/dependencies`. Dashboard modal with interactive SVG DAG visualization (layered layout, hover-highlighting, running status dots), dependency list with inline remove, and recommended start order badges. 7 new tests (39 total, 68 expect() calls).
-- [ ] **Log export** — Add CSV/JSON export for History entries and process logs
+- [x] ~~**Log export**~~ — ✅ DONE. Added CSV/JSON export for History entries plus text/JSON/CSV export for process logs through the dashboard API, and wired export buttons into the History modal and log drawer.
+- [ ] **Add log export coverage** — Add focused API tests for `/api/history?format=csv` and `/api/logs/:name?format=text|csv|json` so export behavior stays stable.
 - [ ] **Process resource alerts** — Notify when CPU/memory exceeds configurable thresholds
 - [ ] **Config hot-reload** — Watch `.config.toml` for changes and auto-restart the process
 - [ ] **Multi-node support** — Manage processes across multiple machines from one dashboard

@@ -2463,6 +2463,14 @@ a.port-link:hover {
     border-bottom: 1px solid var(--border-subtle);
     background: rgba(0, 0, 0, 0.08);
     flex-shrink: 0;
+    flex-wrap: wrap;
+}
+
+.toolbar-export-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
 }
 
 .log-search {

@@ -266,6 +266,11 @@ export default function DashboardPage() {
                             <div className="drawer-log-toolbar" id="drawer-log-toolbar">
                                 <input type="text" id="log-search" className="log-search" placeholder="Filter logs..." />
                                 <span className="log-line-count" id="log-line-count"></span>
+                                <div className="toolbar-export-actions">
+                                    <a id="log-export-text-btn" className="btn btn-ghost btn-sm" href="#" target="_blank" rel="noopener">Export .log</a>
+                                    <a id="log-export-json-btn" className="btn btn-ghost btn-sm" href="#" target="_blank" rel="noopener">Export JSON</a>
+                                    <a id="log-export-csv-btn" className="btn btn-ghost btn-sm" href="#" target="_blank" rel="noopener">Export CSV</a>
+                                </div>
                                 <button id="log-autoscroll-btn" className="log-autoscroll" title="Auto-scroll: OFF">
                                     <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12l7 7 7-7" /></svg>
                                     Follow
@@ -387,6 +392,10 @@ export default function DashboardPage() {
                                 </select>
                             </label>
                             <button className="btn btn-ghost btn-sm" id="history-clear-filters-btn" title="Clear all history filters">Clear</button>
+                            <div className="toolbar-export-actions">
+                                <a id="history-export-json-btn" className="btn btn-ghost btn-sm" href="#" target="_blank" rel="noopener">Export JSON</a>
+                                <a id="history-export-csv-btn" className="btn btn-ghost btn-sm" href="#" target="_blank" rel="noopener">Export CSV</a>
+                            </div>
                         </div>
                         <div className="history-hints-bar">
                             <div className="history-hints-bar-left">
