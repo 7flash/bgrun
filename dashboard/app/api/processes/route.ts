@@ -1,7 +1,7 @@
-import { getAllProcesses, updateProcessPid } from '../../../../src/db';
-import { calculateRuntime } from '../../../../src/utils';
-import { getProcessBatchResources, reconcileProcessPids } from '../../../../src/platform';
-import { guardRestartCounts } from '../../../../src/server';
+import { getAllProcesses, updateProcessPid } from '../../../lib/runtime';
+import { calculateRuntime } from '../../../lib/runtime';
+import { getProcessBatchResources, reconcileProcessPids } from '../../../lib/runtime';
+import { guardRestartCounts } from '../../../lib/runtime';
 import { measure, createMeasure } from 'measure-fn';
 import { $ } from 'bun';
 

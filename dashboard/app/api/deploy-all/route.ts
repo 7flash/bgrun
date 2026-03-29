@@ -1,4 +1,4 @@
-import { deployAllProcesses } from '../../../../src/deploy';
+import { deployAllProcesses } from '../../../lib/runtime';
 
 export async function POST(req: Request) {
     try {

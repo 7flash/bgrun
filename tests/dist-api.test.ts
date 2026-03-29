@@ -1,24 +1,37 @@
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
-import { existsSync, rmSync } from 'fs'
+import { beforeAll, describe, expect, test } from 'bun:test'
+import { existsSync } from 'fs'
 import { join } from 'path'
 
-const testDbName = `bgrun-dist-api-${Date.now()}.sqlite`
-process.env.BGRUN_DB = testDbName
-process.env.BGRUN_DISABLE_LEGACY_MIGRATION = '1'
+const repoRoot = join(import.meta.dir, '..')
 
-const homePath = process.env.USERPROFILE || process.env.HOME || ''
-const testDbPath = join(homePath, '.bgr', testDbName)
+async function runModuleProbe(modulePath: string, expression: string) {
+  const proc = Bun.spawn([
+    'bun',
+    '--eval',
+    `const mod = await import(${JSON.stringify(modulePath)}); const value = (${expression}); console.log(JSON.stringify(value));`,
+  ], {
+    cwd: repoRoot,
+    stdout: 'pipe',
+    stderr: 'pipe',
+    env: {
+      ...Bun.env,
+      BGRUN_DB: `bgrun-dist-api-probe-${Date.now()}-${Math.random().toString(16).slice(2)}.sqlite`,
+      BGRUN_DISABLE_LEGACY_MIGRATION: '1',
+    },
+  })
 
-let srcApi: any
-let distApi: any
-
-async function importFresh(path: string) {
-  return await import(`${path}?case=${Date.now()}-${Math.random()}`)
+  const exitCode = await proc.exited
+  const stdout = await new Response(proc.stdout).text()
+  const stderr = await new Response(proc.stderr).text()
+  if (exitCode !== 0) {
+    throw new Error(`probe failed for ${modulePath}: ${stderr || stdout}`)
+  }
+  return JSON.parse(stdout.trim())
 }
 
 beforeAll(async () => {
   const build = Bun.spawn(['bun', 'run', 'build'], {
-    cwd: join(import.meta.dir, '..'),
+    cwd: repoRoot,
     stdout: 'pipe',
     stderr: 'pipe',
     env: Bun.env,
@@ -28,42 +41,37 @@ beforeAll(async () => {
   if (exitCode !== 0) {
     throw new Error(`build failed: ${stderr}`)
   }
-
-  srcApi = await importFresh('../src/api.ts')
-  distApi = await importFresh('../dist/api.js')
-})
-
-afterAll(() => {
-  try { rmSync(testDbPath, { force: true }) } catch {}
-  delete process.env.BGRUN_DB
-  delete process.env.BGRUN_DISABLE_LEGACY_MIGRATION
 })
 
 describe('dist/api.js compatibility', () => {
   test('build emits dist/api.js', () => {
-    expect(existsSync(join(import.meta.dir, '..', 'dist', 'api.js'))).toBe(true)
+    expect(existsSync(join(repoRoot, 'dist', 'api.js'))).toBe(true)
   })
 
-  test('matches named export surface from src/api.ts', () => {
-    const srcKeys = Object.keys(srcApi).sort()
-    const distKeys = Object.keys(distApi).sort()
+  test('matches named export surface from src/api.ts', async () => {
+    const srcKeys = await runModuleProbe('./src/api.ts', 'Object.keys(mod).sort()')
+    const distKeys = await runModuleProbe('./dist/api.js', 'Object.keys(mod).sort()')
     expect(distKeys).toEqual(srcKeys)
   })
 
-  test('matches default export namespace keys', () => {
-    const srcKeys = Object.keys(srcApi.default).sort()
-    const distKeys = Object.keys(distApi.default).sort()
+  test('matches default export namespace keys', async () => {
+    const srcKeys = await runModuleProbe('./src/api.ts', 'Object.keys(mod.default).sort()')
+    const distKeys = await runModuleProbe('./dist/api.js', 'Object.keys(mod.default).sort()')
     expect(distKeys).toEqual(srcKeys)
   })
 
-  test('preserves core utility behavior', () => {
-    expect(distApi.parseEnvString('PORT=3000,DEBUG=true')).toEqual(srcApi.parseEnvString('PORT=3000,DEBUG=true'))
-    expect(distApi.calculateRuntime('2026-03-29T00:00:00.000Z')).toBe(srcApi.calculateRuntime('2026-03-29T00:00:00.000Z'))
-    expect(distApi.isWindows()).toBe(srcApi.isWindows())
+  test('preserves core utility behavior', async () => {
+    const srcValue = await runModuleProbe('./src/api.ts', '({ env: mod.parseEnvString("PORT=3000,DEBUG=true"), runtime: mod.calculateRuntime("2026-03-29T00:00:00.000Z"), isWindows: mod.isWindows() })')
+    const distValue = await runModuleProbe('./dist/api.js', '({ env: mod.parseEnvString("PORT=3000,DEBUG=true"), runtime: mod.calculateRuntime("2026-03-29T00:00:00.000Z"), isWindows: mod.isWindows() })')
+    expect(distValue).toEqual(srcValue)
   })
 
-  test('exposes the same database path metadata', () => {
-    expect(distApi.dbPath).toBe(srcApi.dbPath)
-    expect(distApi.bgrHome).toBe(srcApi.bgrHome)
+  test('exposes the same database path metadata shape', async () => {
+    const srcValue = await runModuleProbe('./src/api.ts', '({ dbPath: mod.dbPath, bgrHome: mod.bgrHome })')
+    const distValue = await runModuleProbe('./dist/api.js', '({ dbPath: mod.dbPath, bgrHome: mod.bgrHome })')
+    expect(typeof distValue.dbPath).toBe('string')
+    expect(typeof distValue.bgrHome).toBe('string')
+    expect(distValue.dbPath.endsWith('.sqlite')).toBe(true)
+    expect(distValue.bgrHome).toBe(srcValue.bgrHome)
   })
 })

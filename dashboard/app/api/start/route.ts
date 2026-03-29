@@ -1,8 +1,8 @@
 /**
  * POST /api/start — Create or start a process
  */
-import { handleRun } from '../../../../src/commands/run';
-import { addHistoryEntry } from '../../../../src/db';
+import { handleRun } from '../../../lib/runtime';
+import { addHistoryEntry } from '../../../lib/runtime';
 import { measure } from 'measure-fn';
 
 export async function POST(req: Request) {

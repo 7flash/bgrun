@@ -2,7 +2,7 @@
  * GET  /api/config/:name — Read .config.toml content
  * PUT  /api/config/:name — Write .config.toml content
  */
-import { getProcess } from '../../../../../src/db';
+import { getProcess } from '../../../../lib/runtime';
 import { join } from 'path';
 import { readFile, writeFile } from 'fs/promises';
 

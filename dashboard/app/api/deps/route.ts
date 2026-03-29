@@ -4,9 +4,9 @@
  *   Body: { name: string, dependsOn: string[] }
  */
 
-import { getProcess, updateProcessEnv } from '../../../../src/db'
-import { buildDepGraph } from '../../../../src/deps'
-import { parseEnvString } from '../../../../src/utils'
+import { getProcess, updateProcessEnv } from '../../../lib/runtime'
+import { buildDepGraph } from '../../../lib/runtime'
+import { parseEnvString } from '../../../lib/runtime'
 
 export async function GET() {
     const graph = await buildDepGraph()

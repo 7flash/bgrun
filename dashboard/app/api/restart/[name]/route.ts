@@ -1,8 +1,8 @@
 /**
  * POST /api/restart/:name — Force-restart a process
  */
-import { handleRun } from '../../../../../src/commands/run';
-import { addHistoryEntry, getProcess } from '../../../../../src/db';
+import { handleRun } from '../../../../lib/runtime';
+import { addHistoryEntry, getProcess } from '../../../../lib/runtime';
 import { measure } from 'measure-fn';
 
 export async function POST(req: Request, { params }: { params: { name: string } }) {

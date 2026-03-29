@@ -23,7 +23,31 @@ export type { Process } from './db'
 export type { CommandOptions } from './types'
 
 // --- Database Operations ---
-export { db, getAllProcesses, getProcess, insertProcess, removeProcess, removeProcessByName, removeAllProcesses, retryDatabaseOperation, getDbInfo, dbPath, bgrHome } from './db'
+export {
+    db,
+    getAllProcesses,
+    getProcess,
+    insertProcess,
+    removeProcess,
+    removeProcessByName,
+    removeAllProcesses,
+    updateProcessPid,
+    updateProcessEnv,
+    getAllTemplates,
+    saveTemplate,
+    deleteTemplate,
+    getProcessHistory,
+    getRecentHistory,
+    addHistoryEntry,
+    getDependencyGraph,
+    addDependency,
+    removeDependency,
+    getStartOrder,
+    retryDatabaseOperation,
+    getDbInfo,
+    dbPath,
+    bgrHome,
+} from './db'
 
 // --- Process Operations ---
 export {
@@ -40,7 +64,8 @@ export {
     getHomeDir,
     isWindows,
     getProcessBatchResources,
-    getProcessMemory
+    getProcessMemory,
+    reconcileProcessPids,
 } from './platform'
 
 // --- High-Level Commands ---
@@ -50,14 +75,42 @@ export { handleRun } from './commands/run'
 export { getVersion, calculateRuntime, parseEnvString, validateDirectory } from './utils'
 
 // --- Default Export (namespace style) ---
-import { getAllProcesses, getProcess, insertProcess, removeProcess, removeProcessByName, removeAllProcesses, retryDatabaseOperation, getDbInfo, dbPath, bgrHome } from './db'
-import { isProcessRunning, terminateProcess, readFileTail, getProcessPorts, findChildPid, findPidByPort, getShellCommand, killProcessOnPort, waitForPortFree, ensureDir, getHomeDir, isWindows, getProcessBatchResources, getProcessMemory } from './platform'
+import {
+    db,
+    getAllProcesses,
+    getProcess,
+    insertProcess,
+    removeProcess,
+    removeProcessByName,
+    removeAllProcesses,
+    updateProcessPid,
+    updateProcessEnv,
+    getAllTemplates,
+    saveTemplate,
+    deleteTemplate,
+    getProcessHistory,
+    getRecentHistory,
+    addHistoryEntry,
+    getDependencyGraph,
+    addDependency,
+    removeDependency,
+    getStartOrder,
+    retryDatabaseOperation,
+    getDbInfo,
+    dbPath,
+    bgrHome,
+} from './db'
+import { isProcessRunning, terminateProcess, readFileTail, getProcessPorts, findChildPid, findPidByPort, getShellCommand, killProcessOnPort, waitForPortFree, ensureDir, getHomeDir, isWindows, getProcessBatchResources, getProcessMemory, reconcileProcessPids } from './platform'
 import { handleRun } from './commands/run'
 import { getVersion, calculateRuntime, parseEnvString, validateDirectory } from './utils'
 
 export default {
-    getAllProcesses, getProcess, insertProcess, removeProcess, removeProcessByName, removeAllProcesses, retryDatabaseOperation, getDbInfo, dbPath, bgrHome,
-    isProcessRunning, terminateProcess, readFileTail, getProcessPorts, findChildPid, findPidByPort, getShellCommand, killProcessOnPort, waitForPortFree, ensureDir, getHomeDir, isWindows, getProcessBatchResources, getProcessMemory,
+    db, getAllProcesses, getProcess, insertProcess, removeProcess, removeProcessByName, removeAllProcesses,
+    updateProcessPid, updateProcessEnv, getAllTemplates, saveTemplate, deleteTemplate,
+    getProcessHistory, getRecentHistory, addHistoryEntry,
+    getDependencyGraph, addDependency, removeDependency, getStartOrder,
+    retryDatabaseOperation, getDbInfo, dbPath, bgrHome,
+    isProcessRunning, terminateProcess, readFileTail, getProcessPorts, findChildPid, findPidByPort, getShellCommand, killProcessOnPort, waitForPortFree, ensureDir, getHomeDir, isWindows, getProcessBatchResources, getProcessMemory, reconcileProcessPids,
     handleRun,
     getVersion, calculateRuntime, parseEnvString, validateDirectory,
 }

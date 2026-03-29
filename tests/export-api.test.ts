@@ -22,9 +22,21 @@ function cleanupHistoryEntries(processName: string) {
 
 beforeAll(async () => {
   mkdirSync(tempDir, { recursive: true })
+  const build = Bun.spawn(['bun', 'run', 'build'], {
+    cwd: join(import.meta.dir, '..'),
+    stdout: 'pipe',
+    stderr: 'pipe',
+    env: Bun.env,
+  })
+  const exitCode = await build.exited
+  const stderr = await new Response(build.stderr).text()
+  if (exitCode !== 0) {
+    throw new Error(`build failed: ${stderr}`)
+  }
+
   dbMod = await import('../src/db')
-  historyRoute = await import('../dashboard/app/api/history/route')
-  logsRoute = await import('../dashboard/app/api/logs/[name]/route')
+  historyRoute = await import(`../dashboard/app/api/history/route?case=${Date.now()}-${Math.random()}`)
+  logsRoute = await import(`../dashboard/app/api/logs/[name]/route?case=${Date.now()}-${Math.random()}`)
 })
 
 afterAll(() => {

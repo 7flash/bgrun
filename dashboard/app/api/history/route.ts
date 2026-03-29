@@ -1,4 +1,4 @@
-import { getProcessHistory, getRecentHistory, addHistoryEntry } from '../../../../src/db';
+import { getProcessHistory, getRecentHistory, addHistoryEntry } from '../../../lib/runtime';
 
 function stringifyMetadata(metadata: unknown) {
     try {

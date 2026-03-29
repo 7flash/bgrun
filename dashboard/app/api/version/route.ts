@@ -1,7 +1,7 @@
 /**
  * GET /api/version — Return BGR version
  */
-import { getVersion } from '../../../../src/utils';
+import { getVersion } from '../../../lib/runtime';
 import { measure } from 'measure-fn';
 
 export async function GET() {

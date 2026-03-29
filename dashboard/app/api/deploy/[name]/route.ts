@@ -4,7 +4,7 @@
  * Only works if the process directory is a git repository.
  * Steps: git pull → bun install → force restart
  */
-import { deployProcess } from '../../../../../src/deploy';
+import { deployProcess } from '../../../../lib/runtime';
 
 export async function POST(req: Request, { params }: { params: { name: string } }) {
     const name = decodeURIComponent(params.name);

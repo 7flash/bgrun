@@ -1,4 +1,4 @@
-import { getAllTemplates, saveTemplate, deleteTemplate } from '../../../../src/db';
+import { getAllTemplates, saveTemplate, deleteTemplate } from '../../../lib/runtime';
 
 export async function GET() {
     const templates = getAllTemplates();

@@ -1,4 +1,4 @@
-import { getDependencyGraph, addDependency, removeDependency, getStartOrder, getAllProcesses } from "../../../../src/db";
+import { getDependencyGraph, addDependency, removeDependency, getStartOrder, getAllProcesses } from '../../../lib/runtime';
 
 /** GET /api/dependencies — full dependency graph + start order */
 export function GET() {

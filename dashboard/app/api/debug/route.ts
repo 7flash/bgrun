@@ -3,7 +3,7 @@
  * 
  * Returns DB path, BGR home dir, platform info for diagnostics.
  */
-import { getDbInfo } from '../../../../src/db';
+import { getDbInfo } from '../../../lib/runtime';
 import { measureSync } from 'measure-fn';
 
 export async function GET() {

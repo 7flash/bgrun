@@ -9,7 +9,7 @@
  * Returns JSON by default:
  *   { text, size, mtime, filePath }
  */
-import { getProcess } from '../../../../../src/db';
+import { getProcess } from '../../../../lib/runtime';
 import { stat, open } from 'fs/promises';
 
 interface FileInfo {

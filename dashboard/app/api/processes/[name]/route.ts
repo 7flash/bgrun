@@ -1,8 +1,8 @@
 /**
  * DELETE /api/processes/:name — Stop and remove a process
  */
-import { getProcess, removeProcessByName } from '../../../../../src/db';
-import { isProcessRunning, terminateProcess } from '../../../../../src/platform';
+import { getProcess, removeProcessByName } from '../../../../lib/runtime';
+import { isProcessRunning, terminateProcess } from '../../../../lib/runtime';
 import { measure } from 'measure-fn';
 
 export async function DELETE(req: Request, { params }: { params: { name: string } }) {

@@ -3,8 +3,8 @@
  * GET  /api/logs/rotate — Get log file sizes
  */
 
-import { getAllProcesses } from '../../../../../src/db'
-import { rotateAllLogs } from '../../../../../src/log-rotation'
+import { getAllProcesses } from '../../../../lib/runtime'
+import { rotateAllLogs } from '../../../../lib/runtime'
 import { existsSync, statSync } from 'fs'
 
 export function POST() {

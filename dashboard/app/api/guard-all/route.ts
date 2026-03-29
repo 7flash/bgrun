@@ -5,7 +5,7 @@
  * When enabled=true, sets BGR_KEEP_ALIVE=true for ALL processes (except bgr-dashboard).
  * When enabled=false, removes BGR_KEEP_ALIVE from ALL processes.
  */
-import { getAllProcesses, getProcess, updateProcessEnv } from '../../../../src/db';
+import { getAllProcesses, getProcess, updateProcessEnv } from '../../../lib/runtime';
 
 const SKIP = new Set(['bgr-dashboard']);
 

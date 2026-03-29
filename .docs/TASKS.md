@@ -11,8 +11,9 @@
 - [x] ~~**Build `dist/api.js` alongside the CLI**~~ — ✅ DONE. Extended `src/build.ts` to emit both `dist/index.js` and `dist/api.js` while leaving package exports unchanged for compatibility.
 - [x] ~~**Add built-API compatibility smoke tests**~~ — ✅ DONE. Added `tests/dist-api.test.ts` to build the package, import both `src/api.ts` and `dist/api.js`, compare the named/default export surfaces, and verify core utility/db metadata behavior matches.
 - [x] ~~**Flip `main`/`exports` to `dist/api.js` behind a compatibility release**~~ — ✅ DONE. Switched the package entrypoints from `src/api.ts` to `dist/api.js`, while still temporarily publishing the runtime `src/` subset during the migration window.
-- [ ] **Migrate dashboard API routes off `src/*` imports** — Published dashboard route files still import `src/db`, `src/platform`, `src/server`, `src/deploy`, and related modules. Retarget them to a built/internal compatibility layer before removing published `src/`.
-- [ ] **Stop publishing runtime `src/` files after dashboard migration** — Once dashboard runtime imports no longer depend on `src/*`, remove temporary runtime `src/` publishing from the package.
+- [x] ~~**Migrate dashboard API routes off `src/*` imports**~~ — ✅ DONE. Added `dashboard/lib/runtime.ts` as a built-artifact compatibility layer, emitted the extra `dist` runtime modules needed by the dashboard, and rewired all dashboard API routes off direct `src/*` imports.
+- [ ] **Stop publishing runtime `src/` files after dashboard migration** — The package now has built entrypoints plus dashboard compatibility through `dist/*`, so the remaining cleanup step is removing temporary runtime `src/` publishing from the package.
+- [ ] **Add dashboard route smoke coverage through the new compatibility layer** — The route migration works in the full suite, but add a focused smoke test that directly validates the `dashboard/lib/runtime.ts` layer and a couple of representative route imports.
 - [ ] **Process resource alerts** — Notify when CPU/memory exceeds configurable thresholds
 - [ ] **Config hot-reload** — Watch `.config.toml` for changes and auto-restart the process
 - [ ] **Multi-node support** — Manage processes across multiple machines from one dashboard
@@ -33,9 +34,10 @@
 - **Package**: `bgrun` on npm
 - **DB**: `~/.bgr/bgrun.sqlite` (sqlite-zod-orm)
 - **Dashboard**: Melina.js on port 3000 (file-based routing in `dashboard/app/`)
+- **Dashboard runtime bridge**: `dashboard/lib/runtime.ts` now routes dashboard backend imports through built `dist/*` artifacts instead of direct `src/*` imports.
 - **Guard**: Built into dashboard — monitors `BGR_KEEP_ALIVE=true` processes
 - **Tests**: 32 passing, 59 expect() calls — `bun test`
-- **Build**: `bun run build` → `dist/index.js` + `dist/api.js`
+- **Build**: `bun run build` → `dist/index.js` + `dist/api.js` + `dist/server.js` + `dist/deploy.js` + `dist/deps.js` + `dist/log-rotation.js`
 - **Dev**: `bun run src/index.ts --help`
 
 ## ⚠️ Security Reminders

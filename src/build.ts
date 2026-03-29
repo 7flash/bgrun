@@ -1,6 +1,13 @@
 console.log("Starting build process for bgrun...");
 
-const entrypoints = ['./src/index.ts', './src/api.ts'];
+const entrypoints = [
+  './src/index.ts',
+  './src/api.ts',
+  './src/server.ts',
+  './src/deploy.ts',
+  './src/deps.ts',
+  './src/log-rotation.ts',
+];
 const result = await Bun.build({
   entrypoints,
   outdir: './dist',
