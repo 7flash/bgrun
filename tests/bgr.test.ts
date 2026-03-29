@@ -27,7 +27,8 @@ const runBgr = async (args: string[]) => {
             stderr: "pipe",
             env: {
                 ...Bun.env,
-                BGRUN_DB: testDbName // Use test database
+                BGRUN_DB: testDbName, // Use test database
+                BGRUN_DISABLE_LEGACY_MIGRATION: '1'
             }
         }
     );

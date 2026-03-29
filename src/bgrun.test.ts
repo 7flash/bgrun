@@ -15,6 +15,7 @@ import { mkdirSync, rmSync } from 'fs'
 
 // Use a test-specific database to avoid polluting real data
 process.env.BGRUN_DB = `bgrun-test-${Date.now()}.sqlite`
+process.env.BGRUN_DISABLE_LEGACY_MIGRATION = '1'
 import { addDependency, removeDependency, getDependencyGraph, getDependencies, getDependents, getStartOrder, removeAllDependencies } from './db'
 
 // ─── parseEnvString ─────────────────────────────────────

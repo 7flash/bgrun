@@ -1,11 +1,11 @@
 {
   "name": "bgrun",
-  "version": "3.12.5",
+  "version": "3.12.11",
   "description": "bgrun — A lightweight process manager for Bun",
   "type": "module",
-  "main": "./src/api.ts",
+  "main": "./dist/api.js",
   "exports": {
-    ".": "./src/api.ts"
+    ".": "./dist/api.js"
   },
   "bin": {
     "bgrun": "dist/index.js"

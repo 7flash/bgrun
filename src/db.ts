@@ -65,9 +65,14 @@ const dbFilename = process.env.BGRUN_DB ?? "bgrun.sqlite";
 export const dbPath = join(bgrDir, dbFilename);
 export const bgrHome = bgrDir;
 
+function shouldAutoMigrateLegacyDb() {
+    const raw = (process.env.BGRUN_DISABLE_LEGACY_MIGRATION || '').trim().toLowerCase();
+    return !(raw === '1' || raw === 'true' || raw === 'yes');
+}
+
 // Auto-migration: if new DB doesn't exist but old one does, copy it over
 const legacyDbPath = join(bgrDir, "bgr_v2.sqlite");
-if (!existsSync(dbPath) && existsSync(legacyDbPath)) {
+if (shouldAutoMigrateLegacyDb() && !existsSync(dbPath) && existsSync(legacyDbPath)) {
     try {
         copyFileSync(legacyDbPath, dbPath);
         console.log(`[bgrun] Migrated database: ${legacyDbPath} → ${dbPath}`);

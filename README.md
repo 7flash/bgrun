@@ -409,6 +409,9 @@ If no `--config` is specified, bgrun looks for `.config.toml` in the working dir
 
 bgrun exposes its internals as importable TypeScript functions:
 
+> **Packaging note:** the CLI ships from `dist/index.js`, and the Bun programmatic API now resolves through the built `dist/api.js` artifact.
+> The runtime `src/` subset is still temporarily published for compatibility during the migration window, but package consumers should treat `dist/api.js` as the canonical API entry.
+
 ```bash
 bun add bgrun
 ```

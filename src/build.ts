@@ -1,9 +1,8 @@
-import { EOL } from 'os';
-
 console.log("Starting build process for bgrun...");
 
+const entrypoints = ['./src/index.ts', './src/api.ts'];
 const result = await Bun.build({
-  entrypoints: ['./src/index.ts'],
+  entrypoints,
   outdir: './dist',
   target: 'bun',
   format: 'esm',
@@ -21,6 +20,5 @@ if (!result.success) {
   process.exit(1);
 }
 
-const outFile = result.outputs[0].path;
-
-console.log(`Build successful! Executable created at: ${outFile}`);
+const builtFiles = result.outputs.map((output) => output.path.split(/[\\/]/).pop()).filter(Boolean);
+console.log(`Build successful! Artifacts: ${builtFiles.join(', ')}`);
