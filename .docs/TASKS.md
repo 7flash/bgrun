@@ -15,7 +15,8 @@
 
 ## 🔴 Priority: Fix
 - [x] ~~**Fix Unix no-port restart false-positive listener detection**~~ — ✅ DONE. Updated the Unix `getProcessPorts(pid)` lsof fallback to use `lsof -Pan -p <pid> -iTCP -sTCP:LISTEN` so worker processes without configured ports no longer report unrelated listeners during restart checks.
-- [ ] **Add Unix process-port regression coverage** — Add focused tests around the `getProcessPorts(pid)` fallback parsing so future refactors do not reintroduce false-positive listener detection on no-port worker processes.
+- [x] ~~**Add Unix process-port regression coverage**~~ — ✅ DONE. Extracted Unix `lsof` LISTEN parsing into a dedicated helper and added focused tests covering true LISTEN sockets, broad `lsof` output with ESTABLISHED noise, and no-port worker output.
+- [ ] **Normalize npm publish metadata warnings** — `npm publish` still auto-corrects `repository.url` and `bin` metadata; clean up `package.json` so publishes are warning-free.
 
 ## 📝 Architecture Notes
 - **Package**: `bgrun` on npm

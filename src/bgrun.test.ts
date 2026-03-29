@@ -10,7 +10,7 @@ import { describe, expect, test } from 'bun:test'
 import { parseEnvString, calculateRuntime } from './utils'
 import { stripAnsi, truncateString, truncatePath } from './table'
 import { detectPackageManager, formatDeployToolError } from './deploy'
-import { isProcessRunning } from './platform'
+import { isProcessRunning, parseUnixListeningPorts } from './platform'
 import { mkdirSync, rmSync } from 'fs'
 
 // Use a test-specific database to avoid polluting real data
@@ -138,6 +138,39 @@ describe('isProcessRunning', () => {
     test('returns false for negative PID', async () => {
         const alive = await isProcessRunning(-1)
         expect(alive).toBe(false)
+    })
+})
+
+describe('parseUnixListeningPorts', () => {
+    test('extracts only LISTEN ports from lsof output', () => {
+        const output = [
+            'COMMAND   PID USER   FD   TYPE DEVICE SIZE/OFF NODE NAME',
+            'bun     12345 root   21u  IPv4 123456      0t0  TCP *:3400 (LISTEN)',
+            'bun     12345 root   22u  IPv4 123457      0t0  TCP 127.0.0.1:9222 (LISTEN)',
+        ].join('\n')
+
+        expect(parseUnixListeningPorts(output)).toEqual([3400, 9222])
+    })
+
+    test('ignores non-LISTEN sockets from broad lsof output', () => {
+        const output = [
+            'COMMAND   PID USER   FD   TYPE DEVICE SIZE/OFF NODE NAME',
+            'bun     12345 root   18u  IPv4 111111      0t0  TCP 127.0.0.1:49440->127.0.0.1:3000 (ESTABLISHED)',
+            'bun     12345 root   19u  IPv4 111112      0t0  TCP 127.0.0.1:49441->127.0.0.1:3737 (ESTABLISHED)',
+            'bun     12345 root   20u  IPv4 111113      0t0  TCP *:3400 (LISTEN)',
+        ].join('\n')
+
+        expect(parseUnixListeningPorts(output)).toEqual([3400])
+    })
+
+    test('returns empty array for no-port worker output', () => {
+        const output = [
+            'COMMAND   PID USER   FD   TYPE DEVICE SIZE/OFF NODE NAME',
+            'bun     12345 root   18u  unix 0xffff      0t0      /tmp/bun.sock',
+            'bun     12345 root   19u  IPv4 111111      0t0  TCP 127.0.0.1:49440->127.0.0.1:3000 (ESTABLISHED)',
+        ].join('\n')
+
+        expect(parseUnixListeningPorts(output)).toEqual([])
     })
 })
 

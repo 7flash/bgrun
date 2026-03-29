@@ -609,6 +609,20 @@ export async function getProcessBatchResources(pids: number[]): Promise<Map<numb
 }
 
 /**
+ * Parse Unix lsof LISTEN output and return only true listening TCP ports.
+ */
+export function parseUnixListeningPorts(output: string): number[] {
+  const ports = new Set<number>();
+  for (const line of output.split('\n')) {
+    const portMatch = line.match(/:(\d+)\s+\(LISTEN\)/);
+    if (portMatch) {
+      ports.add(parseInt(portMatch[1]));
+    }
+  }
+  return Array.from(ports);
+}
+
+/**
  * Get the TCP ports a process is currently listening on by querying the OS.
  * Returns an array of port numbers (empty if none or process not found).
  */
@@ -643,14 +657,7 @@ export async function getProcessPorts(pid: number): Promise<number[]> {
       } catch { /* ss not available, try lsof */ }
 
       const result = await $`lsof -Pan -p ${pid} -iTCP -sTCP:LISTEN`.nothrow().quiet().text();
-      const ports = new Set<number>();
-      for (const line of result.split('\n')) {
-        const portMatch = line.match(/:(\d+)\s+\(LISTEN\)/);
-        if (portMatch) {
-          ports.add(parseInt(portMatch[1]));
-        }
-      }
-      return Array.from(ports);
+      return parseUnixListeningPorts(result);
     }
   } catch {
     return [];
