@@ -50,7 +50,7 @@ export default function DashboardPage() {
             {/* Guard Activity Feed */}
             <div className="guard-activity" id="guard-activity">
                 <div className="guard-activity-header">
-                    <span className="guard-activity-title">🛡️ Guard Activity</span>
+                    <span className="guard-activity-title">🛡️ Watcher Activity</span>
                     <span className="guard-activity-empty" id="guard-activity-empty">No recent activity</span>
                 </div>
                 <div className="guard-activity-list" id="guard-activity-list"></div>
@@ -122,10 +122,6 @@ export default function DashboardPage() {
                             </svg>
                         </button>
                     </div>
-                    <span className="guard-sentinel-pill" id="guard-sentinel-pill" title="Standalone guard process status">
-                        <span className="guard-sentinel-dot" id="guard-sentinel-dot" />
-                        <span id="guard-sentinel-label">Guard: –</span>
-                    </span>
                     <button className="btn btn-ghost btn-icon" id="theme-toggle-btn" title="Toggle light/dark theme">
                         <span id="theme-toggle-icon" style={{ fontSize: '0.85rem' }}>🌙</span>
                     </button>

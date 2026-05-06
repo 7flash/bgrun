@@ -7,16 +7,32 @@
  * Run: bun test src/bgrun.test.ts
  */
 import { describe, expect, test } from 'bun:test'
-import { parseEnvString, calculateRuntime } from './utils'
+import { parseEnvString, parseCommandEnv, getDeclaredPort, calculateRuntime, buildManagedProcessEnv } from './utils'
+import { parseConfigFile, loadConfigEnv } from './config'
+import { buildDateProcessName, joinCommandArgs } from './cli-helpers'
 import { stripAnsi, truncateString, truncatePath } from './table'
 import { detectPackageManager, formatDeployToolError } from './deploy'
-import { isProcessRunning, parseUnixListeningPorts } from './platform'
+import { isProcessRunning, parseUnixListeningPorts, terminateProcess, waitForPortFree } from './platform'
 import { mkdirSync, rmSync } from 'fs'
 
 // Use a test-specific database to avoid polluting real data
 process.env.BGRUN_DB = `bgrun-test-${Date.now()}.sqlite`
 process.env.BGRUN_DISABLE_LEGACY_MIGRATION = '1'
-import { addDependency, removeDependency, getDependencyGraph, getDependencies, getDependents, getStartOrder, removeAllDependencies } from './db'
+
+const { handleRun, resolveInternalBgrunCommand } = await import('./commands/run')
+const { parseEnvitArgs, renderEnvitOutput } = await import('./commands/envit')
+const { parseInlineArgs } = await import('./commands/inline')
+const {
+    getProcess,
+    removeProcessByName,
+    addDependency,
+    removeDependency,
+    getDependencyGraph,
+    getDependencies,
+    getDependents,
+    getStartOrder,
+    removeAllDependencies,
+} = await import('./db')
 
 // ─── parseEnvString ─────────────────────────────────────
 
@@ -43,6 +59,224 @@ describe('parseEnvString', () => {
         expect(result.GOOD).toBe('yes')
         expect(result.ALSO_GOOD).toBe('ok')
         expect(result.BAD).toBeUndefined()
+    })
+})
+
+describe('parseCommandEnv / getDeclaredPort', () => {
+    test('parses Windows inline set prefixes', () => {
+        expect(parseCommandEnv('set BUN_PORT=3105&& set DEBUG=true && bun run server.ts')).toEqual({
+            BUN_PORT: '3105',
+            DEBUG: 'true',
+        })
+    })
+
+    test('parses Unix-style env prefixes', () => {
+        expect(parseCommandEnv('PORT=4321 HOST=127.0.0.1 bun run server.ts')).toEqual({
+            PORT: '4321',
+            HOST: '127.0.0.1',
+        })
+    })
+
+    test('prefers explicit process env over inline command env for declared port', () => {
+        expect(getDeclaredPort({ PORT: '9999' }, 'set BUN_PORT=3105&& bun run server.ts')).toBe(9999)
+    })
+
+    test('detects declared port from inline command env', () => {
+        expect(getDeclaredPort({}, 'set BUN_PORT=3105&& bun run server.ts')).toBe(3105)
+    })
+})
+
+describe('buildManagedProcessEnv', () => {
+    test('strips bgrun internal env leakage but preserves explicit process env', () => {
+        const env = buildManagedProcessEnv(
+            {
+                PATH: '/bin',
+                HOME: '/tmp/home',
+                BUN_PORT: '3000',
+                BGR_STDOUT: '/tmp/out.log',
+                BGR_STDERR: '/tmp/err.log',
+            },
+            {
+                PORT: '4310',
+                CUSTOM_FLAG: 'true',
+            },
+        )
+
+        expect(env.PATH).toBe('/bin')
+        expect(env.HOME).toBe('/tmp/home')
+        expect(env.PORT).toBe('4310')
+        expect(env.CUSTOM_FLAG).toBe('true')
+        expect(env.BUN_PORT).toBeUndefined()
+        expect(env.BGR_STDOUT).toBeUndefined()
+        expect(env.BGR_STDERR).toBeUndefined()
+    })
+})
+
+describe('config env loading', () => {
+    test('loads and flattens nested config sections', async () => {
+        const dir = `${process.cwd()}/tmp-config-load-${Date.now()}`
+        mkdirSync(dir, { recursive: true })
+
+        try {
+            await Bun.write(`${dir}/.config.toml`, [
+                '[server]',
+                'port = 3000',
+                'host = "127.0.0.1"',
+                '',
+                '[wallets]',
+                '0 = "abc"',
+            ].join('\n'))
+
+            const parsed = await parseConfigFile(`${dir}/.config.toml`)
+            expect(parsed).toEqual({
+                SERVER_PORT: '3000',
+                SERVER_HOST: '127.0.0.1',
+                WALLETS_0: 'abc',
+            })
+
+            const loaded = await loadConfigEnv(dir)
+            expect(loaded.exists).toBe(true)
+            expect(loaded.configEnv.SERVER_PORT).toBe('3000')
+            expect(loaded.configEnv.SERVER_HOST).toBe('127.0.0.1')
+        } finally {
+            rmSync(dir, { recursive: true, force: true })
+        }
+    })
+
+    test('returns empty env when config file is missing', async () => {
+        const dir = `${process.cwd()}/tmp-config-missing-${Date.now()}`
+        mkdirSync(dir, { recursive: true })
+
+        try {
+            const loaded = await loadConfigEnv(dir)
+            expect(loaded.exists).toBe(false)
+            expect(loaded.configEnv).toEqual({})
+        } finally {
+            rmSync(dir, { recursive: true, force: true })
+        }
+    })
+})
+
+describe('parseEnvitArgs', () => {
+    test('parses positional config path', () => {
+        expect(parseEnvitArgs([
+            '.dev.toml',
+        ])).toEqual({
+            configPath: '.dev.toml',
+            directory: undefined,
+            shell: undefined,
+            help: false,
+        })
+    })
+
+    test('parses explicit shell and directory options', () => {
+        expect(parseEnvitArgs([
+            '--directory=apps/api',
+            '--shell=json',
+            '--config', '.env.toml',
+        ])).toEqual({
+            directory: 'apps/api',
+            configPath: '.env.toml',
+            shell: 'json',
+            help: false,
+        })
+    })
+})
+
+describe('CLI --env mode', () => {
+    test('prints PowerShell export lines from config', async () => {
+        const dir = `${process.cwd()}/tmp-cli-env-${Date.now()}`
+        mkdirSync(dir, { recursive: true })
+
+        try {
+            await Bun.write(`${dir}/.config.toml`, [
+                '[server]',
+                'port = 3000',
+                'name = "demo"',
+            ].join('\n'))
+
+            const proc = Bun.spawn(
+                ['bun', 'run', 'src/index.ts', '--env', '--directory', dir],
+                {
+                    cwd: process.cwd(),
+                    stdout: 'pipe',
+                    stderr: 'pipe',
+                    env: Bun.env,
+                }
+            )
+
+            const stdout = await new Response(proc.stdout).text()
+            const stderr = await new Response(proc.stderr).text()
+            const exitCode = await proc.exited
+
+            expect(exitCode).toBe(0)
+            expect(stderr).toBe('')
+            expect(stdout).toContain("$env:SERVER_PORT='3000'")
+            expect(stdout).toContain("$env:SERVER_NAME='demo'")
+        } finally {
+            rmSync(dir, { recursive: true, force: true })
+        }
+    })
+})
+
+describe('parseInlineArgs', () => {
+    test('parses options before a -- command separator', () => {
+        expect(parseInlineArgs([
+            '--directory', 'apps/api',
+            '--config=.dev.toml',
+            '--',
+            'bun', 'run', 'dev', '--watch',
+        ])).toEqual({
+            directory: 'apps/api',
+            configPath: '.dev.toml',
+            commandArgs: ['bun', 'run', 'dev', '--watch'],
+            help: false,
+        })
+    })
+})
+
+describe('renderEnvitOutput', () => {
+    test('renders PowerShell env assignments', () => {
+        expect(renderEnvitOutput({ SERVER_PORT: '3000', NAME: "o'hare" }, 'powershell')).toBe([
+            "$env:SERVER_PORT='3000'",
+            "$env:NAME='o''hare'",
+        ].join('\n'))
+    })
+
+    test('renders POSIX export statements', () => {
+        expect(renderEnvitOutput({ SERVER_PORT: '3000' }, 'sh')).toBe("export SERVER_PORT='3000'")
+    })
+})
+
+describe('cli helpers', () => {
+    test('builds date-based process names', () => {
+        expect(buildDateProcessName(new Date(2026, 3, 5, 12, 0, 0))).toBe('april-fifth')
+    })
+
+    test('quotes command args for shell reconstruction', () => {
+        expect(joinCommandArgs(['bun', 'run', 'my script.ts'])).toContain('my')
+        expect(joinCommandArgs(['bun', 'run', 'my script.ts'])).not.toBe('bun run my script.ts')
+    })
+})
+
+describe('resolveInternalBgrunCommand', () => {
+    test('rewrites internal dashboard command to current runtime entry', () => {
+        const resolved = resolveInternalBgrunCommand('bgrun --_serve')
+        expect(resolved).toContain('bun run ')
+        expect(resolved).toContain('--_serve')
+        expect(resolved).not.toBe('bgrun --_serve')
+    })
+
+    test('rewrites internal watcher command to current runtime entry', () => {
+        const resolved = resolveInternalBgrunCommand('bgrun --_watch-process "my-app"')
+        expect(resolved).toContain('bun run ')
+        expect(resolved).toContain('--_watch-process')
+        expect(resolved).toContain('my-app')
+        expect(resolved).not.toBe('bgrun --_watch-process "my-app"')
+    })
+
+    test('leaves normal commands unchanged', () => {
+        expect(resolveInternalBgrunCommand('bun run server.ts')).toBe('bun run server.ts')
     })
 })
 
@@ -173,6 +407,144 @@ describe('parseUnixListeningPorts', () => {
 
         expect(parseUnixListeningPorts(output)).toEqual([])
     })
+})
+
+describe('handleRun port safety', () => {
+    test('does not auto-enable guard for new processes', async () => {
+        const dir = `${process.cwd()}/tmp-no-guard-default-${Date.now()}`
+        const scriptPath = `${dir}/worker.ts`
+        const name = `no-guard-default-${Date.now()}`
+
+        mkdirSync(dir, { recursive: true })
+        await Bun.write(scriptPath, 'setInterval(() => {}, 1000);\n')
+
+        try {
+            await handleRun({
+                action: 'run',
+                name,
+                directory: dir,
+                command: `bun run ${scriptPath}`,
+                remoteName: '',
+            })
+
+            const proc = getProcess(name)
+            expect(proc).toBeDefined()
+            const env = proc?.env ?? ''
+            expect(env).not.toContain('BGR_KEEP_ALIVE=true')
+        } finally {
+            const proc = getProcess(name)
+            if (proc) {
+                try {
+                    await terminateProcess(proc.pid, true)
+                } catch { }
+                removeProcessByName(name)
+            }
+            rmSync(dir, { recursive: true, force: true })
+        }
+    }, 15000)
+
+    test('refuses to start a second managed process on the same explicit PORT without force', async () => {
+        const dir = `${process.cwd()}/tmp-port-guard-${Date.now()}`
+        const scriptPath = `${dir}/serve-port.ts`
+        const nameA = `port-guard-a-${Date.now()}`
+        const nameB = `port-guard-b-${Date.now()}`
+        const probe = Bun.serve({
+            port: 0,
+            hostname: '127.0.0.1',
+            fetch() { return new Response('ok') },
+        })
+        const port = probe.port
+        probe.stop(true)
+
+        mkdirSync(dir, { recursive: true })
+        await Bun.write(scriptPath, [
+            'const port = Number(process.env.PORT);',
+            'Bun.serve({ port, hostname: "127.0.0.1", fetch() { return new Response("ok"); } });',
+            'setInterval(() => {}, 1000);',
+        ].join('\n'))
+
+        try {
+            await handleRun({
+                action: 'run',
+                name: nameA,
+                directory: dir,
+                command: `bun run ${scriptPath}`,
+                env: { PORT: String(port), BGR_KEEP_ALIVE: 'false' },
+                remoteName: '',
+            })
+
+            await Bun.sleep(800)
+
+            await expect(handleRun({
+                action: 'run',
+                name: nameB,
+                directory: dir,
+                command: `bun run ${scriptPath}`,
+                env: { PORT: String(port), BGR_KEEP_ALIVE: 'false' },
+                remoteName: '',
+            })).rejects.toThrow(`Port ${port} is already in use`)
+        } finally {
+            for (const name of [nameA, nameB]) {
+                const proc = getProcess(name)
+                if (proc) {
+                    try {
+                        await terminateProcess(proc.pid, true)
+                    } catch { }
+                    removeProcessByName(name)
+                }
+            }
+            await waitForPortFree(port, 5000)
+            rmSync(dir, { recursive: true, force: true })
+        }
+    }, 20000)
+})
+
+describe('CLI implicit command mode', () => {
+    test('treats multi-positional args as a managed command without requiring literal --', async () => {
+        const dir = `${process.cwd()}/tmp-cli-implicit-${Date.now()}`
+        const scriptPath = `${dir}/worker.ts`
+
+        mkdirSync(dir, { recursive: true })
+        await Bun.write(scriptPath, 'setInterval(() => {}, 1000);\n')
+
+        let launchedName = ''
+
+        try {
+            const proc = Bun.spawn(
+                ['bun', 'run', 'src/index.ts', '--directory', dir, 'bun', 'run', scriptPath],
+                {
+                    cwd: process.cwd(),
+                    stdout: 'pipe',
+                    stderr: 'pipe',
+                    env: Bun.env,
+                }
+            )
+
+            const stdout = await new Response(proc.stdout).text()
+            const stderr = await new Response(proc.stderr).text()
+            const exitCode = await proc.exited
+
+            expect(exitCode).toBe(0)
+            expect(stderr).toBe('')
+            expect(stdout).toContain('Launched process "')
+
+            const match = stdout.match(/Launched process "([^"]+)"/)
+            expect(match).not.toBeNull()
+            launchedName = match?.[1] || ''
+            expect(launchedName.length).toBeGreaterThan(0)
+        } finally {
+            if (launchedName) {
+                const proc = getProcess(launchedName)
+                if (proc) {
+                    try {
+                        await terminateProcess(proc.pid, true)
+                    } catch { }
+                    removeProcessByName(launchedName)
+                }
+            }
+            rmSync(dir, { recursive: true, force: true })
+        }
+    }, 20000)
 })
 
 // ─── detectPackageManager ───────────────────────────────

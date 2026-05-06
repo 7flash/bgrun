@@ -1,5 +1,14 @@
 # bgrun — Tasks & Ideas
 
+## 🔴 Priority: Fix
+- [x] ~~**Port 3000 env leakage and dashboard reclamation**~~ — ✅ DONE. `handleRun()` now strips dashboard-only env (`BUN_PORT`, `BGR_STDOUT`, `BGR_STDERR`) before spawning managed apps, rejects explicit `PORT` collisions unless forced, dashboard startup only reclaims explicitly requested ports, and detached dashboard PID detection no longer assumes port 3000.
+- [x] ~~**Stale internal restart path on dashboard/guard**~~ — ✅ DONE. Internal commands stored as `bgrun --_serve` / `bgrun --_guard-loop` are now resolved to the current package runtime before spawn, so CLI/guard/API restarts no longer pick up a stale `bgrun.exe` from PATH and reclaim the wrong port.
+- [x] ~~**Live wrapper PID port reconciliation**~~ — ✅ DONE. When a running Windows process has no detected ports, bgrun now probes its child PID, updates the DB if the child owns listening ports, and re-fetches resources so dashboard/CLI show the real port.
+- [x] ~~**PowerShell capture for Windows PID discovery**~~ — ✅ DONE. `psExec()` now pipes stdout/stderr and reads them correctly, which fixes child-PID lookup and wrapper-port reconciliation on Windows.
+- [x] ~~**Inline command env port discovery**~~ — ✅ DONE. bgrun now parses `set PORT=...&&` / `set BUN_PORT=...&&` style command prefixes (plus simple Unix env prefixes) for pre-spawn port conflict checks and next-port suggestions.
+- [ ] **CLI/server-side port reservation for non-PORT apps** — Add optional deeper port declaration/locking for processes whose listening port comes from command flags or config files instead of `env.PORT`.
+- [x] ~~**Silence stray Windows `del` noise in tests**~~ — ✅ DONE. `psExec()` now uses `Bun.sleep()` and `fs.rmSync()` instead of shelling out to `sleep`/`del`, so guard/test output no longer emits shell-command-not-found noise on Windows.
+
 ## 🟡 Priority: Improve
 - [x] ~~**Dashboard detachment on Windows**~~ — ✅ DONE. Dashboard spawn now uses `detached: true` + `stdio: "ignore"` to break out of the parent terminal's Job Object. PID detection via `findPidByPort` since cmd.exe wrapper exits immediately in detached mode. Guard spawn also detached with command-line PID fallback.
 - [x] ~~**Dashboard log viewing when detached**~~ — ✅ DONE. Detached processes (dashboard, guard) now redirect `console.log`/`console.error` to their log files via `redirectConsoleToFiles()`. Parent passes paths via `BGR_STDOUT`/`BGR_STDERR` env vars. Output is timestamped with ANSI codes stripped. `bgrun bgr-dashboard --logs` now shows real output.
@@ -7,7 +16,7 @@
 ## 🟢 Priority: Features
 - [x] ~~**Process health metrics in dashboard**~~ — ✅ ALREADY DONE. `MiniSparkline` SVG component renders CPU/memory trends (up to 60 data points = 5 min at 5s polling). Displayed in both `ProcessRow` table and `ProcessCard` mobile views. API (`/api/processes`) collects `memoryHistory[]` and `cpuHistory[]` with per-process tracking via `__bgrResourceHistory` global Map. Windows CPU uses delta-time calculation; Unix uses `ps` percentage directly.
 - [x] ~~**Webhook notifications**~~ — ✅ DONE. Guard fires HTTP POST to `BGR_WEBHOOK_URL` on crash/restart/restart_failed events. Payload includes process name, PID, restart count, backoff, timestamp. Optional `BGR_WEBHOOK_SECRET` enables HMAC-SHA256 signature in `X-BGR-Signature` header (GitHub-style). 5s timeout, non-blocking. Shown in guard startup banner.
-- [x] ~~**Auto-enable guard for new processes**~~ — ✅ DONE. New processes now default to `BGR_KEEP_ALIVE=true` unless explicitly disabled. Agent auto-restarts processes on crash.
+- [x] ~~**Auto-enable guard for new processes**~~ — REVERTED. Guard is now opt-in only via `BGR_KEEP_ALIVE=true`; new processes are not auto-guarded.
 
 ## 🚧 New Tasks
 - [x] ~~**Process groups**~~ — ✅ DONE. Added group filter dropdown in toolbar, group badge on process cards, filtering by group in renderFilteredProcesses(), and CSS styles for group-badge and group-filter dropdown.

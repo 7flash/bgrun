@@ -8,17 +8,21 @@ import { handleDelete, handleClean, handleDeleteAll, handleStop } from "./comman
 import { handleWatch } from "./commands/watch";
 import { showLogs } from "./commands/logs";
 import { showDetails } from "./commands/details";
+import { handleEnvit, parseEnvitArgs } from "./commands/envit";
+import { handleInline, parseInlineArgs } from "./commands/inline";
 import type { CommandOptions } from "./types";
 import { error, announce } from "./logger";
 // startServer is dynamically imported only when --_serve is used
 // to avoid loading melina (which has side-effects) on every bgrun command
-import { getHomeDir, getShellCommand, findChildPid, isProcessRunning, terminateProcess, getProcessPorts, killProcessOnPort, waitForPortFree, isPortFree, findPidByPort } from "./platform";
+import { getHomeDir, getShellCommand, findChildPid, isProcessRunning, terminateProcess, getProcessPorts, killProcessOnPort, waitForPortFree, isPortFree, findPidByPort, psExec } from "./platform";
 import { insertProcess, removeProcessByName, getProcess, retryDatabaseOperation, getDbInfo } from "./db";
 import dedent from "dedent";
 import chalk from "chalk";
 import { join } from "path";
 import { sleep } from "bun";
 import { configure } from "measure-fn";
+import { startProcessWatcher } from "./watcher";
+import { generateAutoProcessName, joinCommandArgs } from "./cli-helpers";
 
 if (!Bun.argv.includes("--_serve")) {
   if (!Bun.env.MEASURE_SILENT) {
@@ -68,6 +72,21 @@ function redirectConsoleToFiles() {
   }
 }
 
+async function findDetachedProcessByArg(snippet: string): Promise<number | null> {
+  if (process.platform !== 'win32') return null;
+
+  try {
+    const result = await psExec(
+      `Get-CimInstance Win32_Process -Filter "Name='bun.exe'" | Where-Object { $_.CommandLine -match '${snippet.replace(/'/g, "''")}' } | Sort-Object -Property CreationDate -Descending | Select-Object -First 1 -ExpandProperty ProcessId`,
+      3000
+    );
+    const pid = parseInt(result.trim(), 10);
+    return !isNaN(pid) && pid > 0 ? pid : null;
+  } catch {
+    return null;
+  }
+}
+
 async function showHelp() {
   const usage = dedent`
     ${chalk.bold('bgrun — Bun Background Runner')}
@@ -79,8 +98,10 @@ async function showHelp() {
     ${chalk.yellow('Commands:')}
       bgrun                     List all processes
       bgrun [name]             Show details for a process
+      bgrun -- <cmd>           Start a managed process with an auto-generated name
+      bgrun inline -- <cmd>    Run a command in this terminal with config env loaded
+      bgrun --env              Print shell commands to export config env vars
       bgrun --dashboard        Launch web dashboard (managed by bgrun)
-      bgrun --guard            Launch standalone process guard
       bgrun --restart [name]   Restart a process
       bgrun --restart-all      Restart ALL registered processes
       bgrun --stop [name]      Stop a process (keep in registry)
@@ -94,6 +115,8 @@ async function showHelp() {
       --command <string>     Process command (required for new)
       --directory <path>     Working directory (required for new)
       --config <path>        Config file (default: .config.toml)
+      --env                  Print shell export commands from config and exit
+      --shell <type>         Shell for --env: powershell | cmd | sh | json
       --watch                Watch for file changes and auto-restart
       --force                Force restart existing process
       --fetch                Fetch latest git changes before running
@@ -110,6 +133,11 @@ async function showHelp() {
       --help                 Show this help message
 
     ${chalk.yellow('Examples:')}
+      bgrun -- bun run dev
+      bgrun --force -- bun run server.ts
+      bgrun inline -- bun run dev
+      Invoke-Expression (bgrun --env)
+      eval "$(bgrun --env --shell sh)"
       bgrun --dashboard
       bgrun --name myapp --command "bun run dev" --directory . --watch
       bgrun myapp --logs --lines 50
@@ -117,46 +145,164 @@ async function showHelp() {
   console.log(usage);
 }
 
+const cliArgOptions = {
+  name: { type: 'string' as const },
+  command: { type: 'string' as const },
+  directory: { type: 'string' as const },
+  config: { type: 'string' as const },
+  env: { type: 'boolean' as const },
+  shell: { type: 'string' as const },
+  watch: { type: 'boolean' as const },
+  force: { type: 'boolean' as const },
+  fetch: { type: 'boolean' as const },
+  delete: { type: 'boolean' as const },
+  nuke: { type: 'boolean' as const },
+  restart: { type: 'boolean' as const },
+  "restart-all": { type: 'boolean' as const },
+  stop: { type: 'boolean' as const },
+  "stop-all": { type: 'boolean' as const },
+  clean: { type: 'boolean' as const },
+  json: { type: 'boolean' as const },
+  logs: { type: 'boolean' as const },
+  "log-stdout": { type: 'boolean' as const },
+  "log-stderr": { type: 'boolean' as const },
+  lines: { type: 'string' as const },
+  filter: { type: 'string' as const },
+  version: { type: 'boolean' as const },
+  help: { type: 'boolean' as const },
+  db: { type: 'string' as const },
+  stdout: { type: 'string' as const },
+  stderr: { type: 'string' as const },
+  dashboard: { type: 'boolean' as const },
+  debug: { type: 'boolean' as const },
+  "_serve": { type: 'boolean' as const },
+  "_watch-process": { type: 'string' as const },
+  port: { type: 'string' as const },
+};
+
 // Re-running parseArgs logic properly
 async function run() {
+  const rawArgs = Bun.argv.slice(2);
+  const isActionInvocation = (values: Record<string, unknown>) => {
+    return Boolean(
+      values.dashboard ||
+      values.version ||
+      values.help ||
+      values.debug ||
+      values.nuke ||
+      values.clean ||
+      values['restart-all'] ||
+      values['stop-all'] ||
+      values.delete ||
+      values.restart ||
+      values.stop ||
+      values.logs ||
+      values['log-stdout'] ||
+      values['log-stderr'] ||
+      values.watch ||
+      values.json ||
+      values.filter
+    );
+  };
+
+  if (rawArgs[0] === "inline") {
+    const parsed = parseInlineArgs(rawArgs.slice(1));
+    if (parsed.help) {
+      console.log(dedent`
+        ${chalk.bold('bgrun inline')}
+        ${chalk.gray('─'.repeat(40))}
+
+        Run a command in the current terminal with env vars loaded from a bgrun config file.
+
+        Usage:
+          bgrun inline [--directory <path>] [--config <path>] -- <command> [args...]
+
+        Examples:
+          bgrun inline -- bun run dev
+          bgrun inline --directory apps/api -- node server.js
+      `);
+      return;
+    }
+
+    await handleInline(parsed);
+    return;
+  }
+
+  const delimiterIndex = rawArgs.indexOf("--");
+  if (delimiterIndex !== -1 && delimiterIndex < rawArgs.length - 1) {
+    const preArgs = rawArgs.slice(0, delimiterIndex);
+    const commandArgs = rawArgs.slice(delimiterIndex + 1);
+    const { values } = parseArgs({
+      args: preArgs,
+      options: cliArgOptions,
+      strict: false,
+      allowPositionals: true,
+    });
+
+    const autoName = (values.name as string | undefined) || generateAutoProcessName();
+    const inlineCommand = joinCommandArgs(commandArgs);
+    const directory = (values.directory as string | undefined) || process.cwd();
+
+    await handleRun({
+      action: 'run',
+      name: autoName,
+      command: inlineCommand,
+      directory,
+      configPath: values.config as string | undefined,
+      force: values.force as boolean | undefined,
+      fetch: values.fetch as boolean | undefined,
+      remoteName: '',
+      dbPath: values.db as string | undefined,
+      stdout: values.stdout as string | undefined,
+      stderr: values.stderr as string | undefined
+    });
+    return;
+  }
+
   const { values, positionals } = parseArgs({
-    args: Bun.argv.slice(2),
-    options: {
-      name: { type: 'string' },
-      command: { type: 'string' },
-      directory: { type: 'string' },
-      config: { type: 'string' },
-      watch: { type: 'boolean' },
-      force: { type: 'boolean' },
-      fetch: { type: 'boolean' },
-      delete: { type: 'boolean' },
-      nuke: { type: 'boolean' },
-      restart: { type: 'boolean' },
-      "restart-all": { type: 'boolean' },
-      stop: { type: 'boolean' },
-      "stop-all": { type: 'boolean' },
-      clean: { type: 'boolean' },
-      json: { type: 'boolean' },
-      logs: { type: 'boolean' },
-      "log-stdout": { type: 'boolean' },
-      "log-stderr": { type: 'boolean' },
-      lines: { type: 'string' },
-      filter: { type: 'string' },
-      version: { type: 'boolean' },
-      help: { type: 'boolean' },
-      db: { type: 'string' },
-      stdout: { type: 'string' },
-      stderr: { type: 'string' },
-      dashboard: { type: 'boolean' },
-      guard: { type: 'boolean' },
-      debug: { type: 'boolean' },
-      "_serve": { type: 'boolean' },
-      "_guard-loop": { type: 'boolean' },
-      port: { type: 'string' },
-    },
+    args: rawArgs,
+    options: cliArgOptions,
     strict: false,
     allowPositionals: true,
   });
+
+  if (values.env) {
+    if (positionals.length > 1) {
+      error("Too many positional arguments for --env. Use --config <path> or pass a single config path.");
+    }
+
+    await handleEnvit({
+      directory: values.directory as string | undefined,
+      configPath: (values.config as string | undefined) || positionals[0],
+      shell: values.shell as any,
+    });
+    return;
+  }
+
+  if (
+    positionals.length > 1 &&
+    !values.command &&
+    !isActionInvocation(values as Record<string, unknown>)
+  ) {
+    const autoName = (values.name as string | undefined) || generateAutoProcessName();
+    const implicitCommand = joinCommandArgs(positionals);
+    const directory = (values.directory as string | undefined) || process.cwd();
+
+    await handleRun({
+      action: 'run',
+      name: autoName,
+      command: implicitCommand,
+      directory,
+      configPath: values.config as string | undefined,
+      force: values.force as boolean | undefined,
+      fetch: values.fetch as boolean | undefined,
+      remoteName: '',
+      dbPath: values.db as string | undefined,
+      stdout: values.stdout as string | undefined,
+      stderr: values.stderr as string | undefined
+    });
+    return;
+  }
 
   // Internal: actually run the HTTP server (spawned by --dashboard)
   // Port is NOT passed explicitly — Melina auto-detects from BUN_PORT env
@@ -170,14 +316,11 @@ async function run() {
     return;
   }
 
-  // Internal: actually run the guard loop (spawned by --guard)
-  if (values['_guard-loop']) {
+  // Internal: watcher loop for a single guarded process
+  if (values['_watch-process']) {
     // Redirect console output to log files when running detached
     redirectConsoleToFiles();
-    const { startGuardLoop } = await import("./guard");
-    const intervalStr = positionals[0];
-    const intervalMs = intervalStr ? parseInt(intervalStr) * 1000 : undefined;
-    await startGuardLoop(intervalMs);
+    await startProcessWatcher(String(values['_watch-process']));
     return;
   }
 
@@ -186,9 +329,11 @@ async function run() {
     const dashboardName = 'bgr-dashboard';
     const homePath = getHomeDir();
     const bgrDir = join(homePath, '.bgr');
-    // User can request a specific port via BUN_PORT=XXXX bgrun --dashboard
+    // User can request a specific port via --port or BUN_PORT=XXXX bgrun --dashboard
     // Otherwise Melina picks automatically (3000 → fallback)
     const requestedPort = values.port as string | undefined;
+    const explicitPortValue = requestedPort || Bun.env.BUN_PORT || undefined;
+    const explicitPort = explicitPortValue ? parseInt(explicitPortValue, 10) : null;
 
     // Check if dashboard is already running
     const existing = getProcess(dashboardName);
@@ -239,26 +384,26 @@ async function run() {
     await Bun.write(stdoutPath, '');
     await Bun.write(stderrPath, '');
 
-    // Pass BUN_PORT env var only if user explicitly requested a port
+    // Pass BUN_PORT only when this dashboard launch explicitly requested one.
     const spawnEnv: Record<string, string> = { ...Bun.env } as any;
-    if (requestedPort) {
-      spawnEnv.BUN_PORT = requestedPort;
+    if (explicitPortValue) {
+      spawnEnv.BUN_PORT = explicitPortValue;
+    } else {
+      delete spawnEnv.BUN_PORT;
     }
     // Pass log paths so the detached process can redirect its own console output
     spawnEnv.BGR_STDOUT = stdoutPath;
     spawnEnv.BGR_STDERR = stderrPath;
 
-    // Resolve the target port: --port flag > BUN_PORT env > default 3000
-    const targetPort = parseInt(requestedPort || Bun.env.BUN_PORT || '3000');
-    if (!isNaN(targetPort) && targetPort > 0) {
-      // Auto-kill whatever occupies the target port so dashboard always reclaims it
-      const portFree = await isPortFree(targetPort);
+    if (explicitPort && explicitPort > 0) {
+      // Only reclaim a dashboard port when the user explicitly asked for one.
+      const portFree = await isPortFree(explicitPort);
       if (!portFree) {
-        console.log(chalk.yellow(`  ⚡ Port ${targetPort} is occupied — reclaiming...`));
-        await killProcessOnPort(targetPort);
-        const freed = await waitForPortFree(targetPort, 5000);
+        console.log(chalk.yellow(`  ⚡ Requested dashboard port ${explicitPort} is occupied — reclaiming...`));
+        await killProcessOnPort(explicitPort);
+        const freed = await waitForPortFree(explicitPort, 5000);
         if (!freed) {
-          console.log(chalk.red(`  ⚠ Could not free port ${targetPort} — dashboard may pick a fallback port`));
+          console.log(chalk.red(`  ⚠ Could not free port ${explicitPort} — dashboard may pick a fallback port`));
         }
       }
     }
@@ -273,11 +418,16 @@ async function run() {
 
     newProcess.unref();
 
-    // With detached: cmd.exe wrapper exits immediately, so findChildPid won't work.
-    // Instead, wait for the server to bind a port and find the PID from there.
+    // With detached: cmd.exe wrapper exits immediately, so findChildPid can miss the real bun child.
     await sleep(2000); // Give the server time to start and bind a port
-    const resolvedPort = parseInt(requestedPort || Bun.env.BUN_PORT || '3000');
-    const actualPid = await findPidByPort(resolvedPort, 10000) ?? await findChildPid(newProcess.pid);
+    let actualPid = explicitPort && explicitPort > 0
+      ? (await findPidByPort(explicitPort, 10000) ?? await findChildPid(newProcess.pid))
+      : await findChildPid(newProcess.pid);
+
+    if (!(await isProcessRunning(actualPid))) {
+      const detachedPid = await findDetachedProcessByArg('--_serve');
+      if (detachedPid) actualPid = detachedPid;
+    }
 
     // Detect the port the server actually bound to
     let actualPort: number | null = null;
@@ -325,94 +475,8 @@ async function run() {
     return;
   }
 
-  // Guard: spawn the standalone guard as a bgr-managed process
-  if (values.guard) {
-    const guardName = 'bgr-guard';
-    const homePath = getHomeDir();
-    const bgrDir = join(homePath, '.bgr');
-
-    // Check if guard is already running
-    const existing = getProcess(guardName);
-    if (existing && await isProcessRunning(existing.pid)) {
-      announce(
-        `Guard is already running (PID ${existing.pid})\n\n` +
-        `  Use ${chalk.yellow(`bgrun --stop ${guardName}`)} to stop it\n` +
-        `  Use ${chalk.yellow(`bgrun --guard --force`)} to restart`,
-        'BGR Guard'
-      );
-      return;
-    }
-
-    // Kill existing if force
-    if (existing) {
-      if (await isProcessRunning(existing.pid)) {
-        await terminateProcess(existing.pid);
-      }
-      await retryDatabaseOperation(() => removeProcessByName(guardName));
-    }
-
-    const { resolve } = require('path');
-    const scriptPath = resolve(process.argv[1]);
-    const spawnCommand = `bun run ${scriptPath} --_guard-loop`;
-    const command = `bgrun --_guard-loop`;
-    const stdoutPath = join(bgrDir, `${guardName}-out.txt`);
-    const stderrPath = join(bgrDir, `${guardName}-err.txt`);
-
-    await Bun.write(stdoutPath, '');
-    await Bun.write(stderrPath, '');
-
-    const newProcess = Bun.spawn(getShellCommand(spawnCommand), {
-      env: { ...Bun.env, BGR_STDOUT: stdoutPath, BGR_STDERR: stderrPath },
-      cwd: bgrDir,
-      stdout: "ignore",
-      stderr: "ignore",
-      detached: true, // Windows: new process group outside parent's Job Object — survives terminal close
-    } as any);
-
-    newProcess.unref();
-    await sleep(1000);
-    // With detached: cmd.exe exits immediately. Search for the guard by command line.
-    let actualPid = await findChildPid(newProcess.pid);
-    if (!(await isProcessRunning(actualPid))) {
-      // cmd.exe already died — search for the bun process running --_guard-loop
-      const { psExec: ps } = await import('./platform');
-      const result = ps(
-        `Get-CimInstance Win32_Process -Filter "Name='bun.exe'" | Where-Object { $_.CommandLine -match '_guard-loop' } | Sort-Object -Property CreationDate -Descending | Select-Object -First 1 -ExpandProperty ProcessId`,
-        3000
-      );
-      const foundPid = parseInt(result.trim());
-      if (!isNaN(foundPid) && foundPid > 0) actualPid = foundPid;
-    }
-
-    await retryDatabaseOperation(() =>
-      insertProcess({
-        pid: actualPid,
-        workdir: bgrDir,
-        command,
-        name: guardName,
-        env: 'BGR_KEEP_ALIVE=false', // Guard doesn't guard itself
-        configPath: '',
-        stdout_path: stdoutPath,
-        stderr_path: stderrPath,
-      })
-    );
-
-    const msg = dedent`
-      ${chalk.bold('🛡️  BGR Standalone Guard launched')}
-      ${chalk.gray('─'.repeat(40))}
-
-        Monitors: All processes with BGR_KEEP_ALIVE=true
-        Also watches: bgr-dashboard (auto-restart if it dies)
-        Check interval: 30 seconds
-        Backoff: Exponential after 5 rapid crashes
-
-      ${chalk.gray('─'.repeat(40))}
-        Process: ${chalk.white(guardName)}  |  PID: ${chalk.white(String(actualPid))}
-
-        ${chalk.yellow(`bgrun ${guardName} --logs`)}    View guard logs
-        ${chalk.yellow(`bgrun --stop ${guardName}`)}    Stop the guard
-    `;
-    announce(msg, 'BGR Guard');
+  if ((values as any).guard) {
+    error("Standalone guard was removed. Enable guard per process with BGR_KEEP_ALIVE=true or the dashboard toggle.");
     return;
   }
 

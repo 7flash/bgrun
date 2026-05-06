@@ -1,13 +1,8 @@
 /**
- * POST /api/guard-all — Bulk toggle guard for all processes
+ * POST /api/guard-all — Bulk toggle per-process watcher guard
  * Body: { enabled: boolean }
- * 
- * When enabled=true, sets BGR_KEEP_ALIVE=true for ALL processes (except bgr-dashboard).
- * When enabled=false, removes BGR_KEEP_ALIVE from ALL processes.
  */
-import { getAllProcesses, getProcess, updateProcessEnv } from '../../../lib/runtime';
-
-const SKIP = new Set(['bgr-dashboard']);
+import { getAllProcesses, updateProcessEnv, parseEnvString, stringifyEnvString, syncProcessWatcher, isInternalProcessName } from '../../../lib/runtime';
 
 export async function POST(req: Request) {
     try {
@@ -16,13 +11,9 @@ export async function POST(req: Request) {
         let count = 0;
 
         for (const proc of processes) {
-            if (SKIP.has(proc.name)) continue;
+            if (isInternalProcessName(proc.name)) continue;
 
-            // Parse existing env
-            let env: Record<string, string> = {};
-            if (proc.env) {
-                try { env = JSON.parse(proc.env); } catch { env = {}; }
-            }
+            const env = parseEnvString(proc.env || '');
 
             const alreadyGuarded = env.BGR_KEEP_ALIVE === 'true';
             if (body.enabled && alreadyGuarded) continue;
@@ -34,7 +25,8 @@ export async function POST(req: Request) {
                 delete env.BGR_KEEP_ALIVE;
             }
 
-            updateProcessEnv(proc.name, JSON.stringify(env));
+            updateProcessEnv(proc.name, stringifyEnvString(env));
+            await syncProcessWatcher(proc.name, env);
             count++;
         }
 

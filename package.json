@@ -1,6 +1,6 @@
 {
   "name": "bgrun",
-  "version": "3.12.15",
+  "version": "3.12.20",
   "description": "bgrun — A lightweight process manager for Bun",
   "type": "module",
   "main": "./dist/api.js",
@@ -12,6 +12,7 @@
   },
   "scripts": {
     "build": "bun run ./src/build.ts",
+    "prepare": "bun run build",
     "test": "bun test",
     "prepublishOnly": "bun run build"
   },

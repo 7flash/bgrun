@@ -1,11 +1,8 @@
 /**
- * POST /api/guard — Toggle BGR_KEEP_ALIVE for a process
+ * POST /api/guard — Toggle per-process watcher guard
  * Body: { name: string, enabled: boolean }
- * 
- * When enabled=true, the built-in guard will auto-restart this process if it dies.
- * When enabled=false, the process is left alone.
  */
-import { getProcess, updateProcessEnv, addHistoryEntry } from '../../../lib/runtime';
+import { getProcess, updateProcessEnv, addHistoryEntry, parseEnvString, stringifyEnvString, syncProcessWatcher } from '../../../lib/runtime';
 
 export async function POST(req: Request) {
     try {
@@ -20,22 +17,17 @@ export async function POST(req: Request) {
         }
 
         // Parse existing env
-        let env: Record<string, string> = {};
-        if (proc.env) {
-            try { env = JSON.parse(proc.env); } catch { env = {}; }
-        }
+        const env = parseEnvString(proc.env || '');
 
-        // Toggle BGR_KEEP_ALIVE
         if (body.enabled) {
             env.BGR_KEEP_ALIVE = 'true';
         } else {
             delete env.BGR_KEEP_ALIVE;
         }
 
-        // Save back
-        updateProcessEnv(body.name, JSON.stringify(env));
+        updateProcessEnv(body.name, stringifyEnvString(env));
+        await syncProcessWatcher(body.name, env);
 
-        // Record history
         addHistoryEntry(body.name, body.enabled ? 'guard_on' : 'guard_off');
 
         return Response.json({

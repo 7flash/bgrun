@@ -1,6 +1,7 @@
 import { getProcess, getAllProcesses, addHistoryEntry } from './db';
 import { handleRun } from './commands/run';
 import { $ } from 'bun';
+import { isInternalProcessName } from './utils';
 
 export interface DeployResult {
     name: string;
@@ -33,7 +34,7 @@ export function formatDeployToolError(manager: Exclude<PackageManager, null>, er
 }
 
 function isInternalProcess(name: string): boolean {
-    return name === 'bgr-dashboard' || name === 'bgr-guard';
+    return isInternalProcessName(name);
 }
 
 async function pathExists(path: string): Promise<boolean> {

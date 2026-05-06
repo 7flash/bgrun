@@ -3,8 +3,8 @@ import { renderProcessTable } from "../table";
 import type { ProcessTableRow } from "../table";
 import { getAllProcesses, updateProcessPid } from "../db";
 import { announce } from "../logger";
-import { isProcessRunning, calculateRuntime, parseEnvString } from "../utils";
-import { getProcessPorts, getProcessBatchResources, reconcileProcessPids } from "../platform";
+import { isProcessRunning, calculateRuntime, parseEnvString, isInternalProcessName } from "../utils";
+import { getProcessPorts, getProcessBatchResources, reconcileProcessPids, resolvePidWithPorts } from "../platform";
 import { measure } from "measure-fn";
 
 function formatMemory(bytes: number): string {
@@ -19,6 +19,7 @@ export async function showAll(opts?: { json?: boolean; filter?: string }) {
 
     // Apply filter by env.BGR_GROUP if provided
     const filtered = processes.filter((proc) => {
+        if (isInternalProcessName(proc.name)) return false;
         if (!opts?.filter) return true;
         const envVars = parseEnvString(proc.env);
         return envVars["BGR_GROUP"] === opts.filter;
@@ -89,12 +90,23 @@ export async function showAll(opts?: { json?: boolean; filter?: string }) {
     for (const proc of filtered) {
         const isRunning = aliveCache.get(proc.pid) ?? await isProcessRunning(proc.pid, proc.command);
         const runtime = calculateRuntime(proc.timestamp);
-        const mem = isRunning ? (resourceMap.get(proc.pid)?.memory || 0) : 0;
 
-        const ports = isRunning ? await getProcessPorts(proc.pid) : [];
+        let displayPid = proc.pid;
+        let ports: number[] = [];
+        if (isRunning) {
+            const resolved = await resolvePidWithPorts(proc.pid);
+            displayPid = resolved.pid;
+            ports = resolved.ports;
+            if (displayPid !== proc.pid) {
+                updateProcessPid(proc.name, displayPid);
+                (proc as any).pid = displayPid;
+            }
+        }
+
+        const mem = isRunning ? (resourceMap.get(displayPid)?.memory || resourceMap.get(proc.pid)?.memory || 0) : 0;
         tableData.push({
             id: proc.id,
-            pid: proc.pid,
+            pid: displayPid,
             name: proc.name,
             port: ports.length > 0 ? ports.map(p => `:${p}`).join(',') : '-',
             memory: formatMemory(mem),

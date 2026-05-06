@@ -27,6 +27,7 @@ export {
   getProcessPorts,
   findChildPid,
   findPidByPort,
+  resolvePidWithPorts,
   getShellCommand,
   killProcessOnPort,
   waitForPortFree,
@@ -37,13 +38,21 @@ export {
   getProcessMemory,
   reconcileProcessPids,
   handleRun,
+  ensureProcessWatcher,
+  stopProcessWatcher,
+  syncProcessWatcher,
+  getGuardRestartCounts,
+  getRecentGuardEvents,
   getVersion,
   calculateRuntime,
   parseEnvString,
+  stringifyEnvString,
   validateDirectory,
 } from '../../dist/api.js'
 
 export { deployProcess, deployAllProcesses } from '../../dist/deploy.js'
 export { buildDepGraph } from '../../dist/deps.js'
 export { rotateAllLogs } from '../../dist/log-rotation.js'
-export { guardEvents, guardRestartCounts } from '../../dist/server.js'
+
+export const guardEvents: any[] = []
+export const guardRestartCounts = new Map<string, number>()

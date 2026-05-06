@@ -16,16 +16,116 @@ export function calculateRuntime(startTime: string): string {
     return `${diffInMinutes} minutes`;
 }
 
+const INTERNAL_MANAGED_ENV_KEYS = ["BUN_PORT", "BGR_STDOUT", "BGR_STDERR"] as const;
+
+export function parseCommandEnv(command: string): Record<string, string> {
+    const env: Record<string, string> = {};
+    const trimmed = command.trim();
+
+    const windowsSegments = trimmed.split(/&&/).map(segment => segment.trim());
+    for (const segment of windowsSegments) {
+        const match = segment.match(/^set\s+([A-Za-z_][A-Za-z0-9_]*)=(.*)$/i);
+        if (!match) break;
+        env[match[1]] = match[2].trim();
+    }
+
+    const unixPrefixRegex = /^(?:([A-Za-z_][A-Za-z0-9_]*)=([^\s]+)\s+)+/;
+    const unixPrefix = trimmed.match(unixPrefixRegex);
+    if (unixPrefix) {
+        const pairs = unixPrefix[0].trim().split(/\s+/);
+        for (const pair of pairs) {
+            const eqIdx = pair.indexOf('=');
+            if (eqIdx <= 0) continue;
+            const key = pair.slice(0, eqIdx);
+            const value = pair.slice(eqIdx + 1);
+            if (key) env[key] = value;
+        }
+    }
+
+    return env;
+}
+
+export function getDeclaredPort(processEnv: Record<string, string>, command?: string): number | null {
+    const mergedEnv = { ...(command ? parseCommandEnv(command) : {}), ...processEnv };
+    const raw = mergedEnv.PORT || mergedEnv.BUN_PORT || '';
+    const parsed = parseInt(raw, 10);
+    return !isNaN(parsed) && parsed > 0 ? parsed : null;
+}
+
+export function buildManagedProcessEnv(
+    parentEnv: Record<string, string | undefined>,
+    processEnv: Record<string, string> = {},
+): Record<string, string> {
+    const sanitizedParentEnv: Record<string, string> = {};
+
+    for (const [key, value] of Object.entries(parentEnv)) {
+        if (value === undefined) continue;
+        if (INTERNAL_MANAGED_ENV_KEYS.includes(key as typeof INTERNAL_MANAGED_ENV_KEYS[number])) continue;
+        sanitizedParentEnv[key] = value;
+    }
+
+    return { ...sanitizedParentEnv, ...processEnv };
+}
+
+export function stringifyEnvString(env: Record<string, string>): string {
+    return Object.entries(env).map(([key, value]) => `${key}=${value}`).join(",");
+}
+
+const WATCHER_PREFIX = "bgr-watch-";
+
+export function getWatcherProcessName(targetName: string): string {
+    return `${WATCHER_PREFIX}${encodeURIComponent(targetName)}`;
+}
+
+export function getWatchedProcessName(watcherName: string): string | null {
+    if (!watcherName.startsWith(WATCHER_PREFIX)) return null;
+    try {
+        return decodeURIComponent(watcherName.slice(WATCHER_PREFIX.length));
+    } catch {
+        return null;
+    }
+}
+
+export function isWatcherProcessName(name: string): boolean {
+    return getWatchedProcessName(name) !== null;
+}
+
+export function isInternalProcessName(name: string): boolean {
+    return name === "bgr-dashboard" || name === "bgr-guard" || isWatcherProcessName(name);
+}
+
 // Re-export platform utils for backward compatibility and convenience
 export { isProcessRunning } from "./platform";
 
 import * as fs from "fs";
+import * as os from "os";
 import chalk from "chalk";
+import { join } from "path";
+
+function getOperationLockPath(name: string): string {
+    return join(os.homedir(), ".bgr", `${name}.operation.lock`);
+}
+
+export function acquireProcessOperationLock(name: string): () => void {
+    const lockPath = getOperationLockPath(name);
+    fs.mkdirSync(join(os.homedir(), ".bgr"), { recursive: true });
+    fs.writeFileSync(lockPath, JSON.stringify({ pid: process.pid, time: Date.now() }));
+
+    let released = false;
+    return () => {
+        if (released) return;
+        released = true;
+        try { fs.unlinkSync(lockPath); } catch { }
+    };
+}
+
+export function isProcessOperationLocked(name: string): boolean {
+    return fs.existsSync(getOperationLockPath(name));
+}
 
 // Read version at runtime instead of using macros (macros crash on Windows)
 export async function getVersion(): Promise<string> {
     try {
-        const { join } = await import("path");
         const pkgPath = join(import.meta.dir, '../package.json');
         const pkg = await Bun.file(pkgPath).json();
         return pkg.version || '0.0.0';

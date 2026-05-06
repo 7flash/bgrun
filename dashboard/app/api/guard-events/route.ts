@@ -1,5 +1,5 @@
-import { guardEvents } from '../../../lib/runtime';
+import { getRecentGuardEvents } from '../../../lib/runtime';
 
 export async function GET() {
-    return Response.json(guardEvents);
+    return Response.json(getRecentGuardEvents());
 }

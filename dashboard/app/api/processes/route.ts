@@ -1,7 +1,5 @@
-import { getAllProcesses, updateProcessPid } from '../../../lib/runtime';
-import { calculateRuntime } from '../../../lib/runtime';
-import { getProcessBatchResources, reconcileProcessPids } from '../../../lib/runtime';
-import { guardRestartCounts } from '../../../lib/runtime';
+import { getAllProcesses, updateProcessPid, calculateRuntime, getGuardRestartCounts, isInternalProcessName } from '../../../lib/runtime';
+import { getProcessBatchResources, reconcileProcessPids, resolvePidWithPorts, getProcessPorts, findChildPid } from '../../../../dist/api.js';
 import { measure, createMeasure } from 'measure-fn';
 import { $ } from 'bun';
 
@@ -111,8 +109,9 @@ function getProcessGroup(envStr: string): string | null {
 
 async function fetchProcesses(): Promise<any[]> {
     return await api.measure('Fetch processes', async (m) => {
-        const procs = getAllProcesses();
+        const procs = getAllProcesses().filter((p: any) => !isInternalProcessName(p.name));
         const pids = procs.map((p: any) => p.pid);
+        const guardRestartCounts = getGuardRestartCounts();
 
         // Three subprocess calls total (not 3×N)
         let [runningPids, portMap, resourceMap] = await Promise.all([
@@ -159,6 +158,33 @@ async function fetchProcesses(): Promise<any[]> {
 
         const now = Date.now();
         const isWin = process.platform === 'win32';
+
+        for (const p of procs) {
+            const running = runningPids?.has(p.pid) ?? false;
+            const ports = running ? (portMap?.get(p.pid) || []) : [];
+            if (!running || ports.length > 0) continue;
+
+            const resolved = await m(`Resolve live wrapper PID for ${p.name}`, () =>
+                withTimeout(resolvePidWithPorts(p.pid), { pid: p.pid, ports: [] })
+            );
+            if (resolved.pid !== p.pid && resolved.ports.length > 0) {
+                const oldPid = p.pid;
+                p.pid = resolved.pid;
+                updateProcessPid(p.name, resolved.pid);
+                runningPids?.delete(oldPid);
+                runningPids?.add(resolved.pid);
+                portMap?.set(resolved.pid, resolved.ports);
+
+                const refreshedResource = await withTimeout(
+                    getProcessBatchResources([resolved.pid]),
+                    new Map<number, { memory: number, cpu: number }>()
+                );
+                const nextResource = refreshedResource.get(resolved.pid);
+                if (nextResource) {
+                    resourceMap?.set(resolved.pid, nextResource);
+                }
+            }
+        }
 
         return procs.map((p: any) => {
             const running = runningPids?.has(p.pid) ?? false;

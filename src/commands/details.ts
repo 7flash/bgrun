@@ -1,14 +1,18 @@
 
 import { error, announce } from "../logger";
 import { getProcess, updateProcessPid } from "../db";
-import { isProcessRunning, calculateRuntime, parseEnvString } from "../utils";
-import { getProcessPorts, reconcileProcessPids } from "../platform";
+import { isProcessRunning, calculateRuntime, parseEnvString, isInternalProcessName } from "../utils";
+import { reconcileProcessPids, resolvePidWithPorts } from "../platform";
 import chalk from "chalk";
 
 export async function showDetails(name: string) {
     const proc = getProcess(name);
     if (!proc) {
         error(`No process found named '${name}'`);
+        return;
+    }
+    if (isInternalProcessName(proc.name)) {
+        error(`'${name}' is an internal bgrun process.`);
         return;
     }
 
@@ -30,8 +34,16 @@ export async function showDetails(name: string) {
     const runtime = calculateRuntime(proc.timestamp);
     const envVars = parseEnvString(proc.env);
 
-    // Detect actual ports via OS
-    const ports = isRunning ? await getProcessPorts(proc.pid) : [];
+    // Detect actual ports via OS, resolving live wrapper PID when needed
+    let ports: number[] = [];
+    if (isRunning) {
+        const resolved = await resolvePidWithPorts(proc.pid);
+        ports = resolved.ports;
+        if (resolved.pid !== proc.pid) {
+            updateProcessPid(proc.name, resolved.pid);
+            (proc as any).pid = resolved.pid;
+        }
+    }
 
     const portDisplay = ports.length > 0
         ? ports.map(p => chalk.hex('#FF6B6B')(`:${p}`)).join(', ')

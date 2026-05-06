@@ -48,6 +48,15 @@ bun install -g bgrun
 # Start a process
 bgrun --name my-api --directory ./my-project --command "bun run server.ts"
 
+# Start a managed process with an auto-generated date name
+bgrun -- bun run server.ts
+
+# Run in the current terminal with config env loaded
+bgrun inline -- bun run dev
+
+# Export config env into your current shell
+Invoke-Expression (bgrun envit)
+
 # List all processes
 bgrun
 
@@ -116,6 +125,14 @@ bgrun --name my-api \
     --directory ~/projects/my-api \
     --command "bun run server.ts"
 ```
+
+Anonymous managed start:
+
+```bash
+bgrun -- bun run server.ts
+```
+
+This generates a date-based name such as `april-fifth`. If that name already exists, bgrun appends `-hhmmss`.
 
 Short form — if you're already *in* the project directory:
 
@@ -402,6 +419,24 @@ AUTH_SESSION_TTL=3600
 The convention: `[section]` becomes the prefix, `key` becomes the suffix, joined with `_`, uppercased.
 
 If no `--config` is specified, bgrun looks for `.config.toml` in the working directory automatically.
+
+### Loading config env without managing the process
+
+Run a command in the current terminal with config env applied:
+
+```bash
+bgrun inline -- bun run dev
+```
+
+Print shell commands that export config values into your current shell:
+
+```powershell
+Invoke-Expression (bgrun envit)
+```
+
+```bash
+eval "$(bgrun envit --shell sh)"
+```
 
 ---
 

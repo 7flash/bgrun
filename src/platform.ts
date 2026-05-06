@@ -12,24 +12,63 @@ import { measure, createMeasure } from "measure-fn";
 const plat = createMeasure('platform');
 
 /**
- * Execute a PowerShell command with -NoProfile synchronously.
+ * Execute a PowerShell command with -NoProfile asynchronously with timeout.
  * Returns stdout as string, or empty string on error.
  * 
- * Uses Bun.spawnSync to avoid async stream hanging issues on Windows
- * where Bun's pipe reader hangs indefinitely when reading killed processes.
+ * Uses asynchronous execution to prevent deadlocks on Windows that occur
+ * with Bun.spawnSync when multiple processes run simultaneously.
  */
-export function psExec(command: string, _timeoutMs: number = 3000): string {
-  const tmpFile = join(os.tmpdir(), `bgr-ps-${Date.now()}.ps1`);
+export async function psExec(command: string, timeoutMs: number = 3000): Promise<string> {
+  const tmpFile = join(os.tmpdir(), `bgr-ps-${Date.now()}-${Math.random().toString(36).substr(2, 9)}.ps1`);
   try {
-    fs.writeFileSync(tmpFile, command);
-    const result = Bun.spawnSync(
-      ['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', tmpFile]
-    );
-    try { fs.unlinkSync(tmpFile); } catch { }
-    return result.stdout?.toString() || '';
-  } catch {
-    try { fs.unlinkSync(tmpFile); } catch { }
-    return '';
+    await Bun.write(tmpFile, command);
+    
+    // Use Bun.spawn with timeout to prevent hanging
+    const proc = Bun.spawn([
+      'powershell', 
+      '-NoProfile', 
+      '-ExecutionPolicy', 
+      'Bypass', 
+      '-File', 
+      tmpFile
+    ], {
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    
+    // Race the process against the timeout
+    const timeoutPromise = new Promise<string>((_, reject) => {
+      setTimeout(() => reject(new Error('PowerShell command timed out')), timeoutMs);
+    }) as Promise<string>;
+    
+    const resultPromise = new Promise<string>(async (resolve, reject) => {
+      try {
+        const stdoutPromise = proc.stdout ? new Response(proc.stdout).text() : Promise.resolve('');
+        const stderrPromise = proc.stderr ? new Response(proc.stderr).text() : Promise.resolve('');
+        const exitCode = await proc.exited;
+        const stdout = await stdoutPromise;
+        const stderr = await stderrPromise;
+        if (exitCode === 0) {
+          resolve(stdout);
+        } else {
+          resolve(stderr || ''); // Return stderr on failure for easier debugging
+        }
+      } catch (error) {
+        reject(error);
+      }
+    });
+    
+    // Wait for either the process to complete or the timeout
+    try {
+      const result = await Promise.race([resultPromise, timeoutPromise]);
+      return result.trim(); // Trim to remove trailing newline
+    } catch (error) {
+      return ''; // Return empty string on timeout or error
+    } finally {
+      try { await Bun.sleep(100); } catch {} // Brief delay before file cleanup
+    }
+  } finally {
+    try { fs.rmSync(tmpFile, { force: true }); } catch {} // Clean up temp file
   }
 }
 
@@ -69,9 +108,9 @@ export async function isProcessRunning(pid: number, command?: string): Promise<b
           process.kill(pid, 0);
           return true;
         } catch {
-          const output = psExec(
+          const output = await psExec(
             `Get-Process -Id ${pid} -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id`
-          ).trim();
+          );
           return output === String(pid);
         }
       } else {
@@ -571,7 +610,7 @@ export async function getProcessBatchResources(pids: number[]): Promise<Map<numb
     try {
       if (isWindows()) {
         // psExec(Get-Process) is fast (~2ms) vs tasklist which hangs
-        const output = psExec(
+        const output = await psExec(
           `Get-Process -Id ${pids.join(',')} -ErrorAction SilentlyContinue | Select-Object Id, WorkingSet64 | ForEach-Object { Write-Output "$($_.Id)|$($_.WorkingSet64)" }`
         );
         for (const line of output.split('\n')) {
@@ -662,4 +701,23 @@ export async function getProcessPorts(pid: number): Promise<number[]> {
   } catch {
     return [];
   }
+}
+
+export async function resolvePidWithPorts(pid: number): Promise<{ pid: number; ports: number[] }> {
+  const ports = await getProcessPorts(pid);
+  if (ports.length > 0 || !isWindows() || pid <= 0) {
+    return { pid, ports };
+  }
+
+  const childPid = await findChildPid(pid);
+  if (childPid === pid || childPid <= 0) {
+    return { pid, ports };
+  }
+
+  const childPorts = await getProcessPorts(childPid);
+  if (childPorts.length > 0) {
+    return { pid: childPid, ports: childPorts };
+  }
+
+  return { pid, ports };
 }

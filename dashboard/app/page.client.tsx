@@ -744,7 +744,7 @@ export default function mount(): () => void {
         if (!btn || !label) return;
 
         const targetCount = allProcesses.filter(p => {
-            if (p.name === 'bgr-dashboard' || p.name === 'bgr-guard') return false;
+            if (p.name === 'bgr-dashboard') return false;
             if (groupQuery && p.group !== groupQuery) return false;
             return true;
         }).length;
@@ -806,23 +806,6 @@ export default function mount(): () => void {
             guardAllBtn.title = allGuarded ? 'Remove guard from all processes' : 'Guard all processes (auto-restart on crash)';
         }
 
-        // Update guard sentinel pill
-        const guardPill = $('guard-sentinel-pill');
-        const guardLabel = $('guard-sentinel-label');
-        if (guardPill && guardLabel) {
-            const guardProc = processes.find(p => p.name === 'bgr-guard');
-            guardPill.classList.remove('active', 'stopped');
-            if (guardProc && guardProc.running) {
-                guardPill.classList.add('active');
-                const restarts = guardProc.guardRestarts || 0;
-                guardLabel.textContent = restarts > 0 ? `Guard: ON (${restarts}↻)` : 'Guard: ON';
-            } else if (guardProc) {
-                guardPill.classList.add('stopped');
-                guardLabel.textContent = 'Guard: OFF';
-            } else {
-                guardLabel.textContent = 'Guard: –';
-            }
-        }
     }
 
     function toggleGroup(groupDir: string) {
@@ -3428,7 +3411,7 @@ export default function mount(): () => void {
         if (!deployAllBtn || deployAllBtn.disabled) return;
 
         const targets = allProcesses.filter(p => {
-            if (p.name === 'bgr-dashboard' || p.name === 'bgr-guard') return false;
+            if (p.name === 'bgr-dashboard') return false;
             if (groupQuery && p.group !== groupQuery) return false;
             return true;
         });
