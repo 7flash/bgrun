@@ -89,6 +89,10 @@ export async function startServer() {
     }
 }
 
+if (import.meta.main) {
+    await startServer();
+}
+
 function startStickyPortChecker() {
     const CHECK_INTERVAL_MS = 60_000; // Check every 60 seconds
     console.log(`[server] Starting sticky port checker (original: ${_originalPort}, current: ${_currentPort})`);
