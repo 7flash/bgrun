@@ -93,22 +93,22 @@ async function showHelp() {
     ${chalk.gray('═'.repeat(50))}
 
     ${chalk.yellow('Usage:')}
-      bgrun [name] [options]
+      bunx bgrun [name] [options]
 
     ${chalk.yellow('Commands:')}
-      bgrun                     List all processes
-      bgrun [name]             Show details for a process
-      bgrun -- <cmd>           Start a managed process with an auto-generated name
-      bgrun inline -- <cmd>    Run a command in this terminal with config env loaded
-      bgrun --env              Print shell commands to export config env vars
-      bgrun --dashboard        Launch web dashboard (managed by bgrun)
-      bgrun --restart [name]   Restart a process
-      bgrun --restart-all      Restart ALL registered processes
-      bgrun --stop [name]      Stop a process (keep in registry)
-      bgrun --stop-all         Stop ALL running processes
-      bgrun --delete [name]    Delete a process
-      bgrun --clean            Remove all stopped processes
-      bgrun --nuke             Delete ALL processes
+      bunx bgrun                     List all processes
+      bunx bgrun [name]             Show details for a process
+      bunx bgrun -- <cmd>           Start a managed process with an auto-generated name
+      bunx bgrun inline -- <cmd>    Run a command in this terminal with config env loaded
+      bunx bgrun --env              Print shell commands to export config env vars
+      bunx bgrun --dashboard        Launch web dashboard (managed by bgrun)
+      bunx bgrun --restart [name]   Restart a process
+      bunx bgrun --restart-all      Restart ALL registered processes
+      bunx bgrun --stop [name]      Stop a process (keep in registry)
+      bunx bgrun --stop-all         Stop ALL running processes
+      bunx bgrun --delete [name]    Delete a process
+      bunx bgrun --clean            Remove all stopped processes
+      bunx bgrun --nuke             Delete ALL processes
 
     ${chalk.yellow('Options:')}
       --name <string>        Process name (required for new)
@@ -133,14 +133,14 @@ async function showHelp() {
       --help                 Show this help message
 
     ${chalk.yellow('Examples:')}
-      bgrun -- bun run dev
-      bgrun --force -- bun run server.ts
-      bgrun inline -- bun run dev
-      Invoke-Expression (bgrun --env)
-      eval "$(bgrun --env --shell sh)"
-      bgrun --dashboard
-      bgrun --name myapp --command "bun run dev" --directory . --watch
-      bgrun myapp --logs --lines 50
+      bunx bgrun -- bun run dev
+      bunx bgrun --force -- bun run server.ts
+      bunx bgrun inline -- bun run dev
+      Invoke-Expression (bunx bgrun --env)
+      eval "$(bunx bgrun --env --shell sh)"
+      bunx bgrun --dashboard
+      bunx bgrun --name myapp --command "bun run dev" --directory . --watch
+      bunx bgrun myapp --logs --lines 50
   `;
   console.log(usage);
 }
@@ -215,11 +215,11 @@ async function run() {
         Run a command in the current terminal with env vars loaded from a bgrun config file.
 
         Usage:
-          bgrun inline [--directory <path>] [--config <path>] -- <command> [args...]
+          bunx bgrun inline [--directory <path>] [--config <path>] -- <command> [args...]
 
         Examples:
-          bgrun inline -- bun run dev
-          bgrun inline --directory apps/api -- node server.js
+          bunx bgrun inline -- bun run dev
+          bunx bgrun inline --directory apps/api -- node server.js
       `);
       return;
     }
@@ -374,10 +374,8 @@ async function run() {
     // Spawn the dashboard server as a managed process
     // Port is NOT passed as CLI arg — Melina will auto-detect.
     // If user wants a specific port, we pass it via BUN_PORT env var.
-    const { resolve } = require('path');
-    const scriptPath = resolve(process.argv[1]);
-    const spawnCommand = `bun run ${scriptPath} --_serve`;
-    const command = `bgrun --_serve`;
+    const spawnCommand = `bunx bgrun --_serve`;
+    const command = `bunx bgrun --_serve`;
     const stdoutPath = join(bgrDir, `${dashboardName}-out.txt`);
     const stderrPath = join(bgrDir, `${dashboardName}-err.txt`);
 

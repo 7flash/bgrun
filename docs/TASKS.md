@@ -2,7 +2,7 @@
 
 ## 🔴 Priority: Fix
 - [x] ~~**Port 3000 env leakage and dashboard reclamation**~~ — ✅ DONE. `handleRun()` now strips dashboard-only env (`BUN_PORT`, `BGR_STDOUT`, `BGR_STDERR`) before spawning managed apps, rejects explicit `PORT` collisions unless forced, dashboard startup only reclaims explicitly requested ports, and detached dashboard PID detection no longer assumes port 3000.
-- [x] ~~**Stale internal restart path on dashboard/guard**~~ — ✅ DONE. Internal commands stored as `bgrun --_serve` / `bgrun --_guard-loop` are now resolved to the current package runtime before spawn, so CLI/guard/API restarts no longer pick up a stale `bgrun.exe` from PATH and reclaim the wrong port.
+- [x] ~~**Stale internal restart path on dashboard/guard**~~ — ✅ DONE. Internal commands stored with `bunx bgrun` (and legacy `bgrun` entries) now resolve through the package runtime, so CLI/guard/API restarts no longer pick up a stale `bgrun.exe` from PATH and reclaim the wrong port.
 - [x] ~~**Live wrapper PID port reconciliation**~~ — ✅ DONE. When a running Windows process has no detected ports, bgrun now probes its child PID, updates the DB if the child owns listening ports, and re-fetches resources so dashboard/CLI show the real port.
 - [x] ~~**PowerShell capture for Windows PID discovery**~~ — ✅ DONE. `psExec()` now pipes stdout/stderr and reads them correctly, which fixes child-PID lookup and wrapper-port reconciliation on Windows.
 - [x] ~~**Inline command env port discovery**~~ — ✅ DONE. bgrun now parses `set PORT=...&&` / `set BUN_PORT=...&&` style command prefixes (plus simple Unix env prefixes) for pre-spawn port conflict checks and next-port suggestions.

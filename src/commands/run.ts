@@ -32,35 +32,28 @@ import {
 import { parseConfigFile } from "../config";
 import { $ } from "bun";
 import { sleep } from "bun";
-import { basename, join } from "path";
+import { join } from "path";
 import { createMeasure } from "measure-fn";
 import { syncProcessWatcher } from "../watcher";
 
 const homePath = getHomeDir();
 const run = createMeasure("run");
+const INTERNAL_BUNX_PREFIX = "bunx bgrun";
 
 export function resolveInternalBgrunCommand(command: string): string {
   const trimmed = command.trim();
   if (
-    !trimmed.startsWith("bgrun --_serve") &&
-    !trimmed.startsWith("bgrun --_watch-process ")
+    !trimmed.startsWith("bgrun --_") &&
+    !trimmed.startsWith(`${INTERNAL_BUNX_PREFIX} --_`)
   ) {
     return command;
   }
 
-  const currentEntry = process.argv[1] || "";
-  const currentBase = basename(currentEntry);
-  const bundledIndex =
-    currentBase === "index.js"
-      ? join(import.meta.dir, "..", "index.js")
-      : join(import.meta.dir, "..", "index.ts");
-
-  if (trimmed.startsWith("bgrun --_serve")) {
-    return `bun run ${bundledIndex} --_serve`;
+  if (trimmed.startsWith(`${INTERNAL_BUNX_PREFIX} --_`)) {
+    return trimmed;
   }
 
-  const suffix = trimmed.slice("bgrun ".length);
-  return `bun run ${bundledIndex} ${suffix}`;
+  return `${INTERNAL_BUNX_PREFIX}${trimmed.slice("bgrun".length)}`;
 }
 
 export async function handleRun(options: CommandOptions) {

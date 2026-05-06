@@ -1,4 +1,4 @@
-import { basename, join } from "path";
+import { join } from "path";
 import { addHistoryEntry, db, getProcess, insertProcess, removeProcessByName, retryDatabaseOperation } from "./db";
 import { findChildPid, getHomeDir, getShellCommand, isProcessRunning, psExec, terminateProcess } from "./platform";
 import { handleRun } from "./commands/run";
@@ -42,16 +42,10 @@ async function findDetachedWatcherPid(targetName: string): Promise<number | null
 }
 
 function getInternalWatcherCommand(targetName: string): { storedCommand: string; spawnCommand: string } {
-    const currentEntry = process.argv[1] || "";
-    const currentBase = basename(currentEntry);
-    const runtimeEntry = currentBase === "index.js"
-        ? join(import.meta.dir, "..", "index.js")
-        : join(import.meta.dir, "..", "index.ts");
-
     const quotedTarget = quoteArg(targetName);
     return {
-        storedCommand: `bgrun --_watch-process ${quotedTarget}`,
-        spawnCommand: `bun run ${quoteArg(runtimeEntry)} --_watch-process ${quotedTarget}`,
+        storedCommand: `bunx bgrun --_watch-process ${quotedTarget}`,
+        spawnCommand: `bunx bgrun --_watch-process ${quotedTarget}`,
     };
 }
 

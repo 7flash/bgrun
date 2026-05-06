@@ -260,19 +260,21 @@ describe('cli helpers', () => {
 })
 
 describe('resolveInternalBgrunCommand', () => {
-    test('rewrites internal dashboard command to current runtime entry', () => {
+    test('rewrites legacy internal dashboard command to bunx bgrun', () => {
         const resolved = resolveInternalBgrunCommand('bgrun --_serve')
-        expect(resolved).toContain('bun run ')
+        expect(resolved).toBe('bunx bgrun --_serve')
         expect(resolved).toContain('--_serve')
-        expect(resolved).not.toBe('bgrun --_serve')
     })
 
-    test('rewrites internal watcher command to current runtime entry', () => {
+    test('rewrites legacy internal watcher command to bunx bgrun', () => {
         const resolved = resolveInternalBgrunCommand('bgrun --_watch-process "my-app"')
-        expect(resolved).toContain('bun run ')
+        expect(resolved).toBe('bunx bgrun --_watch-process "my-app"')
         expect(resolved).toContain('--_watch-process')
         expect(resolved).toContain('my-app')
-        expect(resolved).not.toBe('bgrun --_watch-process "my-app"')
+    })
+
+    test('leaves bunx internal commands unchanged', () => {
+        expect(resolveInternalBgrunCommand('bunx bgrun --_serve')).toBe('bunx bgrun --_serve')
     })
 
     test('leaves normal commands unchanged', () => {

@@ -12,8 +12,8 @@
 Start, stop, restart, and monitor any process — from dev servers to Docker containers.
 Zero config. One command. Beautiful dashboard included.
 
-```
-bun install -g bgrun
+```bash
+bunx bgrun --help
 ```
 
 </div>
@@ -35,33 +35,33 @@ bun install -g bgrun
 | Programmatic API | ✅ | ✅ (first-class TypeScript) |
 | Process persistence | ✅ | ✅ (SQLite) |
 
-> **Note:** The CLI is available as both `bgrun` and `bgr` (alias). All examples below use `bgrun`.
+> **Note:** Prefer `bunx bgrun`. Bare `bgrun` only works if you installed it globally or already have a matching shim on `PATH`.
 
 ---
 
 ## Quick Start
 
 ```bash
-# Install globally
-bun install -g bgrun
+# Run without a global install
+bunx bgrun --help
 
 # Start a process
-bgrun --name my-api --directory ./my-project --command "bun run server.ts"
+bunx bgrun --name my-api --directory ./my-project --command "bun run server.ts"
 
 # Start a managed process with an auto-generated date name
-bgrun -- bun run server.ts
+bunx bgrun -- bun run server.ts
 
 # Run in the current terminal with config env loaded
-bgrun inline -- bun run dev
+bunx bgrun inline -- bun run dev
 
 # Export config env into your current shell
-Invoke-Expression (bgrun envit)
+Invoke-Expression (bunx bgrun envit)
 
 # List all processes
-bgrun
+bunx bgrun
 
 # Open the web dashboard
-bgrun --dashboard
+bunx bgrun --dashboard
 ```
 
 That's it. bgrun tracks the PID, captures stdout/stderr, detects the port, and survives terminal close.
@@ -71,7 +71,7 @@ That's it. bgrun tracks the PID, captures stdout/stderr, detects the port, and s
 ## 📊 Web Dashboard
 
 
-Launch with `bgrun --dashboard` and open `http://localhost:3001`. Processes are auto-grouped by working directory.
+Launch with `bunx bgrun --dashboard` and open `http://localhost:3001`. Processes are auto-grouped by working directory.
 
 **Expose with Caddy** for remote access:
 
