@@ -14,8 +14,8 @@ import type { CommandOptions } from "./types";
 import { error, announce } from "./logger";
 // startServer is dynamically imported only when --_serve is used
 // to avoid loading melina (which has side-effects) on every bgrun command
-import { getHomeDir, getShellCommand, findChildPid, isProcessRunning, terminateProcess, getProcessPorts, killProcessOnPort, waitForPortFree, isPortFree, findPidByPort, psExec } from "./platform";
-import { insertProcess, removeProcessByName, getProcess, retryDatabaseOperation, getDbInfo } from "./db";
+import { getHomeDir, getShellCommand, findChildPid, isProcessRunning, terminateProcess, getProcessPorts, killProcessOnPort, waitForPortFree, isPortFree, findPidByPort, psExec, resolvePidWithPorts } from "./platform";
+import { insertProcess, removeProcessByName, getProcess, retryDatabaseOperation, getDbInfo, updateProcessPid } from "./db";
 import dedent from "dedent";
 import chalk from "chalk";
 import { join } from "path";
@@ -338,18 +338,28 @@ async function run() {
     // Check if dashboard is already running
     const existing = getProcess(dashboardName);
     if (existing && await isProcessRunning(existing.pid)) {
-      // The stored PID may be the shell wrapper (cmd.exe), not the actual bun process
-      // Try the stored PID first, then traverse the process tree to find the real one
-      let existingPorts = await getProcessPorts(existing.pid);
+      // The stored PID may be a shell wrapper. Resolve toward the child that
+      // actually owns the listening socket before rendering the banner.
+      const resolved = await resolvePidWithPorts(existing.pid);
+      let existingPid = resolved.pid;
+      let existingPorts = resolved.ports;
+
       if (existingPorts.length === 0) {
-        const childPid = await findChildPid(existing.pid);
-        if (childPid !== existing.pid) {
-          existingPorts = await getProcessPorts(childPid);
+        const detachedPid = await findDetachedProcessByArg('--_serve');
+        if (detachedPid && detachedPid !== existingPid) {
+          const detachedResolved = await resolvePidWithPorts(detachedPid);
+          existingPid = detachedResolved.pid;
+          existingPorts = detachedResolved.ports;
         }
       }
+
+      if (existingPid !== existing.pid && existingPorts.length > 0) {
+        await retryDatabaseOperation(() => updateProcessPid(dashboardName, existingPid));
+      }
+
       const portStr = existingPorts.length > 0 ? `:${existingPorts[0]}` : '(detecting...)';
       announce(
-        `Dashboard is already running (PID ${existing.pid})\n\n` +
+        `Dashboard is already running (PID ${existingPid})\n\n` +
         `  🌐  ${chalk.cyan(`http://localhost${portStr}`)}\n\n` +
         `  Use ${chalk.yellow(`bgrun --stop ${dashboardName}`)} to stop it\n` +
         `  Use ${chalk.yellow(`bgrun --dashboard --force`)} to restart`,
@@ -427,14 +437,23 @@ async function run() {
       if (detachedPid) actualPid = detachedPid;
     }
 
-    // Detect the port the server actually bound to
+    // Detect the port the server actually bound to.
+    // On Windows, the first live PID can still be a wrapper process with no ports,
+    // so keep resolving toward the child that actually owns the listener.
     let actualPort: number | null = null;
     for (let attempt = 0; attempt < 10; attempt++) {
-      const ports = await getProcessPorts(actualPid);
-      if (ports.length > 0) {
-        actualPort = ports[0];
+      const resolved = await resolvePidWithPorts(actualPid);
+      actualPid = resolved.pid;
+      if (resolved.ports.length > 0) {
+        actualPort = resolved.ports[0];
         break;
       }
+
+      const detachedPid = await findDetachedProcessByArg('--_serve');
+      if (detachedPid && detachedPid !== actualPid) {
+        actualPid = detachedPid;
+      }
+
       await sleep(1000);
     }
 
