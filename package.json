@@ -1,6 +1,6 @@
 {
   "name": "bgrun",
-  "version": "3.12.20",
+  "version": "3.12.21",
   "description": "bgrun — A lightweight process manager for Bun",
   "type": "module",
   "main": "./dist/api.js",
@@ -52,7 +52,7 @@
     "chalk": "^5.4.1",
     "dedent": "^1.5.3",
     "measure-fn": "3.10.1",
-    "melina": "2.3.6",
+    "melina": "2.5.2",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "sqlite-zod-orm": "3.26.1"

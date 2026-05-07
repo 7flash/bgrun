@@ -446,6 +446,7 @@ bgrun exposes its internals as importable TypeScript functions:
 
 > **Packaging note:** the CLI ships from `dist/index.js`, the Bun programmatic API resolves through `dist/api.js`, and the dashboard backend uses built `dist/*` runtime artifacts via `dashboard/lib/runtime.ts`.
 > Published packages are now `dist`-first; repository `src/` files remain the development/build source of truth and are not part of the runtime package surface.
+> **Build hooks:** `npm`/`bun` runs the package `prepare` script on local install from the repo and before packing/publishing, so `bun run build` is triggered to refresh `dist/`. `prepublishOnly` also runs `bun run build` right before `npm publish`.
 
 ```bash
 bun add bgrun
