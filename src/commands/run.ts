@@ -340,26 +340,6 @@ export async function handleRun(options: CommandOptions) {
       }
     }
 
-    const requestedPort = getDeclaredPort(finalEnv, finalCommand);
-    if (requestedPort) {
-      const portFree = await isPortFree(requestedPort);
-      if (!portFree) {
-        if (force) {
-          await killProcessOnPort(requestedPort);
-          const freed = await waitForPortFree(requestedPort, 5000);
-          if (!freed) {
-            error(
-              `Port ${requestedPort} is still in use. Could not reclaim it for '${name}'.`,
-            );
-          }
-        } else {
-          error(
-            `Port ${requestedPort} is already in use. Refusing to start '${name}' without --force.`,
-          );
-        }
-      }
-    }
-
     const stdoutPath =
       stdout ||
       existingProcess?.stdout_path ||

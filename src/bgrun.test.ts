@@ -445,11 +445,54 @@ describe('handleRun port safety', () => {
         }
     }, 15000)
 
-    test('refuses to start a second managed process on the same explicit PORT without force', async () => {
+    test('does not refuse startup solely because PORT is set when the script ignores it', async () => {
+        const dir = `${process.cwd()}/tmp-port-guard-${Date.now()}`
+        const scriptPath = `${dir}/ignore-port.ts`
+        const name = `ignore-port-${Date.now()}`
+        const probe = Bun.serve({
+            port: 0,
+            hostname: '127.0.0.1',
+            fetch() { return new Response('ok') },
+        })
+        const port = probe.port
+        probe.stop(true)
+
+        mkdirSync(dir, { recursive: true })
+        await Bun.write(scriptPath, [
+            'setInterval(() => {}, 1000);',
+        ].join('\n'))
+
+        try {
+            await handleRun({
+                action: 'run',
+                name,
+                directory: dir,
+                command: `bun run ${scriptPath}`,
+                env: { PORT: String(port), BGR_KEEP_ALIVE: 'false' },
+                remoteName: '',
+            })
+
+            const proc = getProcess(name)
+            expect(proc).toBeDefined()
+            expect(proc?.pid ?? 0).toBeGreaterThan(0)
+        } finally {
+            const proc = getProcess(name)
+            if (proc) {
+                try {
+                    await terminateProcess(proc.pid, true)
+                } catch { }
+                removeProcessByName(name)
+            }
+            probe.stop(true)
+            await waitForPortFree(port, 5000)
+            rmSync(dir, { recursive: true, force: true })
+        }
+    }, 15000)
+
+    test('still cleans up the old process ports on force restart', async () => {
         const dir = `${process.cwd()}/tmp-port-guard-${Date.now()}`
         const scriptPath = `${dir}/serve-port.ts`
-        const nameA = `port-guard-a-${Date.now()}`
-        const nameB = `port-guard-b-${Date.now()}`
+        const name = `port-guard-a-${Date.now()}`
         const probe = Bun.serve({
             port: 0,
             hostname: '127.0.0.1',
@@ -468,7 +511,7 @@ describe('handleRun port safety', () => {
         try {
             await handleRun({
                 action: 'run',
-                name: nameA,
+                name,
                 directory: dir,
                 command: `bun run ${scriptPath}`,
                 env: { PORT: String(port), BGR_KEEP_ALIVE: 'false' },
@@ -477,23 +520,26 @@ describe('handleRun port safety', () => {
 
             await Bun.sleep(800)
 
-            await expect(handleRun({
+            await handleRun({
                 action: 'run',
-                name: nameB,
+                name,
                 directory: dir,
                 command: `bun run ${scriptPath}`,
                 env: { PORT: String(port), BGR_KEEP_ALIVE: 'false' },
                 remoteName: '',
-            })).rejects.toThrow(`Port ${port} is already in use`)
+                force: true,
+            })
+
+            const proc = getProcess(name)
+            expect(proc).toBeDefined()
+            expect(proc?.pid ?? 0).toBeGreaterThan(0)
         } finally {
-            for (const name of [nameA, nameB]) {
-                const proc = getProcess(name)
-                if (proc) {
-                    try {
-                        await terminateProcess(proc.pid, true)
-                    } catch { }
-                    removeProcessByName(name)
-                }
+            const proc = getProcess(name)
+            if (proc) {
+                try {
+                    await terminateProcess(proc.pid, true)
+                } catch { }
+                removeProcessByName(name)
             }
             await waitForPortFree(port, 5000)
             rmSync(dir, { recursive: true, force: true })
