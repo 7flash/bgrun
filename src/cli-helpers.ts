@@ -84,7 +84,7 @@ export function generateAutoProcessName(now = new Date()): string {
 
 export function shellQuoteArg(arg: string): string {
     if (process.platform === "win32") {
-        if (/^[A-Za-z0-9_./:-]+$/.test(arg)) return arg;
+        if (/^[A-Za-z0-9_./:\\-]+$/.test(arg)) return arg;
         return `"${arg.replace(/"/g, '\\"')}"`;
     }
 

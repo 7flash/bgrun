@@ -257,6 +257,15 @@ describe('cli helpers', () => {
         expect(joinCommandArgs(['bun', 'run', 'my script.ts'])).toContain('my')
         expect(joinCommandArgs(['bun', 'run', 'my script.ts'])).not.toBe('bun run my script.ts')
     })
+
+    test('does not quote a plain Windows absolute path argument', () => {
+        const command = joinCommandArgs(['bun', 'run', 'C:\\Code\\melina.js\\examples\\port-check\\server-implicit.ts'])
+        if (process.platform === 'win32') {
+            expect(command).toBe('bun run C:\\Code\\melina.js\\examples\\port-check\\server-implicit.ts')
+        } else {
+            expect(command).toContain('server-implicit.ts')
+        }
+    })
 })
 
 describe('resolveInternalBgrunCommand', () => {
