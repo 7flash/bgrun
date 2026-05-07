@@ -45,6 +45,9 @@ bunx bgrun --help
 # Run without a global install
 bunx bgrun --help
 
+# Skip automatic .config.toml loading for one-off commands
+bunx bgrun --no-config -- bun run script.ts
+
 # Start a process
 bunx bgrun --name my-api --directory ./my-project --command "bun run server.ts"
 

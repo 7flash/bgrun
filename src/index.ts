@@ -118,6 +118,7 @@ async function showHelp() {
       --command <string>     Process command (required for new)
       --directory <path>     Working directory (required for new)
       --config <path>        Config file (default: .config.toml)
+      --no-config            Disable automatic .config.toml loading
       --env                  Print shell export commands from config and exit
       --shell <type>         Shell for --env: powershell | cmd | sh | json
       --watch                Watch for file changes and auto-restart
@@ -139,6 +140,7 @@ async function showHelp() {
 
     ${chalk.yellow('Examples:')}
       bunx bgrun -- bun run dev
+      bunx bgrun --no-config -- bun run script.ts
       bunx bgrun --force -- bun run server.ts
       bunx bgrun inline -- bun run dev
       Invoke-Expression (bunx bgrun --env)
@@ -157,6 +159,7 @@ const cliArgOptions = {
   command: { type: 'string' as const },
   directory: { type: 'string' as const },
   config: { type: 'string' as const },
+  "no-config": { type: 'boolean' as const },
   env: { type: 'boolean' as const },
   shell: { type: 'string' as const },
   watch: { type: 'boolean' as const },
@@ -259,7 +262,7 @@ async function run() {
       name: autoName,
       command: inlineCommand,
       directory,
-      configPath: values.config as string | undefined,
+      configPath: (values['no-config'] as boolean | undefined) ? '' : values.config as string | undefined,
       force: values.force as boolean | undefined,
       fetch: values.fetch as boolean | undefined,
       remoteName: '',
@@ -304,7 +307,7 @@ async function run() {
       name: autoName,
       command: implicitCommand,
       directory,
-      configPath: values.config as string | undefined,
+      configPath: (values['no-config'] as boolean | undefined) ? '' : values.config as string | undefined,
       force: values.force as boolean | undefined,
       fetch: values.fetch as boolean | undefined,
       remoteName: '',
@@ -685,7 +688,7 @@ async function run() {
         name: name,
         command: values.command as string | undefined,
         directory: values.directory as string | undefined,
-        configPath: values.config as string | undefined,
+        configPath: (values['no-config'] as boolean | undefined) ? '' : values.config as string | undefined,
         force: values.force as boolean | undefined,
         fetch: values.fetch as boolean | undefined,
         remoteName: '',
