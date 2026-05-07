@@ -10,6 +10,7 @@ import { showLogs } from "./commands/logs";
 import { showDetails } from "./commands/details";
 import { handleEnvit, parseEnvitArgs } from "./commands/envit";
 import { handleInline, parseInlineArgs } from "./commands/inline";
+import { handleGuardToggle } from "./commands/guard";
 import type { CommandOptions } from "./types";
 import { error, announce } from "./logger";
 // startServer is dynamically imported only when --_serve is used
@@ -102,6 +103,8 @@ async function showHelp() {
       bunx bgrun inline -- <cmd>    Run a command in this terminal with config env loaded
       bunx bgrun --env              Print shell commands to export config env vars
       bunx bgrun --dashboard        Launch web dashboard (managed by bgrun)
+      bunx bgrun [name] --guard     Enable crash watcher for a process
+      bunx bgrun [name] --guard-off Disable crash watcher for a process
       bunx bgrun --restart [name]   Restart a process
       bunx bgrun --restart-all      Restart ALL registered processes
       bunx bgrun --stop [name]      Stop a process (keep in registry)
@@ -129,6 +132,8 @@ async function showHelp() {
       --version              Show version
       --debug                Show debug info (DB path, BGR home, etc.)
       --dashboard            Launch web dashboard as bgrun-managed process
+      --guard                Enable per-process crash watcher
+      --guard-off            Disable per-process crash watcher
       --port <number>        Port for dashboard (default: 3000)
       --help                 Show this help message
 
@@ -139,6 +144,8 @@ async function showHelp() {
       Invoke-Expression (bunx bgrun --env)
       eval "$(bunx bgrun --env --shell sh)"
       bunx bgrun --dashboard
+      bunx bgrun myapp --guard
+      bunx bgrun myapp --guard-off
       bunx bgrun --name myapp --command "bun run dev" --directory . --watch
       bunx bgrun myapp --logs --lines 50
   `;
@@ -174,6 +181,8 @@ const cliArgOptions = {
   stdout: { type: 'string' as const },
   stderr: { type: 'string' as const },
   dashboard: { type: 'boolean' as const },
+  guard: { type: 'boolean' as const },
+  "guard-off": { type: 'boolean' as const },
   debug: { type: 'boolean' as const },
   "_serve": { type: 'boolean' as const },
   "_watch-process": { type: 'string' as const },
@@ -186,6 +195,8 @@ async function run() {
   const isActionInvocation = (values: Record<string, unknown>) => {
     return Boolean(
       values.dashboard ||
+      values.guard ||
+      values['guard-off'] ||
       values.version ||
       values.help ||
       values.debug ||
@@ -492,8 +503,8 @@ async function run() {
     return;
   }
 
-  if ((values as any).guard) {
-    error("Standalone guard was removed. Enable guard per process with BGR_KEEP_ALIVE=true or the dashboard toggle.");
+  if (values.guard || values['guard-off']) {
+    await handleGuardToggle(positionals[0], Boolean(values.guard));
     return;
   }
 

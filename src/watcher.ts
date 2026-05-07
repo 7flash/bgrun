@@ -2,6 +2,7 @@ import { join } from "path";
 import { addHistoryEntry, db, getProcess, insertProcess, removeProcessByName, retryDatabaseOperation } from "./db";
 import { findChildPid, getHomeDir, getShellCommand, isProcessRunning, psExec, terminateProcess } from "./platform";
 import { handleRun } from "./commands/run";
+import { shellQuoteArg } from "./cli-helpers";
 import {
     acquireProcessOperationLock,
     getWatchedProcessName,
@@ -25,10 +26,6 @@ function getWatcherLogPaths(watcherName: string) {
     };
 }
 
-function quoteArg(value: string): string {
-    return `"${value.replace(/(["\\])/g, "\\$1")}"`;
-}
-
 async function findDetachedWatcherPid(targetName: string): Promise<number | null> {
     if (process.platform !== "win32") return null;
 
@@ -42,7 +39,7 @@ async function findDetachedWatcherPid(targetName: string): Promise<number | null
 }
 
 function getInternalWatcherCommand(targetName: string): { storedCommand: string; spawnCommand: string } {
-    const quotedTarget = quoteArg(targetName);
+    const quotedTarget = shellQuoteArg(targetName);
     return {
         storedCommand: `bunx bgrun --_watch-process ${quotedTarget}`,
         spawnCommand: `bunx bgrun --_watch-process ${quotedTarget}`,

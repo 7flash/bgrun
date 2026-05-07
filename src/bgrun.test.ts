@@ -7,7 +7,7 @@
  * Run: bun test src/bgrun.test.ts
  */
 import { describe, expect, test } from 'bun:test'
-import { parseEnvString, parseCommandEnv, getDeclaredPort, calculateRuntime, buildManagedProcessEnv } from './utils'
+import { parseEnvString, parseCommandEnv, getDeclaredPort, calculateRuntime, buildManagedProcessEnv, getWatcherProcessName } from './utils'
 import { parseConfigFile, loadConfigEnv } from './config'
 import { buildDateProcessName, joinCommandArgs } from './cli-helpers'
 import { stripAnsi, truncateString, truncatePath } from './table'
@@ -19,7 +19,20 @@ import { mkdirSync, rmSync } from 'fs'
 process.env.BGRUN_DB = `bgrun-test-${Date.now()}.sqlite`
 process.env.BGRUN_DISABLE_LEGACY_MIGRATION = '1'
 
+async function rmDirWithRetries(dir: string, retries = 5) {
+    for (let i = 0; i < retries; i++) {
+        try {
+            rmSync(dir, { recursive: true, force: true })
+            return
+        } catch (err: any) {
+            if (err?.code !== 'EBUSY' || i === retries - 1) throw err
+            await Bun.sleep(300)
+        }
+    }
+}
+
 const { handleRun, resolveInternalBgrunCommand } = await import('./commands/run')
+const { handleGuardToggle } = await import('./commands/guard')
 const { parseEnvitArgs, renderEnvitOutput } = await import('./commands/envit')
 const { parseInlineArgs } = await import('./commands/inline')
 const {
@@ -573,7 +586,11 @@ describe('CLI implicit command mode', () => {
                     cwd: process.cwd(),
                     stdout: 'pipe',
                     stderr: 'pipe',
-                    env: Bun.env,
+                    env: {
+                        ...Bun.env,
+                        BGRUN_DB: process.env.BGRUN_DB!,
+                        BGRUN_DISABLE_LEGACY_MIGRATION: '1',
+                    },
                 }
             )
 
@@ -599,9 +616,71 @@ describe('CLI implicit command mode', () => {
                     removeProcessByName(launchedName)
                 }
             }
-            rmSync(dir, { recursive: true, force: true })
+            await rmDirWithRetries(dir)
         }
     }, 20000)
+})
+
+describe('guard CLI toggles', () => {
+    test('enables and disables the per-process watcher', async () => {
+        const dir = `${process.cwd()}/tmp-guard-toggle-${Date.now()}`
+        const scriptPath = `${dir}/worker.ts`
+        const name = `guard-toggle-${Date.now()}`
+        const watcherName = getWatcherProcessName(name)
+
+        mkdirSync(dir, { recursive: true })
+        await Bun.write(scriptPath, 'setInterval(() => {}, 1000);\n')
+
+        try {
+            await handleRun({
+                action: 'run',
+                name,
+                directory: dir,
+                command: `bun run ${scriptPath}`,
+                remoteName: '',
+            })
+
+            let proc = getProcess(name)
+            expect(proc).toBeDefined()
+            expect(proc?.env ?? '').not.toContain('BGR_KEEP_ALIVE=true')
+
+            await handleGuardToggle(name, true)
+
+            await Bun.sleep(1200)
+
+            proc = getProcess(name)
+            expect(proc).toBeDefined()
+            expect(proc?.env ?? '').toContain('BGR_KEEP_ALIVE=true')
+            expect(getProcess(watcherName)).toBeDefined()
+
+            await handleGuardToggle(name, false)
+
+            await Bun.sleep(600)
+
+            proc = getProcess(name)
+            expect(proc).toBeDefined()
+            expect(proc?.env ?? '').not.toContain('BGR_KEEP_ALIVE=true')
+            expect(getProcess(watcherName)).toBeNull()
+        } finally {
+            const watcherProc = getProcess(watcherName)
+            if (watcherProc) {
+                try {
+                    await terminateProcess(watcherProc.pid, true)
+                } catch { }
+                removeProcessByName(watcherName)
+            }
+
+            const proc = getProcess(name)
+            if (proc) {
+                try {
+                    await terminateProcess(proc.pid, true)
+                } catch { }
+                removeProcessByName(name)
+            }
+
+            await rmDirWithRetries(dir)
+        }
+    }, 25000)
 })
 
 // ─── detectPackageManager ───────────────────────────────

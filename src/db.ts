@@ -149,7 +149,7 @@ export function removeProcessByName(name: string) {
 export function updateProcessPid(name: string, newPid: number) {
     const proc = db.process.select().where({ name }).limit(1).get();
     if (proc) {
-        db.process.update(proc.id, { pid: newPid });
+        proc.update({ pid: newPid });
     }
 }
 
@@ -164,7 +164,7 @@ export function removeAllProcesses() {
 export function updateProcessEnv(name: string, envJson: string) {
     const proc = db.process.select().where({ name }).limit(1).get();
     if (proc) {
-        db.process.update(proc.id, { env: envJson });
+        proc.update({ env: envJson });
     }
 }
 
