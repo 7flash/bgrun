@@ -122,6 +122,7 @@ async function showHelp() {
       --env                  Print shell export commands from config and exit
       --shell <type>         Shell for --env: powershell | cmd | sh | json
       --watch                Watch for file changes and auto-restart
+      --hot                  Restart the managed process when files change
       --force                Force restart existing process
       --fetch                Fetch latest git changes before running
       --json                 Output in JSON format
@@ -140,6 +141,7 @@ async function showHelp() {
 
     ${chalk.yellow('Examples:')}
       bunx bgrun -- bun run dev
+      bunx bgrun --hot -- bun run index.ts
       bunx bgrun --no-config -- bun run script.ts
       bunx bgrun --force -- bun run server.ts
       bunx bgrun inline -- bun run dev
@@ -163,6 +165,7 @@ const cliArgOptions = {
   env: { type: 'boolean' as const },
   shell: { type: 'string' as const },
   watch: { type: 'boolean' as const },
+  hot: { type: 'boolean' as const },
   force: { type: 'boolean' as const },
   fetch: { type: 'boolean' as const },
   delete: { type: 'boolean' as const },
@@ -214,6 +217,7 @@ async function run() {
       values['log-stdout'] ||
       values['log-stderr'] ||
       values.watch ||
+      values.hot ||
       values.json ||
       values.filter
     );
@@ -256,9 +260,10 @@ async function run() {
     const autoName = (values.name as string | undefined) || generateAutoProcessName();
     const inlineCommand = joinCommandArgs(commandArgs);
     const directory = (values.directory as string | undefined) || process.cwd();
+    const watchLike = Boolean(values.watch || values.hot);
 
-    await handleRun({
-      action: 'run',
+    const runOptions = {
+      action: watchLike ? 'watch' : 'run',
       name: autoName,
       command: inlineCommand,
       directory,
@@ -269,7 +274,17 @@ async function run() {
       dbPath: values.db as string | undefined,
       stdout: values.stdout as string | undefined,
       stderr: values.stderr as string | undefined
-    });
+    } as CommandOptions;
+
+    if (watchLike) {
+      await handleWatch(runOptions, {
+        showLogs: (values.logs as boolean) || false,
+        logType: values["log-stdout"] ? 'stdout' : (values["log-stderr"] ? 'stderr' : 'both'),
+        lines: values.lines ? parseInt(values.lines as string) : undefined
+      });
+    } else {
+      await handleRun(runOptions);
+    }
     return;
   }
 
@@ -301,9 +316,10 @@ async function run() {
     const autoName = (values.name as string | undefined) || generateAutoProcessName();
     const implicitCommand = joinCommandArgs(positionals);
     const directory = (values.directory as string | undefined) || process.cwd();
+    const watchLike = Boolean(values.watch || values.hot);
 
-    await handleRun({
-      action: 'run',
+    const runOptions = {
+      action: watchLike ? 'watch' : 'run',
       name: autoName,
       command: implicitCommand,
       directory,
@@ -314,7 +330,17 @@ async function run() {
       dbPath: values.db as string | undefined,
       stdout: values.stdout as string | undefined,
       stderr: values.stderr as string | undefined
-    });
+    } as CommandOptions;
+
+    if (watchLike) {
+      await handleWatch(runOptions, {
+        showLogs: (values.logs as boolean) || false,
+        logType: values["log-stdout"] ? 'stdout' : (values["log-stderr"] ? 'stderr' : 'both'),
+        lines: values.lines ? parseInt(values.lines as string) : undefined
+      });
+    } else {
+      await handleRun(runOptions);
+    }
     return;
   }
 
@@ -649,7 +675,7 @@ async function run() {
   }
 
   // Watch
-  if (values.watch) {
+  if (values.watch || values.hot) {
     await handleWatch({
       action: 'watch',
       name: name,
