@@ -99,7 +99,7 @@ async function showHelp() {
     ${chalk.yellow('Commands:')}
       bunx bgrun                     List all processes
       bunx bgrun [name]             Show details for a process
-      bunx bgrun -- <cmd>           Start a managed process with an auto-generated name
+      bunx bgrun -- <cmd>           Start a managed process named from the working directory
       bunx bgrun inline -- <cmd>    Run a command in this terminal with config env loaded
       bunx bgrun --env              Print shell commands to export config env vars
       bunx bgrun --dashboard        Launch web dashboard (managed by bgrun)
@@ -257,9 +257,9 @@ async function run() {
       allowPositionals: true,
     });
 
-    const autoName = (values.name as string | undefined) || generateAutoProcessName();
     const inlineCommand = joinCommandArgs(commandArgs);
     const directory = (values.directory as string | undefined) || process.cwd();
+    const autoName = (values.name as string | undefined) || generateAutoProcessName(directory);
     const watchLike = Boolean(values.watch || values.hot);
 
     const runOptions = {
@@ -313,9 +313,9 @@ async function run() {
     !values.command &&
     !isActionInvocation(values as Record<string, unknown>)
   ) {
-    const autoName = (values.name as string | undefined) || generateAutoProcessName();
     const implicitCommand = joinCommandArgs(positionals);
     const directory = (values.directory as string | undefined) || process.cwd();
+    const autoName = (values.name as string | undefined) || generateAutoProcessName(directory);
     const watchLike = Boolean(values.watch || values.hot);
 
     const runOptions = {

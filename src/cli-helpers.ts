@@ -1,85 +1,37 @@
+import { basename, resolve } from "path";
 import { getProcess } from "./db";
 
-const MONTH_NAMES = [
-    "january",
-    "february",
-    "march",
-    "april",
-    "may",
-    "june",
-    "july",
-    "august",
-    "september",
-    "october",
-    "november",
-    "december",
-];
+function sanitizeProcessName(value: string): string {
+    const normalized = value
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9._-]+/g, "-")
+        .replace(/-+/g, "-")
+        .replace(/^[-._]+|[-._]+$/g, "");
 
-const DAY_NAMES = [
-    "",
-    "first",
-    "second",
-    "third",
-    "fourth",
-    "fifth",
-    "sixth",
-    "seventh",
-    "eighth",
-    "ninth",
-    "tenth",
-    "eleventh",
-    "twelfth",
-    "thirteenth",
-    "fourteenth",
-    "fifteenth",
-    "sixteenth",
-    "seventeenth",
-    "eighteenth",
-    "nineteenth",
-    "twentieth",
-    "twenty-first",
-    "twenty-second",
-    "twenty-third",
-    "twenty-fourth",
-    "twenty-fifth",
-    "twenty-sixth",
-    "twenty-seventh",
-    "twenty-eighth",
-    "twenty-ninth",
-    "thirtieth",
-    "thirty-first",
-];
-
-function pad2(value: number): string {
-    return String(value).padStart(2, "0");
+    return normalized || "process";
 }
 
-export function buildDateProcessName(now = new Date()): string {
-    const month = MONTH_NAMES[now.getMonth()] || "process";
-    const day = DAY_NAMES[now.getDate()] || "day";
-    return `${month}-${day}`;
+export function buildDirectoryProcessName(directory: string): string {
+    const resolved = resolve(directory);
+    const folderName = basename(resolved);
+    return sanitizeProcessName(folderName);
 }
 
-export function generateAutoProcessName(now = new Date()): string {
-    const baseName = buildDateProcessName(now);
+export function generateAutoProcessName(directory: string): string {
+    const baseName = buildDirectoryProcessName(directory);
     if (!getProcess(baseName)) {
         return baseName;
     }
 
-    const timeSuffix = `${pad2(now.getHours())}${pad2(now.getMinutes())}${pad2(now.getSeconds())}`;
-    const timeName = `${baseName}-${timeSuffix}`;
-    if (!getProcess(timeName)) {
-        return timeName;
-    }
-
     for (let i = 1; i < 1000; i++) {
-        const candidate = `${timeName}-${i}`;
+        const candidate = `${baseName}-${i}`;
         if (!getProcess(candidate)) {
             return candidate;
         }
     }
 
-    return `${timeName}-${Date.now()}`;
+    return `${baseName}-${Date.now()}`;
 }
 
 export function shellQuoteArg(arg: string): string {

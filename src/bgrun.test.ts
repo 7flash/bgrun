@@ -9,7 +9,7 @@
 import { describe, expect, test } from 'bun:test'
 import { parseEnvString, parseCommandEnv, getDeclaredPort, calculateRuntime, buildManagedProcessEnv, getWatcherProcessName } from './utils'
 import { parseConfigFile, loadConfigEnv } from './config'
-import { buildDateProcessName, joinCommandArgs } from './cli-helpers'
+import { buildDirectoryProcessName, generateAutoProcessName, joinCommandArgs } from './cli-helpers'
 import { stripAnsi, truncateString, truncatePath } from './table'
 import { detectPackageManager, formatDeployToolError } from './deploy'
 import { isProcessRunning, parseUnixListeningPorts, terminateProcess, waitForPortFree } from './platform'
@@ -38,6 +38,7 @@ const { parseInlineArgs } = await import('./commands/inline')
 const {
     getProcess,
     removeProcessByName,
+    insertProcess,
     addDependency,
     removeDependency,
     getDependencyGraph,
@@ -282,8 +283,30 @@ describe('renderEnvitOutput', () => {
 })
 
 describe('cli helpers', () => {
-    test('builds date-based process names', () => {
-        expect(buildDateProcessName(new Date(2026, 3, 5, 12, 0, 0))).toBe('april-fifth')
+    test('builds process names from the working directory', () => {
+        expect(buildDirectoryProcessName('C:\\Code\\fairfun-landing')).toBe('fairfun-landing')
+        expect(buildDirectoryProcessName('C:\\Code\\My App')).toBe('my-app')
+    })
+
+    test('adds numeric suffixes when a directory-based name already exists', () => {
+        const name = `auto-name-test-${Date.now()}`
+        insertProcess({
+            pid: 1,
+            workdir: `C:\\Code\\${name}`,
+            command: 'bun run server.ts',
+            name,
+            env: '',
+            configPath: '',
+            stdout_path: 'out.log',
+            stderr_path: 'err.log',
+        })
+
+        try {
+            expect(generateAutoProcessName(`C:\\Code\\${name}`)).toBe(`${name}-1`)
+        } finally {
+            removeProcessByName(name)
+            removeProcessByName(`${name}-1`)
+        }
     })
 
     test('quotes command args for shell reconstruction', () => {
