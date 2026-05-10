@@ -16,9 +16,22 @@ function formatMemory(bytes: number): string {
 
 export async function showAll(opts?: { json?: boolean; filter?: string }) {
     const processes = getAllProcesses();
+    const latestByName = new Map<string, typeof processes[number]>();
+
+    for (const proc of processes) {
+        const existing = latestByName.get(proc.name);
+        if (!existing) {
+            latestByName.set(proc.name, proc);
+            continue;
+        }
+
+        if (proc.timestamp > existing.timestamp || (proc.timestamp === existing.timestamp && proc.id > existing.id)) {
+            latestByName.set(proc.name, proc);
+        }
+    }
 
     // Apply filter by env.BGR_GROUP if provided
-    const filtered = processes.filter((proc) => {
+    const filtered = Array.from(latestByName.values()).filter((proc) => {
         if (isInternalProcessName(proc.name)) return false;
         if (!opts?.filter) return true;
         const envVars = parseEnvString(proc.env);
@@ -66,9 +79,20 @@ export async function showAll(opts?: { json?: boolean; filter?: string }) {
             const isRunning = aliveCache.get(proc.pid) ?? await isProcessRunning(proc.pid, proc.command);
             const envVars = parseEnvString(proc.env);
 
-            const ports = isRunning ? await getProcessPorts(proc.pid) : [];
+            let displayPid = proc.pid;
+            let ports: number[] = [];
+            if (isRunning) {
+                const resolved = await resolvePidWithPorts(proc.pid);
+                displayPid = resolved.pid;
+                ports = resolved.ports;
+                if (displayPid !== proc.pid) {
+                    updateProcessPid(proc.name, displayPid);
+                    (proc as any).pid = displayPid;
+                }
+            }
+
             jsonData.push({
-                pid: proc.pid,
+                pid: displayPid,
                 name: proc.name,
                 ports: ports.length > 0 ? ports : undefined,
                 status: isRunning ? "running" : "stopped",
