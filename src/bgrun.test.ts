@@ -115,13 +115,33 @@ describe('buildManagedProcessEnv', () => {
             },
         )
 
-        expect(env.PATH).toBe('/bin')
+        expect(env.PATH).toBe(`${require('path').dirname(process.execPath)}${process.platform === 'win32' ? ';' : ':'}/bin`)
         expect(env.HOME).toBe('/tmp/home')
         expect(env.PORT).toBe('4310')
         expect(env.CUSTOM_FLAG).toBe('true')
         expect(env.BUN_PORT).toBeUndefined()
         expect(env.BGR_STDOUT).toBeUndefined()
         expect(env.BGR_STDERR).toBeUndefined()
+    })
+
+    test('prioritizes the real bun executable directory on PATH', () => {
+        const inheritedPath = [
+            'C:\\project\\node_modules\\.bin',
+            'C:\\Users\\galaxywin\\.bun\\bin',
+            'C:\\Windows\\System32',
+        ].join(process.platform === 'win32' ? ';' : ':')
+
+        const env = buildManagedProcessEnv(
+            {
+                PATH: inheritedPath,
+            },
+            {},
+        )
+
+        const parts = (env.PATH || '').split(process.platform === 'win32' ? ';' : ':')
+        expect(parts[0]).toBe(require('path').dirname(process.execPath))
+        expect(parts.filter(part => part === require('path').dirname(process.execPath)).length).toBe(1)
+        expect(parts).toContain('C:\\project\\node_modules\\.bin')
     })
 })
 

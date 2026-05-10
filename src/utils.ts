@@ -18,6 +18,17 @@ export function calculateRuntime(startTime: string): string {
 
 const INTERNAL_MANAGED_ENV_KEYS = ["BUN_PORT", "BGR_STDOUT", "BGR_STDERR"] as const;
 
+function prependPathEntry(existingPath: string | undefined, entry: string): string {
+    if (!existingPath) return entry;
+    const parts = existingPath.split(delimiter).filter(Boolean);
+    const normalizedEntry = process.platform === "win32" ? entry.toLowerCase() : entry;
+    const deduped = parts.filter(part => {
+        const normalizedPart = process.platform === "win32" ? part.toLowerCase() : part;
+        return normalizedPart !== normalizedEntry;
+    });
+    return [entry, ...deduped].join(delimiter);
+}
+
 export function parseCommandEnv(command: string): Record<string, string> {
     const env: Record<string, string> = {};
     const trimmed = command.trim();
@@ -64,6 +75,11 @@ export function buildManagedProcessEnv(
         sanitizedParentEnv[key] = value;
     }
 
+    // bunx prepends transient shims like project/node_modules/.bin/bun.exe ahead of the real
+    // Bun install. Managed children must prefer the actual Bun runtime when invoking `bun`.
+    const bunDir = dirname(process.execPath);
+    sanitizedParentEnv.PATH = prependPathEntry(sanitizedParentEnv.PATH, bunDir);
+
     return { ...sanitizedParentEnv, ...processEnv };
 }
 
@@ -100,7 +116,7 @@ export { isProcessRunning } from "./platform";
 import * as fs from "fs";
 import * as os from "os";
 import chalk from "chalk";
-import { join } from "path";
+import { delimiter, dirname, join } from "path";
 
 function getOperationLockPath(name: string): string {
     return join(os.homedir(), ".bgr", `${name}.operation.lock`);
