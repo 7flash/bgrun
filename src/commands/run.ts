@@ -40,6 +40,40 @@ const homePath = getHomeDir();
 const run = createMeasure("run");
 const INTERNAL_BUNX_PREFIX = "bunx bgrun";
 
+async function resolveSpawnedProcessPid(
+  parentPid: number,
+  command: string,
+  workdir: string,
+): Promise<number> {
+  if (parentPid <= 0) return 0;
+
+  let candidatePid = parentPid;
+
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const descendantPid = await findChildPid(parentPid);
+    if (descendantPid > 0) {
+      candidatePid = descendantPid;
+    }
+
+    if (candidatePid > 0 && await isProcessRunning(candidatePid, command)) {
+      return candidatePid;
+    }
+
+    await sleep(250);
+  }
+
+  const reconciled = await reconcileProcessPids(
+    [{ name: "__spawn__", pid: parentPid, command, workdir }],
+    new Set([parentPid]),
+  );
+  const matchedPid = reconciled.get("__spawn__") ?? 0;
+  if (matchedPid > 0 && await isProcessRunning(matchedPid, command)) {
+    return matchedPid;
+  }
+
+  return 0;
+}
+
 export function resolveInternalBgrunCommand(command: string): string {
   const trimmed = command.trim();
   if (
@@ -364,14 +398,21 @@ export async function handleRun(options: CommandOptions) {
         });
 
         newProcess.unref();
-        // Give shell a moment to spawn child, then find PID before shell exits
-        await sleep(100);
-        // Find the actual child PID (shell wrapper exits immediately after spawning)
-        const pid = await findChildPid(newProcess.pid);
-        // Wait more for subprocess to initialize
-        await sleep(400);
-        return pid;
+        return await resolveSpawnedProcessPid(
+          newProcess.pid,
+          finalCommand!,
+          finalDirectory,
+        );
       })) ?? 0;
+
+    if (actualPid <= 0) {
+      throw new Error(
+        `Failed to resolve a live PID for "${name}" after launch. ` +
+        `The child process likely exited immediately. Check logs:\n` +
+        `stdout: ${stdoutPath}\n` +
+        `stderr: ${stderrPath}`,
+      );
+    }
 
     await retryDatabaseOperation(() =>
       insertProcess({
