@@ -71,6 +71,52 @@ async function resolveSpawnedProcessPid(
     return matchedPid;
   }
 
+  if (process.platform === "win32") {
+    try {
+      const commandParts = command
+        .toLowerCase()
+        .split(/\s+/)
+        .map(part => part.trim())
+        .filter(part => part.length > 2);
+      const output = await psExec(
+        `Get-CimInstance Win32_Process -Filter "Name='bun.exe'" | ` +
+        `ForEach-Object { Write-Output "$($_.ProcessId)|$($_.ParentProcessId)|$($_.CreationDate)|$($_.CommandLine)" }`,
+        5000,
+      );
+
+      let bestPid = 0;
+      let bestScore = -1;
+
+      for (const line of output.split("\n")) {
+        const parts = line.split("|");
+        if (parts.length < 4) continue;
+        const pid = parseInt(parts[0]?.trim(), 10);
+        const candidateParentPid = parseInt(parts[1]?.trim(), 10);
+        const candidateCommand = parts.slice(3).join("|").trim().toLowerCase();
+        if (isNaN(pid) || pid <= 0 || pid === process.pid) continue;
+        if (!candidateCommand) continue;
+
+        let score = 0;
+        if (candidateParentPid === parentPid) score += 10;
+        for (const part of commandParts) {
+          if (candidateCommand.includes(part)) score += 2;
+        }
+        if (candidateCommand.includes("run server.ts")) score += 2;
+
+        if (score > bestScore && await isProcessRunning(pid, command)) {
+          bestScore = score;
+          bestPid = pid;
+        }
+      }
+
+      if (bestScore >= 4) {
+        return bestPid;
+      }
+    } catch {
+      // best effort
+    }
+  }
+
   return 0;
 }
 
