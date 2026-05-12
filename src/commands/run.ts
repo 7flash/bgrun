@@ -48,6 +48,7 @@ async function resolveSpawnedProcessPid(
   if (parentPid <= 0) return 0;
 
   let candidatePid = parentPid;
+  const spawnedAt = Date.now();
 
   for (let attempt = 0; attempt < 6; attempt++) {
     const descendantPid = await findChildPid(parentPid);
@@ -92,6 +93,7 @@ async function resolveSpawnedProcessPid(
         if (parts.length < 4) continue;
         const pid = parseInt(parts[0]?.trim(), 10);
         const candidateParentPid = parseInt(parts[1]?.trim(), 10);
+        const creationDateRaw = parts[2]?.trim() || "";
         const candidateCommand = parts.slice(3).join("|").trim().toLowerCase();
         if (isNaN(pid) || pid <= 0 || pid === process.pid) continue;
         if (!candidateCommand) continue;
@@ -102,6 +104,15 @@ async function resolveSpawnedProcessPid(
           if (candidateCommand.includes(part)) score += 2;
         }
         if (candidateCommand.includes("run server.ts")) score += 2;
+        if (candidateCommand.includes(workdir.toLowerCase().replace(/\\/g, "/"))) score += 4;
+        if (candidateCommand.includes(workdir.toLowerCase())) score += 4;
+
+        const createdAt = creationDateRaw ? Date.parse(creationDateRaw) : NaN;
+        if (!isNaN(createdAt)) {
+          const ageMs = Math.abs(createdAt - spawnedAt);
+          if (ageMs <= 15_000) score += 6;
+          else if (ageMs <= 60_000) score += 2;
+        }
 
         if (score > bestScore && await isProcessRunning(pid, command)) {
           bestScore = score;
