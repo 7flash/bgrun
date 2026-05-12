@@ -144,6 +144,7 @@ async function showHelp() {
     ${chalk.yellow('Examples:')}
       bunx bgrun -- bun run dev
       bunx bgrun --hot -- bun run index.ts
+      bunx bgrun -hl -- bun run server.ts
       bunx bgrun --no-config -- bun run script.ts
       bunx bgrun --force -- bun run server.ts
       bunx bgrun inline -- bun run dev
@@ -160,16 +161,16 @@ async function showHelp() {
 }
 
 const cliArgOptions = {
-  name: { type: 'string' as const },
-  command: { type: 'string' as const },
-  directory: { type: 'string' as const },
+  name: { type: 'string' as const, short: 'n' },
+  command: { type: 'string' as const, short: 'c' },
+  directory: { type: 'string' as const, short: 'd' },
   config: { type: 'string' as const },
   "no-config": { type: 'boolean' as const },
   env: { type: 'boolean' as const },
   shell: { type: 'string' as const },
-  watch: { type: 'boolean' as const },
-  hot: { type: 'boolean' as const },
-  force: { type: 'boolean' as const },
+  watch: { type: 'boolean' as const, short: 'w' },
+  hot: { type: 'boolean' as const, short: 'h' },
+  force: { type: 'boolean' as const, short: 'f' },
   fetch: { type: 'boolean' as const },
   delete: { type: 'boolean' as const },
   nuke: { type: 'boolean' as const },
@@ -178,13 +179,13 @@ const cliArgOptions = {
   stop: { type: 'boolean' as const },
   "stop-all": { type: 'boolean' as const },
   clean: { type: 'boolean' as const },
-  json: { type: 'boolean' as const },
-  logs: { type: 'boolean' as const },
+  json: { type: 'boolean' as const, short: 'j' },
+  logs: { type: 'boolean' as const, short: 'l' },
   "log-stdout": { type: 'boolean' as const },
   "log-stderr": { type: 'boolean' as const },
   lines: { type: 'string' as const },
   filter: { type: 'string' as const },
-  version: { type: 'boolean' as const },
+  version: { type: 'boolean' as const, short: 'v' },
   help: { type: 'boolean' as const },
   db: { type: 'string' as const },
   stdout: { type: 'string' as const },
