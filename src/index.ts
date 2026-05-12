@@ -112,6 +112,7 @@ async function showHelp() {
       bunx bgrun --delete [name]    Delete a process
       bunx bgrun --clean            Remove all stopped processes
       bunx bgrun --nuke             Delete ALL processes
+      bunx bgrun --kill-port <n>    Kill whatever is currently listening on a port
 
     ${chalk.yellow('Options:')}
       --name <string>        Process name (required for new)
@@ -136,6 +137,7 @@ async function showHelp() {
       --dashboard            Launch web dashboard as bgrun-managed process
       --guard                Enable per-process crash watcher
       --guard-off            Disable per-process crash watcher
+      --kill-port <number>   Kill the process currently using a port
       --port <number>        Port for dashboard (default: 3000)
       --help                 Show this help message
 
@@ -148,6 +150,7 @@ async function showHelp() {
       Invoke-Expression (bunx bgrun --env)
       eval "$(bunx bgrun --env --shell sh)"
       bunx bgrun --dashboard
+      bunx bgrun --kill-port 3000
       bunx bgrun myapp --guard
       bunx bgrun myapp --guard-off
       bunx bgrun --name myapp --command "bun run dev" --directory . --watch
@@ -190,6 +193,7 @@ const cliArgOptions = {
   guard: { type: 'boolean' as const },
   "guard-off": { type: 'boolean' as const },
   debug: { type: 'boolean' as const },
+  "kill-port": { type: 'string' as const },
   "_serve": { type: 'boolean' as const },
   "_watch-process": { type: 'string' as const },
   port: { type: 'string' as const },
@@ -206,6 +210,7 @@ async function run() {
       values.version ||
       values.help ||
       values.debug ||
+      values['kill-port'] ||
       values.nuke ||
       values.clean ||
       values['restart-all'] ||
@@ -561,6 +566,28 @@ async function run() {
       Platform:  ${process.platform}
       Bun:       ${Bun.version}
     `);
+    return;
+  }
+
+  if (values['kill-port']) {
+    const port = parseInt(String(values['kill-port']), 10);
+    if (isNaN(port) || port <= 0) {
+      error("Please provide a valid port number for --kill-port.");
+    }
+
+    const wasFree = await isPortFree(port);
+    if (wasFree) {
+      announce(`Port ${port} is already free.`, "Port Free");
+      return;
+    }
+
+    await killProcessOnPort(port);
+    const freed = await waitForPortFree(port, 5000);
+    if (!freed) {
+      error(`Port ${port} is still busy after attempted cleanup.`);
+    }
+
+    announce(`Freed port ${port}.`, "Port Cleanup");
     return;
   }
 
