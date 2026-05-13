@@ -367,7 +367,7 @@ export function ensureDir(dirPath: string): void {
  */
 export function getShellCommand(command: string): string[] {
   if (isWindows()) {
-    return ["cmd", "/c", command];
+    return [process.env.ComSpec || "cmd.exe", "/c", command];
   } else {
     return ["sh", "-c", command];
   }
