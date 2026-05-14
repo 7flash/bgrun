@@ -190,4 +190,38 @@ describe("bgr Process Manager Fixes", () => {
         expect(logContent.trim()).toBe("bug_was_fixed");
 
     }, 60000);
+
+    test("supports --logs-dir by deriving stdout and stderr names from the process name", async () => {
+        const logsDir = join(testDir, "derived-logs");
+        const printScript = join(appDir, "_print_logs_dir.ts");
+        const stdoutPath = join(logsDir, "app-with-logs-dir-out.txt");
+        const stderrPath = join(logsDir, "app-with-logs-dir-err.txt");
+
+        await fs.mkdir(logsDir, { recursive: true });
+        await fs.writeFile(printScript, 'console.log("logs-dir-ok");\nconsole.error("logs-dir-err");\n');
+
+        const result = await runBgr([
+            "--name", "app-with-logs-dir",
+            "--directory", appDir,
+            "--command", `bun run ${printScript}`,
+            "--no-config",
+            "--logs-dir", logsDir,
+        ]);
+
+        expect(result.stderr).not.toContain("Error:");
+        expect(result.stdout).toContain('🚀 Launched process "app-with-logs-dir"');
+
+        const stdoutLog = await waitForFileContent(stdoutPath, "logs-dir-ok");
+        const stderrLog = await waitForFileContent(stderrPath, "logs-dir-err");
+
+        expect(stdoutLog).toContain("logs-dir-ok");
+        expect(stderrLog).toContain("logs-dir-err");
+
+        const db = new Database(dbPath);
+        const proc = db.query(`SELECT * FROM process WHERE name = ?`).get("app-with-logs-dir") as any;
+        db.close();
+
+        expect(proc.stdout_path).toBe(stdoutPath);
+        expect(proc.stderr_path).toBe(stderrPath);
+    }, 60000);
 });

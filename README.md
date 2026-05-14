@@ -730,6 +730,14 @@ bgrun --name api \
     --stderr /var/log/api/stderr.log
 ```
 
+Or provide a directory and let `bgrun` derive both log filenames from the process name:
+
+```bash
+bgrun --name api \
+    --command "bun run server.ts" \
+    --logs-dir /var/log/api
+```
+
 ---
 
 ## Process Groups

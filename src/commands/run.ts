@@ -32,7 +32,8 @@ import {
 import { parseConfigFile } from "../config";
 import { $ } from "bun";
 import { sleep } from "bun";
-import { join } from "path";
+import { mkdirSync } from "fs";
+import { dirname, join } from "path";
 import { createMeasure } from "measure-fn";
 import { syncProcessWatcher } from "../watcher";
 
@@ -156,6 +157,7 @@ export async function handleRun(options: CommandOptions) {
     configPath,
     force,
     fetch,
+    logsDir,
     stdout,
     stderr,
   } = options;
@@ -433,13 +435,17 @@ export async function handleRun(options: CommandOptions) {
 
     const stdoutPath =
       stdout ||
+      (logsDir ? join(logsDir, `${name}-out.txt`) : undefined) ||
       existingProcess?.stdout_path ||
       join(homePath, ".bgr", `${name}-out.txt`);
+    mkdirSync(dirname(stdoutPath), { recursive: true });
     Bun.write(stdoutPath, "");
     const stderrPath =
       stderr ||
+      (logsDir ? join(logsDir, `${name}-err.txt`) : undefined) ||
       existingProcess?.stderr_path ||
       join(homePath, ".bgr", `${name}-err.txt`);
+    mkdirSync(dirname(stderrPath), { recursive: true });
     Bun.write(stderrPath, "");
 
     const actualPid =

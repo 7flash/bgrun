@@ -8,6 +8,7 @@ export interface CommandOptions {
     name?: string;
     force?: boolean;
     fetch?: boolean;
+    logsDir?: string;
     stdout?: string;
     stderr?: string;
     dbPath?: string;

@@ -125,6 +125,7 @@ async function showHelp() {
       --watch                Watch for file changes and auto-restart
       --hot                  Restart the managed process when files change
       --force                Force restart existing process
+      --logs-dir <path>      Directory for derived stdout/stderr logs
       --fetch                Fetch latest git changes before running
       --json                 Output in JSON format
       --filter <group>       Filter list by BGR_GROUP
@@ -155,6 +156,7 @@ async function showHelp() {
       bunx bgrun myapp --guard
       bunx bgrun myapp --guard-off
       bunx bgrun --name myapp --command "bun run dev" --directory . --watch
+      bunx bgrun --name myapp --logs-dir .data --command "bun run dev" --directory .
       bunx bgrun myapp --logs --lines 50
   `;
   console.log(usage);
@@ -171,6 +173,7 @@ const cliArgOptions = {
   watch: { type: 'boolean' as const, short: 'w' },
   hot: { type: 'boolean' as const, short: 'h' },
   force: { type: 'boolean' as const, short: 'f' },
+  "logs-dir": { type: 'string' as const },
   fetch: { type: 'boolean' as const },
   delete: { type: 'boolean' as const },
   nuke: { type: 'boolean' as const },
@@ -276,6 +279,7 @@ async function run() {
       configPath: (values['no-config'] as boolean | undefined) ? '' : values.config as string | undefined,
       force: values.force as boolean | undefined,
       fetch: values.fetch as boolean | undefined,
+      logsDir: values['logs-dir'] as string | undefined,
       remoteName: '',
       dbPath: values.db as string | undefined,
       stdout: values.stdout as string | undefined,
@@ -332,6 +336,7 @@ async function run() {
       configPath: (values['no-config'] as boolean | undefined) ? '' : values.config as string | undefined,
       force: values.force as boolean | undefined,
       fetch: values.fetch as boolean | undefined,
+      logsDir: values['logs-dir'] as string | undefined,
       remoteName: '',
       dbPath: values.db as string | undefined,
       stdout: values.stdout as string | undefined,
@@ -711,6 +716,7 @@ async function run() {
       directory: values.directory as string | undefined,
       configPath: values.config as string | undefined,
       force: values.force as boolean | undefined,
+      logsDir: values['logs-dir'] as string | undefined,
       remoteName: '',
       dbPath: values.db as string | undefined,
       stdout: values.stdout as string | undefined,
@@ -745,6 +751,7 @@ async function run() {
         configPath: (values['no-config'] as boolean | undefined) ? '' : values.config as string | undefined,
         force: values.force as boolean | undefined,
         fetch: values.fetch as boolean | undefined,
+        logsDir: values['logs-dir'] as string | undefined,
         remoteName: '',
         dbPath: values.db as string | undefined,
         stdout: values.stdout as string | undefined,
