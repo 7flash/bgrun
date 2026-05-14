@@ -23,7 +23,7 @@ import { join } from "path";
 import { sleep } from "bun";
 import { configure } from "measure-fn";
 import { startProcessWatcher } from "./watcher";
-import { generateAutoProcessName, joinCommandArgs } from "./cli-helpers";
+import { generateAutoProcessName, generateCommandBasedProcessName, joinCommandArgs } from "./cli-helpers";
 
 if (!Bun.argv.includes("--_serve")) {
   if (!Bun.env.MEASURE_SILENT) {
@@ -255,20 +255,61 @@ async function run() {
     return;
   }
 
-  const delimiterIndex = rawArgs.indexOf("--");
+  const delimiterIndex = rawArgs.lastIndexOf("--");
   if (delimiterIndex !== -1 && delimiterIndex < rawArgs.length - 1) {
     const preArgs = rawArgs.slice(0, delimiterIndex);
-    const commandArgs = rawArgs.slice(delimiterIndex + 1);
-    const { values } = parseArgs({
+    let commandArgs = rawArgs.slice(delimiterIndex + 1);
+
+    // Parse CLI options that may appear after the command (common pattern: -- "cmd" --option value)
+    // We need to split commandArgs into [actualCommand, ...cliOptions]
+    // A CLI option starts with --
+    let actualCommandArgs: string[] = [];
+    let postCommandOptions: string[] = [];
+    let foundFirstNonOption = false;
+
+    for (const arg of commandArgs) {
+      if (!foundFirstNonOption) {
+        if (arg.startsWith('--')) {
+          // Still in CLI options section
+          postCommandOptions.push(arg);
+        } else {
+          foundFirstNonOption = true;
+          actualCommandArgs.push(arg);
+        }
+      } else {
+        // After we found the command, check if we hit more CLI options
+        if (arg.startsWith('--')) {
+          postCommandOptions.push(arg);
+        } else {
+          // If a non-option appears after we started collecting command args,
+          // it's part of the command (e.g., --run -- "bun --flag value")
+          actualCommandArgs.push(arg);
+        }
+      }
+    }
+
+    // If we found CLI options after the command, parse them
+    let values = parseArgs({
       args: preArgs,
       options: cliArgOptions,
       strict: false,
       allowPositionals: true,
-    });
+    }).values;
 
-    const inlineCommand = joinCommandArgs(commandArgs);
+    if (postCommandOptions.length > 0) {
+      // Merge post-command options with pre-command options
+      const postParsed = parseArgs({
+        args: postCommandOptions,
+        options: cliArgOptions,
+        strict: false,
+        allowPositionals: true,
+      }).values;
+      values = { ...values, ...postParsed };
+    }
+
+    const inlineCommand = actualCommandArgs.length > 0 ? joinCommandArgs(actualCommandArgs) : joinCommandArgs(commandArgs);
     const directory = (values.directory as string | undefined) || process.cwd();
-    const autoName = (values.name as string | undefined) || generateAutoProcessName(directory);
+    const autoName = (values.name as string | undefined) || generateCommandBasedProcessName(inlineCommand);
     const watchLike = Boolean(values.watch || values.hot);
 
     const runOptions = {
@@ -325,7 +366,7 @@ async function run() {
   ) {
     const implicitCommand = joinCommandArgs(positionals);
     const directory = (values.directory as string | undefined) || process.cwd();
-    const autoName = (values.name as string | undefined) || generateAutoProcessName(directory);
+    const autoName = (values.name as string | undefined) || generateCommandBasedProcessName(implicitCommand);
     const watchLike = Boolean(values.watch || values.hot);
 
     const runOptions = {
@@ -740,8 +781,49 @@ async function run() {
 
   // List or Run or Details
   if (name) {
+    // Check if this looks like a command instead of a process name
+    // A command typically has spaces (multiple words)
+    const looksLikeCommand = name.includes(' ') && !getProcess(name);
+
     if (!values.command && !values.directory) {
-      await showDetails(name);
+      if (looksLikeCommand && !isActionInvocation(values as Record<string, unknown>)) {
+        // Treat it as a command with auto-generated name
+        const autoName = generateCommandBasedProcessName(name);
+        await handleRun({
+          action: 'run',
+          name: autoName,
+          command: name,
+          directory: values.directory as string | undefined || process.cwd(),
+          configPath: (values['no-config'] as boolean | undefined) ? '' : values.config as string | undefined,
+          force: values.force as boolean | undefined,
+          fetch: values.fetch as boolean | undefined,
+          logsDir: values['logs-dir'] as string | undefined,
+          remoteName: '',
+          dbPath: values.db as string | undefined,
+          stdout: values.stdout as string | undefined,
+          stderr: values.stderr as string | undefined
+        });
+      } else {
+        await showDetails(name);
+      }
+    } else if (looksLikeCommand && !values.command) {
+      // If directory is set but command is not, and name looks like a command,
+      // treat name as the command and generate an auto-name
+      const autoName = generateCommandBasedProcessName(name);
+      await handleRun({
+        action: 'run',
+        name: autoName,
+        command: name,
+        directory: values.directory as string | undefined || process.cwd(),
+        configPath: (values['no-config'] as boolean | undefined) ? '' : values.config as string | undefined,
+        force: values.force as boolean | undefined,
+        fetch: values.fetch as boolean | undefined,
+        logsDir: values['logs-dir'] as string | undefined,
+        remoteName: '',
+        dbPath: values.db as string | undefined,
+        stdout: values.stdout as string | undefined,
+        stderr: values.stderr as string || undefined
+      });
     } else {
       await handleRun({
         action: 'run',
@@ -755,7 +837,7 @@ async function run() {
         remoteName: '',
         dbPath: values.db as string | undefined,
         stdout: values.stdout as string | undefined,
-        stderr: values.stderr as string | undefined
+        stderr: values.stderr as string || undefined
       });
     }
   } else {

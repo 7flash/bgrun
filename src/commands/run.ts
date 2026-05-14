@@ -51,7 +51,9 @@ async function resolveSpawnedProcessPid(
   let candidatePid = parentPid;
   const spawnedAt = Date.now();
 
-  for (let attempt = 0; attempt < 6; attempt++) {
+  // Reduce attempts from 6 to 3, sleep from 250ms to 100ms
+  // This gives up to 300ms for the process to spawn, which is usually sufficient
+  for (let attempt = 0; attempt < 3; attempt++) {
     const descendantPid = await findChildPid(parentPid);
     if (descendantPid > 0) {
       candidatePid = descendantPid;
@@ -61,7 +63,7 @@ async function resolveSpawnedProcessPid(
       return candidatePid;
     }
 
-    await sleep(250);
+    await sleep(100);
   }
 
   const reconciled = await reconcileProcessPids(

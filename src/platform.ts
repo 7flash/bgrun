@@ -11,36 +11,38 @@ import { measure, createMeasure } from "measure-fn";
 
 const plat = createMeasure('platform');
 
+// Simple LRU cache for process liveness checks to avoid repeated PowerShell queries
+const isRunningCache = new Map<number, { alive: boolean; checkedAt: number }>();
+const CACHE_TTL = 500; // 500ms TTL
+
 /**
  * Execute a PowerShell command with -NoProfile asynchronously with timeout.
  * Returns stdout as string, or empty string on error.
- * 
+ *
  * Uses asynchronous execution to prevent deadlocks on Windows that occur
  * with Bun.spawnSync when multiple processes run simultaneously.
  */
 export async function psExec(command: string, timeoutMs: number = 3000): Promise<string> {
-  const tmpFile = join(os.tmpdir(), `bgr-ps-${Date.now()}-${Math.random().toString(36).substr(2, 9)}.ps1`);
   try {
-    await Bun.write(tmpFile, command);
-    
-    // Use Bun.spawn with timeout to prevent hanging
+    // Use -Command instead of -File to avoid temp file overhead
     const proc = Bun.spawn([
-      'powershell', 
-      '-NoProfile', 
-      '-ExecutionPolicy', 
-      'Bypass', 
-      '-File', 
-      tmpFile
+      'powershell',
+      '-NoProfile',
+      '-NonInteractive',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-Command',
+      command
     ], {
       stdout: 'pipe',
       stderr: 'pipe',
     });
-    
+
     // Race the process against the timeout
     const timeoutPromise = new Promise<string>((_, reject) => {
       setTimeout(() => reject(new Error('PowerShell command timed out')), timeoutMs);
     }) as Promise<string>;
-    
+
     const resultPromise = new Promise<string>(async (resolve, reject) => {
       try {
         const stdoutPromise = proc.stdout ? new Response(proc.stdout).text() : Promise.resolve('');
@@ -57,18 +59,16 @@ export async function psExec(command: string, timeoutMs: number = 3000): Promise
         reject(error);
       }
     });
-    
+
     // Wait for either the process to complete or the timeout
     try {
       const result = await Promise.race([resultPromise, timeoutPromise]);
       return result.trim(); // Trim to remove trailing newline
     } catch (error) {
       return ''; // Return empty string on timeout or error
-    } finally {
-      try { await Bun.sleep(100); } catch {} // Brief delay before file cleanup
     }
-  } finally {
-    try { fs.rmSync(tmpFile, { force: true }); } catch {} // Clean up temp file
+  } catch {
+    return '';
   }
 }
 
@@ -92,11 +92,19 @@ export async function isProcessRunning(pid: number, command?: string): Promise<b
   // PID 0 means intentionally stopped — never alive
   if (pid <= 0) return false;
 
+  // Check cache first (only for repeated queries within TTL)
+  const cached = isRunningCache.get(pid);
+  if (cached && Date.now() - cached.checkedAt < CACHE_TTL) {
+    return cached.alive;
+  }
+
   return (await plat.measure(`PID ${pid} alive?`, async () => {
     try {
       // Docker container detection
       if (command && (command.includes('docker run') || command.includes('docker-compose up') || command.includes('docker compose up'))) {
-        return await isDockerContainerRunning(command);
+        const alive = await isDockerContainerRunning(command);
+        isRunningCache.set(pid, { alive, checkedAt: Date.now() });
+        return alive;
       }
 
       if (isWindows()) {
@@ -106,18 +114,24 @@ export async function isProcessRunning(pid: number, command?: string): Promise<b
         // CLI, dashboard, and guard all agree on process liveness.
         try {
           process.kill(pid, 0);
+          isRunningCache.set(pid, { alive: true, checkedAt: Date.now() });
           return true;
         } catch {
           const output = await psExec(
             `Get-Process -Id ${pid} -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id`
           );
-          return output === String(pid);
+          const alive = output === String(pid);
+          isRunningCache.set(pid, { alive, checkedAt: Date.now() });
+          return alive;
         }
       } else {
         const result = await $`ps -p ${pid}`.nothrow().text();
-        return result.includes(`${pid}`);
+        const alive = result.includes(`${pid}`);
+        isRunningCache.set(pid, { alive, checkedAt: Date.now() });
+        return alive;
       }
     } catch {
+      isRunningCache.set(pid, { alive: false, checkedAt: Date.now() });
       return false;
     }
   })) ?? false;
@@ -442,7 +456,7 @@ export async function reconcileProcessPids(
       if (isWindows()) {
         const output = await psExec(
           `Get-CimInstance Win32_Process -Filter "Name='bun.exe'" | ForEach-Object { Write-Output "$($_.ProcessId)|$($_.CommandLine)" }`,
-          5000
+          2000
         );
         for (const line of output.split('\n')) {
           const sepIdx = line.indexOf('|');
