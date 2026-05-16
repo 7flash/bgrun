@@ -1,12 +1,13 @@
-import { getAllProcesses, updateProcessPid, calculateRuntime, getGuardRestartCounts, isInternalProcessName } from '../../../lib/runtime';
-import { getProcessBatchResources, reconcileProcessPids, resolvePidWithPorts, getProcessPorts, findChildPid } from '../../../../dist/api.js';
-import { measure, createMeasure } from 'measure-fn';
-import { $ } from 'bun';
+import { getAllProcesses, updateProcessPid, calculateRuntime, getGuardRestartCounts, isInternalProcessName } from "../../../lib/runtime";
+import { getProcessBatchResources, reconcileProcessPids, resolvePidWithPorts, getProcessPorts, findChildPid } from "../../../../dist/api.js";
+import { measure, createMeasure } from "measure-fn";
+import { $ } from "bun";
 
-const api = createMeasure('api');
+const api = createMeasure("api");
 
 const CACHE_TTL_MS = 5_000;
 const SUBPROCESS_TIMEOUT_MS = 4_000;
+const RESOLVE_TIMEOUT_MS = 2_000; // Shorter timeout for individual PID resolutions
 
 // Persistent cache across module re-evaluations
 const g = globalThis as any;
@@ -20,54 +21,68 @@ if (!g.__bgrResourceHistory) {
 const cache = g.__bgrProcessCache;
 const history = g.__bgrResourceHistory;
 
-function withTimeout<T>(promise: Promise<T>, fallback: T): Promise<T> {
+function withTimeout<T>(promise: Promise<T>, fallback: T, ms = SUBPROCESS_TIMEOUT_MS): Promise<T> {
     return Promise.race([
         promise,
-        new Promise<T>(resolve => setTimeout(() => resolve(fallback), SUBPROCESS_TIMEOUT_MS)),
+        new Promise<T>(resolve => setTimeout(() => resolve(fallback), ms)),       
     ]);
 }
 
-/** Single tasklist call ‚Äî returns set of running PIDs */
+/** Single liveness check ¶-¶¬Ú¿› returns set of running PIDs */
 async function getRunningPids(pids: number[]): Promise<Set<number>> {
     if (pids.length === 0) return new Set();
-    try {
-        const isWin = process.platform === 'win32';
-        if (isWin) {
+    const runningPids = new Set<number>();
+    const isWin = process.platform === "win32";
+
+    if (isWin) {
+        // FAST PATH: signal 0 works for most processes started by same user
+        const remainingPids: number[] = [];
+        for (const pid of pids) {
+            try {
+                process.kill(pid, 0);
+                runningPids.add(pid);
+            } catch {
+                remainingPids.push(pid);
+            }
+        }
+
+        if (remainingPids.length === 0) return runningPids;
+
+        // SLOW PATH: fallback to tasklist for anything signal 0 missed
+        try {
             const result = await $`tasklist /FO CSV /NH`.nothrow().quiet().text();
-            const runningPids = new Set<number>();
-            for (const line of result.split('\n')) {
-                const match = line.match(/"[^"]*","(\d+)"/);
+            for (const line of result.split("\n")) {
+                const match = line.match(/"[^"]*","(\\d+)"/);
                 if (match) {
                     const pid = parseInt(match[1]);
-                    if (pids.includes(pid)) runningPids.add(pid);
+                    if (remainingPids.includes(pid)) runningPids.add(pid);
                 }
             }
-            return runningPids;
-        } else {
-            const result = await $`ps -p ${pids.join(',')} -o pid=`.nothrow().quiet().text();
-            const runningPids = new Set<number>();
-            for (const line of result.trim().split('\n')) {
+        } catch { /* ignore */ }
+    } else {
+        try {
+            const result = await $`ps -p ${pids.join(",")} -o pid=`.nothrow().quiet().text();        
+            for (const line of result.trim().split("\n")) {
                 const pid = parseInt(line.trim());
                 if (!isNaN(pid)) runningPids.add(pid);
             }
-            return runningPids;
-        }
-    } catch {
-        return new Set();
+        } catch { /* ignore */ }
     }
+    
+    return runningPids;
 }
 
-/** Single netstat call ‚Äî returns map of PID ‚Üí ports */
+/** Single netstat call ¶-¶¬Ú¿› returns map of PID ¶-Ú¿‡Ú¿Ÿ ports */
 async function getPortsByPid(pids: number[]): Promise<Map<number, number[]>> {
     const portMap = new Map<number, number[]>();
     if (pids.length === 0) return portMap;
     try {
-        const isWin = process.platform === 'win32';
+        const isWin = process.platform === "win32";
         if (isWin) {
             const result = await $`netstat -ano`.nothrow().quiet().text();
             const pidSet = new Set(pids);
-            for (const line of result.split('\n')) {
-                const match = line.match(/^\s*TCP\s+\S+:(\d+)\s+\S+\s+LISTENING\s+(\d+)/);
+            for (const line of result.split("\n")) {
+                const match = line.match(/^\\s*TCP\\s+\\S+:(\\d+)\\s+\\S+\\s+LISTENING\\s+(\\d+)/);
                 if (match) {
                     const port = parseInt(match[1]);
                     const pid = parseInt(match[2]);
@@ -81,10 +96,10 @@ async function getPortsByPid(pids: number[]): Promise<Map<number, number[]>> {
         } else {
             const result = await $`ss -tlnp`.nothrow().quiet().text();
             const pidSet = new Set(pids);
-            for (const line of result.split('\n')) {
+            for (const line of result.split("\n")) {
                 for (const pid of pidSet) {
                     if (line.includes(`pid=${pid}`)) {
-                        const portMatch = line.match(/:(\d+)\s/);
+                        const portMatch = line.match(/:(\\d+)\\s/);
                         if (portMatch) {
                             const port = parseInt(portMatch[1]);
                             const existing = portMap.get(pid) || [];
@@ -102,49 +117,43 @@ async function getPortsByPid(pids: number[]): Promise<Map<number, number[]>> {
 // Parse environment string to find BGR_GROUP
 function getProcessGroup(envStr: string): string | null {
     if (!envStr) return null;
-    // Env is usually "KEY=VAL,KEY2=VAL2"
     const match = envStr.match(/(?:^|,)BGR_GROUP=([^,]+)/);
     return match ? match[1] : null;
 }
 
 async function fetchProcesses(): Promise<any[]> {
-    return await api.measure('Fetch processes', async (m) => {
+    return await api.measure("Fetch processes", async (m) => {
         const procs = getAllProcesses().filter((p: any) => !isInternalProcessName(p.name));
         const pids = procs.map((p: any) => p.pid);
         const guardRestartCounts = getGuardRestartCounts();
 
-        // Three subprocess calls total (not 3√óN)
+        // Optimized: all resource fetching in parallel
         let [runningPids, portMap, resourceMap] = await Promise.all([
-            m('Running PIDs', () => withTimeout(getRunningPids(pids), new Set<number>())),
-            m('Port map', () => withTimeout(getPortsByPid(pids), new Map<number, number[]>())),
-            m('Resource map', () => withTimeout(getProcessBatchResources(pids), new Map<number, { memory: number, cpu: number }>())),
+            m("Running PIDs", () => withTimeout(getRunningPids(pids), new Set<number>())),
+            m("Port map", () => withTimeout(getPortsByPid(pids), new Map<number, number[]>())),      
+            m("Resource map", () => withTimeout(getProcessBatchResources(pids), new Map<number, { memory: number, cpu: number }>())),
         ]);
 
         // PID reconciliation: if stored PIDs are dead, try to find the real process
-        const allPids = new Set(pids);
         const deadPids = new Set(pids.filter((pid: number) => !runningPids?.has(pid)));
 
         if (deadPids.size > 0) {
-            const reconciled = await m('Reconcile dead PIDs', () =>
-                withTimeout(reconcileProcessPids(procs, deadPids), new Map<string, number>())
+            const reconciled = await m("Reconcile dead PIDs", () =>
+                withTimeout(reconcileProcessPids(procs, deadPids), new Map<string, number>())        
             );
 
             if (reconciled && reconciled.size > 0) {
-                // Update stored PIDs in DB and refresh running status
                 const newPids: number[] = [];
                 for (const [name, newPid] of reconciled) {
                     updateProcessPid(name, newPid);
                     newPids.push(newPid);
-                    // Update the proc object in-place so the response uses the new PID
                     const proc = procs.find((p: any) => p.name === name);
                     if (proc) proc.pid = newPid;
                 }
 
-                // Mark reconciled PIDs as running
                 if (!runningPids) runningPids = new Set();
                 for (const pid of newPids) runningPids.add(pid);
 
-                // Re-fetch ports and resources for the new PIDs
                 const [newPorts, newResources] = await Promise.all([
                     withTimeout(getPortsByPid(newPids), new Map<number, number[]>()),
                     withTimeout(getProcessBatchResources(newPids), new Map<number, { memory: number, cpu: number }>()),
@@ -157,16 +166,17 @@ async function fetchProcesses(): Promise<any[]> {
         }
 
         const now = Date.now();
-        const isWin = process.platform === 'win32';
+        const isWin = process.platform === "win32";
 
-        for (const p of procs) {
+        // Optimized: parallel resolution of live wrapper PIDs
+        const resolutionTasks = procs.map(async (p) => {
             const running = runningPids?.has(p.pid) ?? false;
             const ports = running ? (portMap?.get(p.pid) || []) : [];
-            if (!running || ports.length > 0) continue;
+            if (!running || ports.length > 0) return;
 
-            const resolved = await m(`Resolve live wrapper PID for ${p.name}`, () =>
-                withTimeout(resolvePidWithPorts(p.pid), { pid: p.pid, ports: [] })
-            );
+            // Resolve toward child if parent has no ports
+            const resolved = await withTimeout(resolvePidWithPorts(p.pid), { pid: p.pid, ports: [] }, RESOLVE_TIMEOUT_MS);
+            
             if (resolved.pid !== p.pid && resolved.ports.length > 0) {
                 const oldPid = p.pid;
                 p.pid = resolved.pid;
@@ -177,21 +187,23 @@ async function fetchProcesses(): Promise<any[]> {
 
                 const refreshedResource = await withTimeout(
                     getProcessBatchResources([resolved.pid]),
-                    new Map<number, { memory: number, cpu: number }>()
+                    new Map<number, { memory: number, cpu: number }>(),
+                    RESOLVE_TIMEOUT_MS
                 );
                 const nextResource = refreshedResource.get(resolved.pid);
                 if (nextResource) {
                     resourceMap?.set(resolved.pid, nextResource);
                 }
             }
-        }
+        });
+
+        await m("Parallel PID resolution", () => Promise.all(resolutionTasks));
 
         return procs.map((p: any) => {
             const running = runningPids?.has(p.pid) ?? false;
             const ports = running ? (portMap?.get(p.pid) || []) : [];
             const res = running ? (resourceMap?.get(p.pid) || { memory: 0, cpu: 0 }) : { memory: 0, cpu: 0 };
 
-            // Manage history tracking for sparklines (up to 60 points = 5 minutes at 5s polling)
             let h = history.get(p.name);
             if (!h) {
                 h = { memory: [], cpu: [], lastCpuTime: 0, lastCheck: 0 };
@@ -201,28 +213,23 @@ async function fetchProcesses(): Promise<any[]> {
             let cpuPercent = 0;
             if (running) {
                 if (isWin) {
-                    // Windows: cpu is cumulative seconds. Calculate delta percentage across time.
                     if (h.lastCheck > 0 && h.lastCpuTime > 0) {
                         const timeDeltaSec = (now - h.lastCheck) / 1000;
                         const cpuDeltaSec = res.cpu - h.lastCpuTime;
                         if (timeDeltaSec > 0 && cpuDeltaSec >= 0) {
-                            // Max it at 100% per core? We'll just display the total usage
                             cpuPercent = (cpuDeltaSec / timeDeltaSec) * 100;
                         }
                     }
                     h.lastCpuTime = res.cpu;
                 } else {
-                    // Unix: it's already a percentage from \`ps\`
                     cpuPercent = res.cpu;
                 }
 
-                // Add points
                 h.memory.push(res.memory);
                 h.cpu.push(cpuPercent);
                 if (h.memory.length > 60) h.memory.shift();
                 if (h.cpu.length > 60) h.cpu.shift();
             } else {
-                // Not running, push zeros if not already zeroed out to bring graphs down
                 if (h.memory.length > 0 && h.memory[h.memory.length - 1] !== 0) {
                     h.memory.push(0);
                     h.cpu.push(0);
@@ -250,10 +257,10 @@ async function fetchProcesses(): Promise<any[]> {
                 group: getProcessGroup(p.env),
                 runtime: calculateRuntime(p.timestamp),
                 timestamp: p.timestamp,
-                env: p.env || '',
-                configPath: p.configPath || '',
-                stdoutPath: p.stdout_path || '',
-                stderrPath: p.stderr_path || '',
+                env: p.env || "",
+                configPath: p.configPath || "",
+                stdoutPath: p.stdout_path || "",
+                stderrPath: p.stderr_path || "",
                 guardRestarts: guardRestartCounts.get(p.name) || 0,
             };
         });
@@ -262,16 +269,14 @@ async function fetchProcesses(): Promise<any[]> {
 
 export async function GET(req: Request) {
     const url = new URL(req.url);
-    const bustCache = url.searchParams.has('t');
-    const portFilter = url.searchParams.get('port');
+    const bustCache = url.searchParams.has("t");
+    const portFilter = url.searchParams.get("port");
     const now = Date.now();
 
-    // Return cached data if still fresh and no bust param and no port filter
     if (!bustCache && !portFilter && cache.data && (now - cache.timestamp) < CACHE_TTL_MS) {
         return Response.json(cache.data);
     }
 
-    // Deduplicate concurrent requests
     if (!cache.inflight) {
         cache.inflight = fetchProcesses().then(result => {
             cache.data = result;
@@ -286,7 +291,6 @@ export async function GET(req: Request) {
 
     try {
         let result = await cache.inflight;
-        // Filter by port if specified (also ensures fresh data by bypassing cache above)
         if (portFilter) {
             const portNum = parseInt(portFilter);
             if (!isNaN(portNum)) {
@@ -295,7 +299,7 @@ export async function GET(req: Request) {
         }
         return Response.json(result);
     } catch (err) {
-        console.error('[api/processes] Error fetching processes:', err);
+        console.error("[api/processes] Error fetching processes:", err);
         return Response.json(cache.data ?? []);
     }
 }

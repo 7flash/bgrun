@@ -48,6 +48,10 @@ export {
   parseEnvString,
   stringifyEnvString,
   validateDirectory,
+  isInternalProcessName,
+  isWatcherProcessName,
+  getWatcherProcessName,
+  getWatchedProcessName,
 } from '../../dist/api.js'
 
 export { deployProcess, deployAllProcesses } from '../../dist/deploy.js'

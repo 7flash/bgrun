@@ -631,7 +631,12 @@ export default function mount(): () => void {
         isFetching = true;
         try {
             const res = await fetch('/api/processes');
-            allProcesses = await res.json();
+            if (res.ok) {
+                allProcesses = await res.json();
+            } else {
+                console.error('/api/processes failed', res.status);
+                allProcesses = [];
+            }
             updateGroupFilter();
             renderFilteredProcesses();
             updateStats(allProcesses);
@@ -3833,3 +3838,4 @@ export default function mount(): () => void {
         logsContainer?.removeEventListener('scroll', onLogScroll);
     };
 }
+
