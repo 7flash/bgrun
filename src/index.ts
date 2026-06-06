@@ -429,7 +429,7 @@ async function run() {
 
     // Check if dashboard is already running
     const existing = getProcess(dashboardName);
-    if (existing && await isProcessRunning(existing.pid)) {
+    if (existing && await isProcessRunning(existing.pid, existing.command)) {
       // The stored PID may be a shell wrapper. Resolve toward the child that
       // actually owns the listening socket before rendering the banner.
       const resolved = await resolvePidWithPorts(existing.pid);
@@ -462,7 +462,7 @@ async function run() {
 
     // Kill existing if force
     if (existing) {
-      if (await isProcessRunning(existing.pid)) {
+      if (await isProcessRunning(existing.pid, existing.command)) {
         const detectedPorts = await getProcessPorts(existing.pid);
         await terminateProcess(existing.pid);
         for (const p of detectedPorts) {
@@ -524,7 +524,7 @@ async function run() {
       ? (await findPidByPort(explicitPort, 10000) ?? await findChildPid(newProcess.pid))
       : await findChildPid(newProcess.pid);
 
-    if (!(await isProcessRunning(actualPid))) {
+    if (!(await isProcessRunning(actualPid, command))) {
       const detachedPid = await findDetachedProcessByArg('--_serve');
       if (detachedPid) actualPid = detachedPid;
     }
@@ -686,7 +686,7 @@ async function run() {
     console.log(chalk.bold(`\n  Stopping ${all.length} processes...\n`));
     for (const proc of all) {
       try {
-        if (await isProcessRunning(proc.pid)) {
+        if (await isProcessRunning(proc.pid, proc.command)) {
           console.log(chalk.yellow(`  ■ Stopping ${proc.name} (PID ${proc.pid})...`));
           await handleStop(proc.name);
         } else {

@@ -12,8 +12,164 @@ import { measure, createMeasure } from "measure-fn";
 const plat = createMeasure('platform');
 
 // Simple LRU cache for process liveness checks to avoid repeated PowerShell queries
-const isRunningCache = new Map<number, { alive: boolean; checkedAt: number }>();
+const isRunningCache = new Map<string, { alive: boolean; checkedAt: number }>();
 const CACHE_TTL = 500; // 500ms TTL
+
+function getRunningCacheKey(pid: number, command?: string): string {
+  return `${pid}:${command?.trim().toLowerCase() || ""}`;
+}
+
+export function clearProcessRunningCache(pid?: number): void {
+  if (pid === undefined) {
+    isRunningCache.clear();
+    return;
+  }
+
+  const prefix = `${pid}:`;
+  for (const key of isRunningCache.keys()) {
+    if (key.startsWith(prefix)) {
+      isRunningCache.delete(key);
+    }
+  }
+}
+
+
+function normalizeCommandText(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/\\/g, "/")
+    .replace(/["'`]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+const COMMAND_MATCH_IGNORED_TOKENS = new Set([
+  "bun",
+  "bunx",
+  "node",
+  "npm",
+  "npx",
+  "pnpm",
+  "yarn",
+  "deno",
+  "python",
+  "python3",
+  "cmd",
+  "cmd.exe",
+  "powershell",
+  "powershell.exe",
+  "pwsh",
+  "pwsh.exe",
+  "sh",
+  "bash",
+  "zsh",
+  "fish",
+  "run",
+  "x",
+  "exec",
+  "start",
+  "dev",
+  "test",
+  "-c",
+  "/c",
+  "/d",
+  "/s",
+]);
+
+function splitCommandTokens(value: string): string[] {
+  return normalizeCommandText(value)
+    .split(/\s+/)
+    .map(token => token.trim())
+    .filter(Boolean);
+}
+
+function basenameToken(token: string): string {
+  const normalized = token.replace(/\\/g, "/");
+  return normalized.split("/").filter(Boolean).pop() || normalized;
+}
+
+function stripTokenDecorations(token: string): string {
+  return token
+    .replace(/^[=,:;()[\]{}<>]+/, "")
+    .replace(/[=,:;()[\]{}<>]+$/, "");
+}
+
+function isStrongCommandToken(token: string): boolean {
+  return /\.(ts|tsx|js|jsx|mjs|cjs|json|toml|py|rb|go|rs|php|sh|ps1)$/i.test(token) ||
+    token.includes("/") ||
+    token.includes("\\");
+}
+
+function getCommandMatchTokens(command: string): { strong: string[]; weak: string[] } {
+  const strong = new Set<string>();
+  const weak = new Set<string>();
+
+  for (const rawToken of splitCommandTokens(command)) {
+    const token = stripTokenDecorations(rawToken);
+    if (!token || token.startsWith("-") || token.includes("=")) continue;
+
+    const base = basenameToken(token);
+    const normalizedBase = stripTokenDecorations(base);
+    const lowerBase = normalizedBase.toLowerCase();
+
+    if (COMMAND_MATCH_IGNORED_TOKENS.has(token) || COMMAND_MATCH_IGNORED_TOKENS.has(lowerBase)) {
+      continue;
+    }
+
+    if (isStrongCommandToken(token)) {
+      strong.add(token);
+      if (normalizedBase && normalizedBase !== token) strong.add(normalizedBase);
+      continue;
+    }
+
+    if (lowerBase.length >= 4) {
+      weak.add(lowerBase);
+    }
+  }
+
+  return {
+    strong: [...strong].filter(token => token.length >= 3),
+    weak: [...weak].filter(token => token.length >= 4),
+  };
+}
+
+export function commandLineMatchesExpectedCommand(actualCommandLine: string, expectedCommand: string): boolean {
+  const actual = normalizeCommandText(actualCommandLine);
+  const expected = normalizeCommandText(expectedCommand);
+
+  if (!actual || !expected) return false;
+  if (actual.includes(expected)) return true;
+
+  const tokens = getCommandMatchTokens(expectedCommand);
+  if (tokens.strong.length > 0) {
+    return tokens.strong.some(token => actual.includes(normalizeCommandText(token)));
+  }
+
+  if (tokens.weak.length > 0) {
+    const matches = tokens.weak.filter(token => actual.includes(normalizeCommandText(token))).length;
+    return matches >= Math.min(tokens.weak.length, 2);
+  }
+
+  // If there are no meaningful tokens, the command is too generic to prove a match.
+  // In that case the caller should rely on PID existence only.
+  return true;
+}
+
+async function getProcessCommandLine(pid: number): Promise<string> {
+  try {
+    if (isWindows()) {
+      const escapedPid = Math.trunc(pid);
+      return await psExec(
+        `Get-CimInstance Win32_Process -Filter "ProcessId=${escapedPid}" | Select-Object -ExpandProperty CommandLine`,
+        3000,
+      );
+    }
+
+    return (await $`ps -p ${pid} -o args=`.nothrow().quiet().text()).trim();
+  } catch {
+    return "";
+  }
+}
 
 /**
  * Execute a PowerShell command with -NoProfile asynchronously with timeout.
@@ -92,8 +248,10 @@ export async function isProcessRunning(pid: number, command?: string): Promise<b
   // PID 0 means intentionally stopped — never alive
   if (pid <= 0) return false;
 
+  const cacheKey = getRunningCacheKey(pid, command);
+
   // Check cache first (only for repeated queries within TTL)
-  const cached = isRunningCache.get(pid);
+  const cached = isRunningCache.get(cacheKey);
   if (cached && Date.now() - cached.checkedAt < CACHE_TTL) {
     return cached.alive;
   }
@@ -103,10 +261,11 @@ export async function isProcessRunning(pid: number, command?: string): Promise<b
       // Docker container detection
       if (command && (command.includes('docker run') || command.includes('docker-compose up') || command.includes('docker compose up'))) {
         const alive = await isDockerContainerRunning(command);
-        isRunningCache.set(pid, { alive, checkedAt: Date.now() });
+        isRunningCache.set(cacheKey, { alive, checkedAt: Date.now() });
         return alive;
       }
 
+      let alive = false;
       if (isWindows()) {
         // Fast path: signal 0 works for many native Windows/Bun invocations.
         // But under MSYS/Git Bash or detached wrapper scenarios it can return
@@ -114,24 +273,34 @@ export async function isProcessRunning(pid: number, command?: string): Promise<b
         // CLI, dashboard, and guard all agree on process liveness.
         try {
           process.kill(pid, 0);
-          isRunningCache.set(pid, { alive: true, checkedAt: Date.now() });
-          return true;
+          alive = true;
         } catch {
           const output = await psExec(
             `Get-Process -Id ${pid} -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id`
           );
-          const alive = output === String(pid);
-          isRunningCache.set(pid, { alive, checkedAt: Date.now() });
-          return alive;
+          alive = output === String(pid);
         }
       } else {
         const result = await $`ps -p ${pid}`.nothrow().text();
-        const alive = result.includes(`${pid}`);
-        isRunningCache.set(pid, { alive, checkedAt: Date.now() });
-        return alive;
+        alive = result.includes(`${pid}`);
       }
+
+      if (!alive) {
+        isRunningCache.set(cacheKey, { alive: false, checkedAt: Date.now() });
+        return false;
+      }
+
+      if (command?.trim()) {
+        const actualCommandLine = await getProcessCommandLine(pid);
+        if (actualCommandLine.trim()) {
+          alive = commandLineMatchesExpectedCommand(actualCommandLine, command);
+        }
+      }
+
+      isRunningCache.set(cacheKey, { alive, checkedAt: Date.now() });
+      return alive;
     } catch {
-      isRunningCache.set(pid, { alive: false, checkedAt: Date.now() });
+      isRunningCache.set(cacheKey, { alive: false, checkedAt: Date.now() });
       return false;
     }
   })) ?? false;
@@ -735,4 +904,3 @@ export async function resolvePidWithPorts(pid: number): Promise<{ pid: number; p
 
   return { pid, ports };
 }
-

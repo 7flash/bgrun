@@ -51,3 +51,11 @@
 
 ## ⚠️ Security Reminders
 - Dashboard has no authentication — localhost only
+## 🗂️ Recent Activity
+
+- **Commit**: `1b472aa` — committed pending dashboard/platform changes
+- **PRD**: `PRD-process-resource-alerts.md` — written and ready for implementation
+
+## 🔴 Priority: Fix
+
+- [ ] **Missing processes in dashboard** — DB was wiped, all process registrations lost. Only bgr-dashboard (internal) survives. PRD written at `PRD-missing-processes.md`. Need to re-register lost processes.

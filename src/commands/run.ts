@@ -18,6 +18,7 @@ import {
   psExec,
   isPortFree,
   reconcileProcessPids,
+  clearProcessRunningCache,
 } from "../platform";
 import { error, announce } from "../logger";
 import {
@@ -32,7 +33,7 @@ import {
 import { parseConfigFile } from "../config";
 import { $ } from "bun";
 import { sleep } from "bun";
-import { mkdirSync } from "fs";
+import { existsSync, mkdirSync, readFileSync } from "fs";
 import { dirname, join } from "path";
 import { createMeasure } from "measure-fn";
 import { syncProcessWatcher } from "../watcher";
@@ -40,6 +41,60 @@ import { syncProcessWatcher } from "../watcher";
 const homePath = getHomeDir();
 const run = createMeasure("run");
 const INTERNAL_BUNX_PREFIX = "bunx bgrun";
+const STARTUP_HEALTH_GRACE_MS = Number(Bun.env.BGR_STARTUP_HEALTH_GRACE_MS || "1500");
+
+function readStartupLogTail(filePath: string, maxLines = 20): string {
+  try {
+    if (!existsSync(filePath)) return "";
+    return readFileSync(filePath, "utf8")
+      .split(/\r?\n/)
+      .slice(-maxLines)
+      .join("\n")
+      .trim();
+  } catch {
+    return "";
+  }
+}
+
+function formatStartupFailureMessage(
+  name: string,
+  stdoutPath: string,
+  stderrPath: string,
+): string {
+  const stderrTail = readStartupLogTail(stderrPath);
+  const stdoutTail = readStartupLogTail(stdoutPath);
+  const logSections = [
+    stderrTail ? `\nstderr tail:\n${stderrTail}` : "",
+    stdoutTail ? `\nstdout tail:\n${stdoutTail}` : "",
+  ].filter(Boolean).join("\n");
+
+  return (
+    `Process "${name}" failed to stay running after launch. ` +
+    `The child process likely exited during startup.\n` +
+    `stdout: ${stdoutPath}\n` +
+    `stderr: ${stderrPath}` +
+    logSections
+  );
+}
+
+async function waitForStartupHealth(pid: number, command: string, graceMs = STARTUP_HEALTH_GRACE_MS): Promise<boolean> {
+  if (pid <= 0) return false;
+  const deadline = Date.now() + Math.max(0, graceMs);
+
+  do {
+    clearProcessRunningCache(pid);
+    if (!(await isProcessRunning(pid, command))) {
+      return false;
+    }
+
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) break;
+    await sleep(Math.min(500, remaining));
+  } while (Date.now() < deadline);
+
+  clearProcessRunningCache(pid);
+  return await isProcessRunning(pid, command);
+}
 
 async function resolveSpawnedProcessPid(
   parentPid: number,
@@ -229,7 +284,7 @@ export async function handleRun(options: CommandOptions) {
         });
       }
 
-      const isRunning = await isProcessRunning(existingProcess.pid);
+      const isRunning = await isProcessRunning(existingProcess.pid, existingProcess.command);
       if (isRunning && !force) {
         error(
           `Process '${name}' is currently running. Use --force to restart.`,
@@ -265,7 +320,7 @@ export async function handleRun(options: CommandOptions) {
       // Detect ports BEFORE killing so we can clean them up
       // Use actualPid which may have been reconciled from a dead wrapper to a live child
       let detectedPorts: number[] = [];
-      const actuallyRunning = await isProcessRunning(actualPid);
+      const actuallyRunning = await isProcessRunning(actualPid, existingProcess.command);
       if (actuallyRunning) {
         detectedPorts = await getProcessPorts(actualPid);
       }
@@ -470,13 +525,8 @@ export async function handleRun(options: CommandOptions) {
         );
       })) ?? 0;
 
-    if (actualPid <= 0) {
-      throw new Error(
-        `Failed to resolve a live PID for "${name}" after launch. ` +
-        `The child process likely exited immediately. Check logs:\n` +
-        `stdout: ${stdoutPath}\n` +
-        `stderr: ${stderrPath}`,
-      );
+    if (actualPid <= 0 || !(await waitForStartupHealth(actualPid, finalCommand!))) {
+      throw new Error(formatStartupFailureMessage(name!, stdoutPath, stderrPath));
     }
 
     await retryDatabaseOperation(() =>

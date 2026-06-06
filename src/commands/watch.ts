@@ -17,7 +17,7 @@ export async function handleWatch(options: CommandOptions, logOptions: { showLog
     let lastRestartPath: string | null = null; // Track if restart was due to file change
 
     const dumpLogsIfDead = async (proc: Process, reason: string) => {
-        const isDead = !(await isProcessRunning(proc.pid));
+        const isDead = !(await isProcessRunning(proc.pid, proc.command));
         if (!isDead) return false;
 
         console.log(chalk.yellow(`💀 Process '${options.name}' died immediately after ${reason}—dumping logs:`));
@@ -207,7 +207,7 @@ export async function handleWatch(options: CommandOptions, logOptions: { showLog
 
         const procToKill = getProcess(options.name!);
         if (procToKill) {
-            const isRunning = await isProcessRunning(procToKill.pid);
+            const isRunning = await isProcessRunning(procToKill.pid, procToKill.command);
             if (isRunning) {
                 // @note avoid "await terminateProcess(procToKill.pid)" because we can re-attach --watch mode to running process
                 console.log(`process ${procToKill.name} (PID: ${procToKill.pid}) still running`);
@@ -219,5 +219,3 @@ export async function handleWatch(options: CommandOptions, logOptions: { showLog
     process.on('SIGINT', cleanup);
     process.on('SIGTERM', cleanup);
 }
-
-

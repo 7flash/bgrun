@@ -12,7 +12,7 @@ import { parseConfigFile, loadConfigEnv } from './config'
 import { buildDirectoryProcessName, generateAutoProcessName, joinCommandArgs } from './cli-helpers'
 import { stripAnsi, truncateString, truncatePath } from './table'
 import { detectPackageManager, formatDeployToolError } from './deploy'
-import { isProcessRunning, parseUnixListeningPorts, terminateProcess, waitForPortFree } from './platform'
+import { commandLineMatchesExpectedCommand, isProcessRunning, parseUnixListeningPorts, terminateProcess, waitForPortFree } from './platform'
 import { mkdirSync, rmSync } from 'fs'
 
 // Use a test-specific database to avoid polluting real data
@@ -440,6 +440,23 @@ describe('isProcessRunning', () => {
     test('returns false for negative PID', async () => {
         const alive = await isProcessRunning(-1)
         expect(alive).toBe(false)
+    })
+
+    test('returns false when PID exists but command does not match', async () => {
+        const alive = await isProcessRunning(process.pid, 'definitely-not-the-current-bgrun-test-command.ts')
+        expect(alive).toBe(false)
+    })
+
+    test('matches command lines using script/path tokens', () => {
+        expect(commandLineMatchesExpectedCommand(
+            'C:/Users/me/.bun/bin/bun.exe run C:/Code/app/src/server.ts',
+            'bun run ./src/server.ts',
+        )).toBe(true)
+
+        expect(commandLineMatchesExpectedCommand(
+            'C:/Users/me/.bun/bin/bun.exe run C:/Code/app/src/worker.ts',
+            'bun run ./src/server.ts',
+        )).toBe(false)
     })
 })
 

@@ -89,7 +89,7 @@ export async function ensureProcessWatcher(targetName: string): Promise<void> {
     await Bun.sleep(1000);
 
     let actualPid = await findChildPid(newProcess.pid);
-    if (!(await isProcessRunning(actualPid))) {
+    if (!(await isProcessRunning(actualPid, storedCommand))) {
         const detachedPid = await findDetachedWatcherPid(targetName);
         if (detachedPid) actualPid = detachedPid;
     }

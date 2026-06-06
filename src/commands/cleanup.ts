@@ -14,7 +14,7 @@ export async function handleDelete(name: string) {
         return;
     }
 
-    const isRunning = await isProcessRunning(process.pid);
+    const isRunning = await isProcessRunning(process.pid, process.command);
     if (isRunning) {
         await terminateProcess(process.pid);
     }
@@ -40,7 +40,7 @@ export async function handleClean() {
     let deletedLogs = 0;
 
     for (const proc of processes) {
-        const running = await isProcessRunning(proc.pid);
+        const running = await isProcessRunning(proc.pid, proc.command);
         if (!running) {
             const watched = getWatchedProcessName(proc.name);
             if (watched) {
@@ -80,7 +80,7 @@ export async function handleStop(name: string) {
 
     const releaseOperationLock = acquireProcessOperationLock(name);
     try {
-        const isRunning = await isProcessRunning(proc.pid);
+        const isRunning = await isProcessRunning(proc.pid, proc.command);
         if (!isRunning) {
             announce(`Process '${name}' is already stopped.`, "Process Stop");
             return;
@@ -134,7 +134,7 @@ export async function handleDeleteAll() {
         if (!isInternalProcessName(proc.name)) {
             await stopProcessWatcher(proc.name);
         }
-        const running = await isProcessRunning(proc.pid);
+        const running = await isProcessRunning(proc.pid, proc.command);
 
         if (running) {
             // Detect ports BEFORE killing so we can clean them up
