@@ -71,6 +71,7 @@ export {
 
 // --- High-Level Commands ---
 export { handleRun } from './commands/run'
+export { handleStop, getManagedChildProcesses } from './commands/cleanup'
 export { handleEnvit, parseEnvitArgs, renderEnvitOutput } from './commands/envit'
 export { handleInline, parseInlineArgs } from './commands/inline'
 export { ensureProcessWatcher, stopProcessWatcher, syncProcessWatcher, getGuardRestartCounts, getRecentGuardEvents } from './watcher'
@@ -106,6 +107,7 @@ import {
 } from './db'
 import { isProcessRunning, terminateProcess, readFileTail, getProcessPorts, findChildPid, findPidByPort, getShellCommand, killProcessOnPort, waitForPortFree, ensureDir, getHomeDir, isWindows, getProcessBatchResources, getProcessMemory, reconcileProcessPids, resolvePidWithPorts } from './platform'
 import { handleRun } from './commands/run'
+import { handleStop, getManagedChildProcesses } from './commands/cleanup'
 import { handleEnvit, parseEnvitArgs, renderEnvitOutput } from './commands/envit'
 import { handleInline, parseInlineArgs } from './commands/inline'
 import { ensureProcessWatcher, stopProcessWatcher, syncProcessWatcher, getGuardRestartCounts, getRecentGuardEvents } from './watcher'
@@ -119,6 +121,8 @@ export default {
     retryDatabaseOperation, getDbInfo, dbPath, bgrHome,
     isProcessRunning, terminateProcess, readFileTail, getProcessPorts, findChildPid, findPidByPort, getShellCommand, killProcessOnPort, waitForPortFree, ensureDir, getHomeDir, isWindows, getProcessBatchResources, getProcessMemory, reconcileProcessPids, resolvePidWithPorts,
     handleRun,
+    handleStop,
+    getManagedChildProcesses,
     handleEnvit,
     parseEnvitArgs,
     renderEnvitOutput,

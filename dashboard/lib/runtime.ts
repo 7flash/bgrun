@@ -38,6 +38,8 @@ export {
   getProcessMemory,
   reconcileProcessPids,
   handleRun,
+  handleStop,
+  getManagedChildProcesses,
   ensureProcessWatcher,
   stopProcessWatcher,
   syncProcessWatcher,
