@@ -42,6 +42,27 @@ const homePath = getHomeDir();
 const run = createMeasure("run");
 const INTERNAL_BUNX_PREFIX = "bunx bgrun";
 const STARTUP_HEALTH_GRACE_MS = Number(Bun.env.BGR_STARTUP_HEALTH_GRACE_MS || "1500");
+const BGR_PROCESS_NAME_ENV = "BGR_PROCESS_NAME";
+const BGR_PARENT_NAME_ENV = "BGR_PARENT_NAME";
+
+function attachManagedProcessMetadata(
+  env: Record<string, string>,
+  processName: string,
+): Record<string, string> {
+  const nextEnv = { ...env };
+  const inheritedParentName = Bun.env[BGR_PROCESS_NAME_ENV];
+
+  if (
+    inheritedParentName &&
+    inheritedParentName !== processName &&
+    !nextEnv[BGR_PARENT_NAME_ENV]
+  ) {
+    nextEnv[BGR_PARENT_NAME_ENV] = inheritedParentName;
+  }
+
+  nextEnv[BGR_PROCESS_NAME_ENV] = processName;
+  return nextEnv;
+}
 
 function readStartupLogTail(filePath: string, maxLines = 20): string {
   try {
@@ -489,6 +510,8 @@ export async function handleRun(options: CommandOptions) {
         );
       }
     }
+
+    finalEnv = attachManagedProcessMetadata(finalEnv, name!);
 
     const stdoutPath =
       stdout ||

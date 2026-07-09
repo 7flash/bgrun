@@ -6,6 +6,16 @@ import { announce, error } from "../logger";
 import * as fs from "fs";
 import { stopProcessWatcher } from "../watcher";
 
+const BGR_PARENT_NAME_ENV = "BGR_PARENT_NAME";
+
+export function getManagedChildProcesses(parentName: string) {
+    return getAllProcesses().filter((proc) => {
+        if (proc.name === parentName) return false;
+        const env = proc.env ? parseEnvString(proc.env) : {};
+        return env[BGR_PARENT_NAME_ENV] === parentName;
+    });
+}
+
 export async function handleDelete(name: string) {
     const process = getProcess(name);
 
@@ -70,7 +80,10 @@ export async function handleClean() {
     }
 }
 
-export async function handleStop(name: string) {
+export async function handleStop(name: string, seen: Set<string> = new Set()) {
+    if (seen.has(name)) return;
+    seen.add(name);
+
     const proc = getProcess(name);
 
     if (!proc) {
@@ -80,9 +93,21 @@ export async function handleStop(name: string) {
 
     const releaseOperationLock = acquireProcessOperationLock(name);
     try {
+        const childProcesses = getManagedChildProcesses(name);
+        let stoppedChildren = 0;
+
+        for (const child of childProcesses) {
+            await handleStop(child.name, seen);
+            stoppedChildren++;
+        }
+
         const isRunning = await isProcessRunning(proc.pid, proc.command);
         if (!isRunning) {
-            announce(`Process '${name}' is already stopped.`, "Process Stop");
+            updateProcessPid(name, 0);
+            announce(
+                `Process '${name}' is already stopped${stoppedChildren > 0 ? `; stopped ${stoppedChildren} managed child ${stoppedChildren === 1 ? 'process' : 'processes'}` : ''}.`,
+                "Process Stop",
+            );
             return;
         }
 
@@ -114,7 +139,10 @@ export async function handleStop(name: string) {
         // a random matching process as this one
         updateProcessPid(name, 0);
 
-        announce(`Process '${name}' has been stopped (kept in registry).`, "Process Stopped");
+        announce(
+            `Process '${name}' has been stopped (kept in registry)${stoppedChildren > 0 ? `; stopped ${stoppedChildren} managed child ${stoppedChildren === 1 ? 'process' : 'processes'}` : ''}.`,
+            "Process Stopped",
+        );
     } finally {
         releaseOperationLock();
     }

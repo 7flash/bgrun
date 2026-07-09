@@ -13,7 +13,8 @@ import { buildDirectoryProcessName, generateAutoProcessName, joinCommandArgs } f
 import { stripAnsi, truncateString, truncatePath } from './table'
 import { detectPackageManager, formatDeployToolError } from './deploy'
 import { commandLineMatchesExpectedCommand, isProcessRunning, parseUnixListeningPorts, terminateProcess, waitForPortFree } from './platform'
-import { mkdirSync, rmSync } from 'fs'
+import { existsSync, mkdirSync, rmSync } from 'fs'
+import { pathToFileURL } from 'url'
 
 // Use a test-specific database to avoid polluting real data
 process.env.BGRUN_DB = `bgrun-test-${Date.now()}.sqlite`
@@ -29,6 +30,19 @@ async function rmDirWithRetries(dir: string, retries = 5) {
             await Bun.sleep(300)
         }
     }
+}
+
+async function waitForCondition(
+    condition: () => boolean | Promise<boolean>,
+    timeoutMs = 8000,
+    intervalMs = 200,
+): Promise<boolean> {
+    const deadline = Date.now() + timeoutMs
+    while (Date.now() < deadline) {
+        if (await condition()) return true
+        await Bun.sleep(intervalMs)
+    }
+    return await condition()
 }
 
 const { handleRun, resolveInternalBgrunCommand } = await import('./commands/run')
@@ -628,6 +642,175 @@ describe('handleRun port safety', () => {
         }
     }, 20000)
 })
+
+describe('handleRun startup health regression', () => {
+    test('does not register a process that exits during startup', async () => {
+        const dir = `${process.cwd()}/tmp-startup-failure-${Date.now()}`
+        const scriptPath = `${dir}/exits-immediately.ts`
+        const name = `startup-failure-${Date.now()}`
+
+        mkdirSync(dir, { recursive: true })
+        await Bun.write(scriptPath, [
+            'console.error("startup exploded before listen");',
+            'process.exit(42);',
+        ].join('\n'))
+
+        try {
+            let failure: Error | null = null
+            try {
+                await handleRun({
+                    action: 'run',
+                    name,
+                    directory: dir,
+                    command: joinCommandArgs(['bun', 'run', scriptPath]),
+                    remoteName: '',
+                })
+            } catch (error: any) {
+                failure = error
+            }
+
+            expect(failure).toBeInstanceOf(Error)
+            expect(failure?.message).toContain('failed to stay running')
+            expect(failure?.message).toContain('startup exploded before listen')
+            expect(getProcess(name)).toBeNull()
+        } finally {
+            const proc = getProcess(name)
+            if (proc) {
+                try {
+                    await terminateProcess(proc.pid, true)
+                } catch { }
+                removeProcessByName(name)
+            }
+            await rmDirWithRetries(dir)
+        }
+    }, 20000)
+})
+
+describe('SDK child process stop tree', () => {
+    test('bgrun --stop parent stops children spawned by the parent through the SDK', async () => {
+        const dir = `${process.cwd()}/tmp-sdk-stop-tree-${Date.now()}`
+        const parentName = `sdk-parent-${Date.now()}`
+        const childAName = `${parentName}-child-a`
+        const childBName = `${parentName}-child-b`
+        const childScript = `${dir}/sdk-child-worker.ts`
+        const parentScript = `${dir}/sdk-parent.ts`
+        const readyPath = `${dir}/children-ready.txt`
+        const apiImportPath = pathToFileURL(`${process.cwd()}/src/api.ts`).href
+
+        mkdirSync(dir, { recursive: true })
+        await Bun.write(childScript, [
+            'const childName = process.argv[2] || process.env.BGR_PROCESS_NAME || "child";',
+            'console.log(`child ${childName} started with parent=${process.env.BGR_PARENT_NAME || ""}`);',
+            'setInterval(() => {}, 1000);',
+        ].join('\n'))
+
+        const childSpecs = [
+            {
+                name: childAName,
+                command: joinCommandArgs(['bun', 'run', childScript, childAName]),
+            },
+            {
+                name: childBName,
+                command: joinCommandArgs(['bun', 'run', childScript, childBName]),
+            },
+        ]
+
+        await Bun.write(parentScript, [
+            `import bgrun from ${JSON.stringify(apiImportPath)};`,
+            `const childSpecs = ${JSON.stringify(childSpecs)};`,
+            `const directory = ${JSON.stringify(dir)};`,
+            `const readyPath = ${JSON.stringify(readyPath)};`,
+            'for (const child of childSpecs) {',
+            '  await bgrun.handleRun({',
+            '    action: "run",',
+            '    name: child.name,',
+            '    directory,',
+            '    command: child.command,',
+            '    env: { BGR_KEEP_ALIVE: "false" },',
+            '    remoteName: "",',
+            '  });',
+            '}',
+            'await Bun.write(readyPath, "ready");',
+            'console.log("sdk parent started children");',
+            'setInterval(() => {}, 1000);',
+        ].join('\n'))
+
+        try {
+            await handleRun({
+                action: 'run',
+                name: parentName,
+                directory: dir,
+                command: joinCommandArgs(['bun', 'run', parentScript]),
+                remoteName: '',
+            })
+
+            const childrenReady = await waitForCondition(() => {
+                return existsSync(readyPath) && !!getProcess(childAName) && !!getProcess(childBName)
+            }, 15000)
+            expect(childrenReady).toBe(true)
+
+            const childAProc = getProcess(childAName)
+            const childBProc = getProcess(childBName)
+            expect(childAProc).toBeDefined()
+            expect(childBProc).toBeDefined()
+            expect(parseEnvString(childAProc?.env || '').BGR_PARENT_NAME).toBe(parentName)
+            expect(parseEnvString(childBProc?.env || '').BGR_PARENT_NAME).toBe(parentName)
+            expect(await isProcessRunning(childAProc!.pid, childAProc!.command)).toBe(true)
+            expect(await isProcessRunning(childBProc!.pid, childBProc!.command)).toBe(true)
+
+            const stopProc = Bun.spawn(
+                ['bun', 'run', 'src/index.ts', '--stop', parentName],
+                {
+                    cwd: process.cwd(),
+                    stdout: 'pipe',
+                    stderr: 'pipe',
+                    env: {
+                        ...Bun.env,
+                        BGRUN_DB: process.env.BGRUN_DB!,
+                        BGRUN_DISABLE_LEGACY_MIGRATION: '1',
+                    },
+                },
+            )
+            const stopStdout = await new Response(stopProc.stdout).text()
+            const stopStderr = await new Response(stopProc.stderr).text()
+            const stopExitCode = await stopProc.exited
+
+            expect(stopExitCode).toBe(0)
+            expect(stopStderr).toBe('')
+            expect(stopStdout).toContain(parentName)
+
+            const stopped = await waitForCondition(async () => {
+                const parent = getProcess(parentName)
+                const childA = getProcess(childAName)
+                const childB = getProcess(childBName)
+                if (!parent || !childA || !childB) return false
+
+                return (
+                    parent.pid === 0 &&
+                    childA.pid === 0 &&
+                    childB.pid === 0 &&
+                    !(await isProcessRunning(parent.pid, parent.command)) &&
+                    !(await isProcessRunning(childA.pid, childA.command)) &&
+                    !(await isProcessRunning(childB.pid, childB.command))
+                )
+            }, 12000)
+
+            expect(stopped).toBe(true)
+        } finally {
+            for (const processName of [childAName, childBName, parentName]) {
+                const proc = getProcess(processName)
+                if (proc) {
+                    try {
+                        await terminateProcess(proc.pid, true)
+                    } catch { }
+                    removeProcessByName(processName)
+                }
+            }
+            await rmDirWithRetries(dir)
+        }
+    }, 40000)
+})
+
 
 describe('CLI implicit command mode', () => {
     test('treats multi-positional args as a managed command without requiring literal --', async () => {
