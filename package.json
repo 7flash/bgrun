@@ -1,14 +1,22 @@
 {
   "name": "bgrun",
   "version": "3.13.0",
-  "description": "bgrun — A lightweight process manager for Bun",
+  "description": "bgrun \u2014 A lightweight process manager for Bun",
   "type": "module",
   "main": "./dist/api.js",
   "exports": {
-    ".": "./dist/api.js"
+    ".": {
+      "bun": "./dist/api.js",
+      "require": "./runtime/unsupported-node.cjs",
+      "import": "./runtime/unsupported-node.mjs",
+      "default": "./runtime/unsupported-node.mjs"
+    },
+    "./bun": "./dist/api.js",
+    "./package.json": "./package.json"
   },
   "bin": {
-    "bgrun": "dist/index.js"
+    "bgrun": "./bin/bgrun.cjs",
+    "bgr": "./bin/bgrun.cjs"
   },
   "scripts": {
     "build": "bun run ./src/build.ts",
@@ -18,6 +26,8 @@
   },
   "files": [
     "dist",
+    "bin",
+    "runtime",
     "dashboard/app",
     "dashboard/lib",
     "scripts",
