@@ -1,21 +1,7 @@
 /**
  * BGR Public API (package: bgrun)
- * 
+ *
  * Import from 'bgrun' to use these functions in your own process-managing apps.
- * 
- * @example
- * ```ts
- * import { getAllProcesses, isProcessRunning, handleRun } from 'bgrun'
- * 
- * // List all managed processes
- * const processes = getAllProcesses()
- * 
- * // Check if a process is running
- * const alive = await isProcessRunning(process.pid)
- * 
- * // Start a new managed process
- * await handleRun({ name: 'my-app', command: 'bun run dev', directory: './my-app', action: 'run', remoteName: '' })
- * ```
  */
 
 // --- Types ---
@@ -71,7 +57,8 @@ export {
 
 // --- High-Level Commands ---
 export { handleRun } from './commands/run'
-export { handleStop, getManagedChildProcesses } from './commands/cleanup'
+export { handleStop } from './commands/cleanup'
+export { getManagedChildProcesses } from './managed-children'
 export { handleEnvit, parseEnvitArgs, renderEnvitOutput } from './commands/envit'
 export { handleInline, parseInlineArgs } from './commands/inline'
 export { ensureProcessWatcher, stopProcessWatcher, syncProcessWatcher, getGuardRestartCounts, getRecentGuardEvents } from './watcher'
@@ -107,7 +94,8 @@ import {
 } from './db'
 import { isProcessRunning, terminateProcess, readFileTail, getProcessPorts, findChildPid, findPidByPort, getShellCommand, killProcessOnPort, waitForPortFree, ensureDir, getHomeDir, isWindows, getProcessBatchResources, getProcessMemory, reconcileProcessPids, resolvePidWithPorts } from './platform'
 import { handleRun } from './commands/run'
-import { handleStop, getManagedChildProcesses } from './commands/cleanup'
+import { handleStop } from './commands/cleanup'
+import { getManagedChildProcesses } from './managed-children'
 import { handleEnvit, parseEnvitArgs, renderEnvitOutput } from './commands/envit'
 import { handleInline, parseInlineArgs } from './commands/inline'
 import { ensureProcessWatcher, stopProcessWatcher, syncProcessWatcher, getGuardRestartCounts, getRecentGuardEvents } from './watcher'
