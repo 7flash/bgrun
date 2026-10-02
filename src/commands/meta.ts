@@ -54,7 +54,7 @@ export function getBgrunMeta() {
     },
     env: {
       BGRUN_DB: process.env.BGRUN_DB ?? null,
-      BGR_HOME: process.env.BGR_HOME ?? null,
+      BGRUN_HOME: process.env.BGRUN_HOME ?? null,
       BGR_PROCESS_NAME: process.env.BGR_PROCESS_NAME ?? null,
       BGR_PARENT_NAME: process.env.BGR_PARENT_NAME ?? null,
     },

@@ -1,15 +1,9 @@
-/** POST /api/stop/:name — stop the registered PID only. */
+/** POST /api/stop/:name — stop through the managed lifecycle primitive. */
 import {
   addHistoryEntry,
   getProcess,
-  isProcessRunning,
-  terminateProcess,
-  updateProcessPid,
+  stopProcess,
 } from "../../../../lib/runtime";
-import {
-  apiMeasure as api,
-  measureRequired,
-} from "../../../../lib/observability";
 import { jsonError } from "../../../../lib/http";
 
 export async function POST(
@@ -23,21 +17,13 @@ export async function POST(
   }
 
   try {
-    const running = await isProcessRunning(proc.pid, proc.command);
-    if (!running) {
-      updateProcessPid(name, 0);
-      return Response.json({ success: true, already_stopped: true });
-    }
-
-    await measureRequired(
-      api.measure,
-      `Stop process "${name}" pid=${proc.pid}`,
-      () => terminateProcess(proc.pid),
-    );
-
-    updateProcessPid(name, 0);
-    addHistoryEntry(name, "stop", proc.pid);
-    return Response.json({ success: true });
+    const result = await stopProcess(name);
+    if (!result.alreadyStopped) addHistoryEntry(name, "stop", proc.pid);
+    return Response.json({
+      success: true,
+      already_stopped: result.alreadyStopped,
+      stopped_children: result.stoppedChildren,
+    });
   } catch (error: unknown) {
     return jsonError(error);
   }

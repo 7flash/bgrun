@@ -1,12 +1,12 @@
 import {
+  clearProcessOwnership,
   getProcess,
   removeProcessByName,
   removeProcess,
   getAllProcesses,
   removeAllProcesses,
-  updateProcessPid,
 } from "../db";
-import { isManagedProcessRunning, terminateProcess } from "../platform";
+import { inspectManagedProcess, terminateProcess } from "../platform";
 import {
   parseEnvString,
   acquireProcessOperationLock,
@@ -27,41 +27,70 @@ export function getManagedChildProcesses(parentName: string) {
   });
 }
 
-export async function handleDelete(name: string) {
-  const process = getProcess(name);
+async function inspectForDestructiveOperation(
+  proc: NonNullable<ReturnType<typeof getProcess>>,
+) {
+  return inspectManagedProcess(
+    proc.pid,
+    proc.name,
+    proc.start_identity,
+    proc.command,
+  );
+}
 
-  if (!process) {
+function clearKnownOwnership(
+  proc: NonNullable<ReturnType<typeof getProcess>>,
+): void {
+  clearProcessOwnership(proc.name, {
+    pid: proc.pid,
+    startIdentity: proc.start_identity,
+  });
+}
+
+export async function deleteProcess(name: string): Promise<void> {
+  const release = acquireProcessOperationLock(name);
+  try {
+    const proc = getProcess(name);
+    if (!proc) throw new Error(`No process found named '${name}'`);
+
+    const inspection = await inspectForDestructiveOperation(proc);
+    if (inspection === "unknown") {
+      throw new Error(
+        `Cannot prove ownership of PID ${proc.pid} for '${name}'. Refusing to delete a potentially running process.`,
+      );
+    }
+    if (inspection === "alive") {
+      await terminateProcess(proc.pid, false, proc.start_identity || undefined);
+    }
+
+    if (!isInternalProcessName(name)) {
+      await stopProcessWatcher(name);
+    }
+
+    for (const path of [proc.stdout_path, proc.stderr_path]) {
+      if (!fs.existsSync(path)) continue;
+      try {
+        fs.unlinkSync(path);
+      } catch {}
+    }
+
+    removeProcessByName(name);
+  } finally {
+    release();
+  }
+}
+
+export async function handleDelete(name: string) {
+  const proc = getProcess(name);
+  if (!proc) {
     error(`No process found named '${name}'`);
     return;
   }
-
-  const isRunning = await isManagedProcessRunning(
-    process.pid,
-    name,
-    process.command,
-  );
-  if (isRunning) {
-    await terminateProcess(process.pid);
-  }
-
-  if (!isInternalProcessName(name)) {
-    await stopProcessWatcher(name);
-  }
-
-  if (fs.existsSync(process.stdout_path)) {
-    try {
-      fs.unlinkSync(process.stdout_path);
-    } catch {}
-  }
-  if (fs.existsSync(process.stderr_path)) {
-    try {
-      fs.unlinkSync(process.stderr_path);
-    } catch {}
-  }
-
-  removeProcessByName(name);
+  const inspection = await inspectForDestructiveOperation(proc);
+  const wasRunning = inspection === "alive";
+  await deleteProcess(name);
   announce(
-    `Process '${name}' has been ${isRunning ? "stopped and " : ""}deleted`,
+    `Process '${name}' has been ${wasRunning ? "stopped and " : ""}deleted`,
     "Process Deleted",
   );
 }
@@ -72,33 +101,20 @@ export async function handleClean() {
   let deletedLogs = 0;
 
   for (const proc of processes) {
-    const running = await isManagedProcessRunning(
-      proc.pid,
-      proc.name,
-      proc.command,
-    );
-    if (!running) {
-      const watched = getWatchedProcessName(proc.name);
-      if (watched) {
-        removeProcess(proc.pid);
-        cleanedCount++;
-        continue;
-      }
-      removeProcess(proc.pid);
-      cleanedCount++;
+    const inspection = await inspectForDestructiveOperation(proc);
+    if (inspection === "alive" || inspection === "unknown") continue;
 
-      if (fs.existsSync(proc.stdout_path)) {
-        try {
-          fs.unlinkSync(proc.stdout_path);
-          deletedLogs++;
-        } catch {}
-      }
-      if (fs.existsSync(proc.stderr_path)) {
-        try {
-          fs.unlinkSync(proc.stderr_path);
-          deletedLogs++;
-        } catch {}
-      }
+    const watched = getWatchedProcessName(proc.name);
+    removeProcess(proc.pid);
+    cleanedCount++;
+    if (watched) continue;
+
+    for (const path of [proc.stdout_path, proc.stderr_path]) {
+      if (!fs.existsSync(path)) continue;
+      try {
+        fs.unlinkSync(path);
+        deletedLogs++;
+      } catch {}
     }
   }
 
@@ -112,57 +128,69 @@ export async function handleClean() {
   }
 }
 
-export async function handleStop(name: string, seen: Set<string> = new Set()) {
-  if (seen.has(name)) return;
+export type StopProcessResult = {
+  name: string;
+  alreadyStopped: boolean;
+  stoppedChildren: number;
+};
+
+export async function stopProcess(
+  name: string,
+  seen: Set<string> = new Set(),
+): Promise<StopProcessResult> {
+  if (seen.has(name)) {
+    return { name, alreadyStopped: true, stoppedChildren: 0 };
+  }
   seen.add(name);
 
-  const proc = getProcess(name);
-
-  if (!proc) {
-    error(`No process found named '${name}'`);
-    return;
-  }
-
-  const releaseOperationLock = acquireProcessOperationLock(name);
+  const release = acquireProcessOperationLock(name);
   try {
+    const proc = getProcess(name);
+    if (!proc) throw new Error(`No process found named '${name}'`);
+
     const childProcesses = getManagedChildProcesses(name);
     let stoppedChildren = 0;
-
     for (const child of childProcesses) {
-      await handleStop(child.name, seen);
+      await stopProcess(child.name, seen);
       stoppedChildren++;
     }
 
-    const isRunning = await isManagedProcessRunning(
-      proc.pid,
-      name,
-      proc.command,
-    );
-    if (!isRunning) {
-      updateProcessPid(name, 0);
-      announce(
-        `Process '${name}' is already stopped${stoppedChildren > 0 ? `; stopped ${stoppedChildren} managed child ${stoppedChildren === 1 ? "process" : "processes"}` : ""}.`,
-        "Process Stop",
+    const inspection = await inspectForDestructiveOperation(proc);
+    if (inspection === "dead" || inspection === "mismatch") {
+      clearKnownOwnership(proc);
+      return { name, alreadyStopped: true, stoppedChildren };
+    }
+    if (inspection === "unknown") {
+      throw new Error(
+        `Cannot prove ownership of PID ${proc.pid} for '${name}'. Refusing to terminate it.`,
       );
-      return;
     }
 
-    // Stop only the registered, command-verified PID. Never kill by port:
-    // another service (for example Caddy) may legitimately connect to or later
-    // own that port.
-    await terminateProcess(proc.pid);
-
-    // Mark PID as 0 — prevents reconcileProcessPids from re-attaching
-    // a random matching process as this one
-    updateProcessPid(name, 0);
-
-    announce(
-      `Process '${name}' has been stopped (kept in registry)${stoppedChildren > 0 ? `; stopped ${stoppedChildren} managed child ${stoppedChildren === 1 ? "process" : "processes"}` : ""}.`,
-      "Process Stopped",
-    );
+    await terminateProcess(proc.pid, false, proc.start_identity || undefined);
+    clearKnownOwnership(proc);
+    return { name, alreadyStopped: false, stoppedChildren };
   } finally {
-    releaseOperationLock();
+    release();
   }
+}
+
+export async function handleStop(name: string, seen: Set<string> = new Set()) {
+  if (!getProcess(name)) {
+    error(`No process found named '${name}'`);
+    return;
+  }
+  const result = await stopProcess(name, seen);
+  if (result.alreadyStopped) {
+    announce(
+      `Process '${name}' is already stopped${result.stoppedChildren > 0 ? `; stopped ${result.stoppedChildren} managed child ${result.stoppedChildren === 1 ? "process" : "processes"}` : ""}.`,
+      "Process Stop",
+    );
+    return;
+  }
+  announce(
+    `Process '${name}' has been stopped (kept in registry)${result.stoppedChildren > 0 ? `; stopped ${result.stoppedChildren} managed child ${result.stoppedChildren === 1 ? "process" : "processes"}` : ""}.`,
+    "Process Stopped",
+  );
 }
 
 export async function handleDeleteAll() {
@@ -173,32 +201,26 @@ export async function handleDeleteAll() {
   }
 
   let killedCount = 0;
+  let unsafeCount = 0;
 
   for (const proc of processes) {
     if (!isInternalProcessName(proc.name)) {
       await stopProcessWatcher(proc.name);
     }
-    const running = await isManagedProcessRunning(
-      proc.pid,
-      proc.name,
-      proc.command,
-    );
 
-    if (running) {
-      // Force-kill only the registered, command-verified process tree.
-      await terminateProcess(proc.pid, true);
+    const inspection = await inspectForDestructiveOperation(proc);
+    if (inspection === "alive") {
+      await terminateProcess(proc.pid, true, proc.start_identity || undefined);
       killedCount++;
+    } else if (inspection === "unknown") {
+      unsafeCount++;
+      continue;
     }
 
-    // Clean up log files
-    if (fs.existsSync(proc.stdout_path)) {
+    for (const path of [proc.stdout_path, proc.stderr_path]) {
+      if (!fs.existsSync(path)) continue;
       try {
-        fs.unlinkSync(proc.stdout_path);
-      } catch {}
-    }
-    if (fs.existsSync(proc.stderr_path)) {
-      try {
-        fs.unlinkSync(proc.stderr_path);
+        fs.unlinkSync(path);
       } catch {}
     }
   }
@@ -208,7 +230,12 @@ export async function handleDeleteAll() {
   const parts = [
     `${processes.length} ${processes.length === 1 ? "process" : "processes"} deleted`,
   ];
-  if (killedCount > 0) parts.push(`${killedCount} force-killed`);
+  if (killedCount > 0) parts.push(`${killedCount} terminated`);
+  if (unsafeCount > 0) {
+    parts.push(
+      `${unsafeCount} running PID${unsafeCount === 1 ? "" : "s"} left untouched because ownership could not be proven`,
+    );
+  }
 
   announce(parts.join(", ") + ".", "Nuke Complete");
 }

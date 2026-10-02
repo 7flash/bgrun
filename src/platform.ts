@@ -7,7 +7,7 @@ import * as fs from "fs";
 import * as os from "os";
 import { join } from "path";
 import { $ } from "bun";
-import { measureRequired, platformMeasure as plat } from "./observability";
+import { getProcessBirthId } from "./process-identity";
 
 // Simple LRU cache for process liveness checks to avoid repeated PowerShell queries
 const isRunningCache = new Map<string, { alive: boolean; checkedAt: number }>();
@@ -283,83 +283,115 @@ export async function isProcessRunning(
   pid: number,
   command?: string,
 ): Promise<boolean> {
-  // PID 0 means intentionally stopped — never alive
   if (pid <= 0) return false;
 
   const cacheKey = getRunningCacheKey(pid, command);
-
-  // Check cache first (only for repeated queries within TTL)
   const cached = isRunningCache.get(cacheKey);
   if (cached && Date.now() - cached.checkedAt < CACHE_TTL) {
     return cached.alive;
   }
 
-  return (
-    (await plat.measure(`Process alive pid=${pid}`, async () => {
+  try {
+    if (
+      command &&
+      (command.includes("docker run") ||
+        command.includes("docker-compose up") ||
+        command.includes("docker compose up"))
+    ) {
+      const alive = await isDockerContainerRunning(command);
+      isRunningCache.set(cacheKey, { alive, checkedAt: Date.now() });
+      return alive;
+    }
+
+    let alive = false;
+    if (isWindows()) {
       try {
-        // Docker container detection
-        if (
-          command &&
-          (command.includes("docker run") ||
-            command.includes("docker-compose up") ||
-            command.includes("docker compose up"))
-        ) {
-          const alive = await isDockerContainerRunning(command);
-          isRunningCache.set(cacheKey, { alive, checkedAt: Date.now() });
-          return alive;
-        }
-
-        let alive = false;
-        if (isWindows()) {
-          // Fast path: signal 0 works for many native Windows/Bun invocations.
-          // But under MSYS/Git Bash or detached wrapper scenarios it can return
-          // false negatives for live Windows PIDs. Fall back to Get-Process so
-          // CLI, dashboard, and guard all agree on process liveness.
-          try {
-            process.kill(pid, 0);
-            alive = true;
-          } catch {
-            const output = await psExec(
-              `Get-Process -Id ${pid} -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id`,
-            );
-            alive = output === String(pid);
-          }
-        } else {
-          const result = await $`ps -p ${pid}`.nothrow().text();
-          alive = result.includes(`${pid}`);
-        }
-
-        if (!alive) {
-          isRunningCache.set(cacheKey, { alive: false, checkedAt: Date.now() });
-          return false;
-        }
-
-        if (command?.trim()) {
-          const actualCommandLine = await getProcessCommandLine(pid);
-          if (actualCommandLine.trim()) {
-            alive = commandLineMatchesExpectedCommand(
-              actualCommandLine,
-              command,
-            );
-          }
-        }
-
-        isRunningCache.set(cacheKey, { alive, checkedAt: Date.now() });
-        return alive;
+        process.kill(pid, 0);
+        alive = true;
       } catch {
-        isRunningCache.set(cacheKey, { alive: false, checkedAt: Date.now() });
-        return false;
+        const output = await psExec(
+          `Get-Process -Id ${pid} -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id`,
+        );
+        alive = output === String(pid);
       }
-    })) ?? false
-  );
+    } else {
+      const result = await $`ps -p ${pid}`.nothrow().text();
+      alive = result.includes(`${pid}`);
+    }
+
+    if (!alive) {
+      isRunningCache.set(cacheKey, { alive: false, checkedAt: Date.now() });
+      return false;
+    }
+
+    if (command?.trim()) {
+      const actualCommandLine = await getProcessCommandLine(pid);
+      if (actualCommandLine.trim()) {
+        alive = commandLineMatchesExpectedCommand(actualCommandLine, command);
+      }
+    }
+
+    isRunningCache.set(cacheKey, { alive, checkedAt: Date.now() });
+    return alive;
+  } catch {
+    isRunningCache.set(cacheKey, { alive: false, checkedAt: Date.now() });
+    return false;
+  }
 }
 
-/** Verify that a live PID is the exact bgrun-managed process name. */
+export type ManagedProcessInspection =
+  "alive" | "dead" | "unknown" | "mismatch";
+
+export async function inspectManagedProcess(
+  pid: number,
+  processName: string,
+  startIdentity: string,
+  command?: string,
+): Promise<ManagedProcessInspection> {
+  if (!Number.isInteger(pid) || pid <= 0) return "dead";
+  const running = await isProcessRunning(pid, command);
+  if (!running) return "dead";
+  if (
+    command &&
+    (command.includes("docker run") ||
+      command.includes("docker-compose up") ||
+      command.includes("docker compose up"))
+  ) {
+    return "alive";
+  }
+  if (!startIdentity) return "unknown";
+
+  const currentIdentity = getProcessBirthId(pid);
+  if (!currentIdentity) return "unknown";
+  if (currentIdentity !== startIdentity) return "mismatch";
+  if (isWindows()) return "alive";
+
+  try {
+    const environ = fs.readFileSync(`/proc/${pid}/environ`, "utf8");
+    return environ.includes(`BGR_PROCESS_NAME=${processName}\0`)
+      ? "alive"
+      : "mismatch";
+  } catch {
+    return "unknown";
+  }
+}
+
 export async function isManagedProcessRunning(
   pid: number,
   processName: string,
   command?: string,
+  startIdentity?: string,
 ): Promise<boolean> {
+  if (startIdentity) {
+    return (
+      (await inspectManagedProcess(
+        pid,
+        processName,
+        startIdentity,
+        command,
+      )) === "alive"
+    );
+  }
   if (!(await isProcessRunning(pid, command))) return false;
   if (isWindows()) return true;
 
@@ -427,13 +459,65 @@ async function getChildPids(pid: number): Promise<number[]> {
       return result
         .trim()
         .split("\n")
-        .filter((p) => p.trim())
-        .map((p) => parseInt(p))
-        .filter((n) => !isNaN(n));
+        .filter((p: string) => p.trim())
+        .map((p: string) => parseInt(p))
+        .filter((n: number) => !isNaN(n));
     }
   } catch {
     return [];
   }
+}
+
+export function selectTerminableDescendants(
+  rootPid: number,
+  parentByPid: ReadonlyMap<number, number>,
+  protectedPids: ReadonlySet<number>,
+): number[] {
+  const children = new Map<number, number[]>();
+  for (const [pid, parent] of parentByPid) {
+    const list = children.get(parent) ?? [];
+    list.push(pid);
+    children.set(parent, list);
+  }
+
+  const selected: number[] = [];
+  const visit = (parent: number) => {
+    for (const child of children.get(parent) ?? []) {
+      if (protectedPids.has(child)) continue;
+      visit(child);
+      selected.push(child);
+    }
+  };
+  visit(rootPid);
+  return selected;
+}
+
+async function getOtherRegisteredPids(targetPid: number): Promise<Set<number>> {
+  try {
+    const { getAllProcesses } = await import("./db");
+    return new Set(
+      getAllProcesses()
+        .map((proc) => proc.pid)
+        .filter((pid) => Number.isInteger(pid) && pid > 0 && pid !== targetPid),
+    );
+  } catch {
+    return new Set();
+  }
+}
+
+async function getWindowsProcessTree(): Promise<Map<number, number>> {
+  const output = await psExec(
+    "Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId | ConvertTo-Json -Compress",
+    10000,
+  );
+  if (!output.trim()) return new Map();
+  const parsed = JSON.parse(output);
+  const rows = Array.isArray(parsed) ? parsed : [parsed];
+  return new Map(
+    rows
+      .map((row) => [Number(row.ProcessId), Number(row.ParentProcessId)] as const)
+      .filter(([child, parent]) => child > 0 && parent >= 0),
+  );
 }
 
 /**
@@ -442,40 +526,56 @@ async function getChildPids(pid: number): Promise<number[]> {
 export async function terminateProcess(
   pid: number,
   force: boolean = false,
+  startIdentity?: string,
 ): Promise<void> {
   if (!Number.isInteger(pid) || pid <= 0) return;
+  if (startIdentity) {
+    const currentIdentity = getProcessBirthId(pid);
+    if (!currentIdentity || currentIdentity !== startIdentity) {
+      throw new Error(`PID ${pid} ownership changed before termination`);
+    }
+  }
 
   clearProcessRunningCache(pid);
-  await measureRequired(
-    plat.measure,
-    `Terminate process pid=${pid}${force ? " force" : ""}`,
-    async (m) => {
-      if (isWindows()) {
-        await $`taskkill /F /T /PID ${pid}`.nothrow().quiet();
-      } else {
-        const children =
-          ((await m?.("Get children", () => getChildPids(pid))) as
-            number[] | null | undefined) ?? [];
-        const signal = force ? "KILL" : "TERM";
+  const protectedPids = await getOtherRegisteredPids(pid);
+  if (isWindows()) {
+    let descendants: number[] = [];
+    try {
+      descendants = selectTerminableDescendants(
+        pid,
+        await getWindowsProcessTree(),
+        protectedPids,
+      );
+    } catch {
+      // A failed snapshot must not fall back to /T, which could kill another
+      // registered process. Killing only the requested PID is the safe fallback.
+    }
+    for (const childPid of descendants) {
+      await $`taskkill /F /PID ${childPid}`.nothrow().quiet();
+    }
+    await $`taskkill /F /PID ${pid}`.nothrow().quiet();
+  } else {
+    const children = (await getChildPids(pid)).filter(
+      (childPid) => !protectedPids.has(childPid),
+    );
+    const signal = force ? "KILL" : "TERM";
 
-        for (const childPid of children) {
-          await $`kill -${signal} ${childPid}`.nothrow().quiet();
-        }
-        await $`kill -${signal} ${pid}`.nothrow().quiet();
-      }
+    for (const childPid of children) {
+      await $`kill -${signal} ${childPid}`.nothrow().quiet();
+    }
+    await $`kill -${signal} ${pid}`.nothrow().quiet();
+  }
 
-      await Bun.sleep(force ? 150 : 500);
-      clearProcessRunningCache(pid);
-      if (!(await isProcessRunning(pid))) return;
-
-      // Do not escalate a graceful stop by PID alone: after a PID exits the OS
-      // can reuse it, and a blind second signal could target another process.
-      // Callers that have already verified ownership can request force=true.
-      if (await isProcessRunning(pid)) {
-        throw new Error(`PID ${pid} did not exit`);
-      }
-    },
-  );
+  await Bun.sleep(force ? 150 : 500);
+  clearProcessRunningCache(pid);
+  if (startIdentity) {
+    const currentIdentity = getProcessBirthId(pid);
+    if (!currentIdentity || currentIdentity !== startIdentity) return;
+  }
+  if (!(await isProcessRunning(pid))) return;
+  if (await isProcessRunning(pid)) {
+    throw new Error(`PID ${pid} did not exit`);
+  }
 }
 
 /**
@@ -696,8 +796,8 @@ export async function findChildPid(parentPid: number): Promise<number> {
         childPids = result
           .trim()
           .split("\n")
-          .map((line) => parseInt(line.trim()))
-          .filter((n) => !isNaN(n) && n > 0);
+          .map((line: string) => parseInt(line.trim()))
+          .filter((n: number) => !isNaN(n) && n > 0);
       }
 
       if (childPids.length === 0) break;
@@ -835,23 +935,13 @@ export async function readFileTail(
   filePath: string,
   lines?: number,
 ): Promise<string> {
-  return (
-    (await plat.measure(`Read log tail lines=${lines ?? "all"}`, async () => {
-      try {
-        const content = await Bun.file(filePath).text();
-
-        if (!lines) {
-          return content;
-        }
-
-        const allLines = content.split(/\r?\n/);
-        const tailLines = allLines.slice(-lines);
-        return tailLines.join("\n");
-      } catch (error) {
-        throw new Error(`Error reading file: ${error}`);
-      }
-    })) ?? ""
-  );
+  try {
+    const content = await Bun.file(filePath).text();
+    if (!lines) return content;
+    return content.split(/\r?\n/).slice(-lines).join("\n");
+  } catch (error) {
+    throw new Error(`Error reading file: ${error}`);
+  }
 }
 
 /**
@@ -883,50 +973,43 @@ export async function getProcessBatchResources(
 ): Promise<Map<number, { memory: number; cpu: number }>> {
   if (pids.length === 0) return new Map();
 
-  return (
-    (await plat.measure(`Batch resources count=${pids.length}`, async () => {
-      const resourceMap = new Map<number, { memory: number; cpu: number }>();
-      const pidSet = new Set(pids);
+  const resourceMap = new Map<number, { memory: number; cpu: number }>();
+  const pidSet = new Set(pids);
 
-      try {
-        if (isWindows()) {
-          // psExec(Get-Process) is fast (~2ms) vs tasklist which hangs
-          const output = await psExec(
-            `Get-Process -Id ${pids.join(",")} -ErrorAction SilentlyContinue | Select-Object Id, WorkingSet64 | ForEach-Object { Write-Output "$($_.Id)|$($_.WorkingSet64)" }`,
-          );
-          for (const line of output.split("\n")) {
-            const sepIdx = line.indexOf("|");
-            if (sepIdx === -1) continue;
-            const pid = parseInt(line.substring(0, sepIdx).trim());
-            const memory = parseInt(line.substring(sepIdx + 1).trim()) || 0;
-            if (!isNaN(pid) && pidSet.has(pid)) {
-              resourceMap.set(pid, { memory, cpu: 0 });
-            }
-          }
-        } else {
-          const result = await $`ps -eo pid,pcpu,rss`.nothrow().quiet().text();
-          const lines = result.trim().split("\n");
-
-          for (let i = 1; i < lines.length; i++) {
-            const line = lines[i].trim();
-            if (!line) continue;
-            const [pidStr, cpuStr, rssStr] = line.split(/\s+/);
-            const pid = parseInt(pidStr);
-            const cpu = parseFloat(cpuStr) || 0;
-            const rss = parseInt(rssStr) || 0;
-
-            if (pidSet.has(pid)) {
-              resourceMap.set(pid, { memory: rss * 1024, cpu });
-            }
-          }
+  try {
+    if (isWindows()) {
+      const output = await psExec(
+        `Get-Process -Id ${pids.join(",")} -ErrorAction SilentlyContinue | Select-Object Id, WorkingSet64 | ForEach-Object { Write-Output "$($_.Id)|$($_.WorkingSet64)" }`,
+      );
+      for (const line of output.split("\n")) {
+        const sepIdx = line.indexOf("|");
+        if (sepIdx === -1) continue;
+        const pid = parseInt(line.substring(0, sepIdx).trim());
+        const memory = parseInt(line.substring(sepIdx + 1).trim()) || 0;
+        if (!isNaN(pid) && pidSet.has(pid)) {
+          resourceMap.set(pid, { memory, cpu: 0 });
         }
-      } catch (e) {
-        // silently fail
       }
+    } else {
+      const result = await $`ps -eo pid,pcpu,rss`.nothrow().quiet().text();
+      const lines = result.trim().split("\n");
 
-      return resourceMap;
-    })) ?? new Map()
-  );
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        const [pidStr, cpuStr, rssStr] = line.split(/\s+/);
+        const pid = parseInt(pidStr);
+        const cpu = parseFloat(cpuStr) || 0;
+        const rss = parseInt(rssStr) || 0;
+
+        if (pidSet.has(pid)) {
+          resourceMap.set(pid, { memory: rss * 1024, cpu });
+        }
+      }
+    }
+  } catch {}
+
+  return resourceMap;
 }
 
 export type SystemProcessResource = {
@@ -947,58 +1030,51 @@ export type SystemProcessResource = {
 export async function getSystemProcessResources(): Promise<
   SystemProcessResource[]
 > {
-  return (
-    (await plat.measure("System resource snapshot", async () => {
-      try {
-        if (isWindows()) {
-          const output = await psExec(
-            `Get-Process -ErrorAction SilentlyContinue | ForEach-Object { Write-Output "$($_.Id)|$([double]$_.CPU)|$($_.WorkingSet64)|$($_.ProcessName)|$($_.Path)" }`,
-            5000,
-          );
-          const rows: SystemProcessResource[] = [];
-          for (const line of output.split("\n")) {
-            const parts = line.split("|");
-            if (parts.length < 4) continue;
-            const pid = parseInt(parts[0]?.trim() || "", 10);
-            if (!Number.isInteger(pid) || pid <= 0) continue;
-            rows.push({
-              pid,
-              cpu: Number(parts[1]) || 0,
-              memory: Number(parts[2]) || 0,
-              executable: parts[3]?.trim() || "",
-              command:
-                parts.slice(4).join("|").trim() || parts[3]?.trim() || "",
-            });
-          }
-          return rows;
-        }
-
-        const output = await $`ps -eo pid=,pcpu=,rss=,comm=,args=`
-          .nothrow()
-          .quiet()
-          .text();
-        const rows: SystemProcessResource[] = [];
-        for (const line of output.split("\n")) {
-          const match = line.match(
-            /^\s*(\d+)\s+([0-9.]+)\s+(\d+)\s+(\S+)\s*(.*)$/,
-          );
-          if (!match) continue;
-          const pid = parseInt(match[1], 10);
-          if (!Number.isInteger(pid) || pid <= 0) continue;
-          rows.push({
-            pid,
-            cpu: parseFloat(match[2]) || 0,
-            memory: (parseInt(match[3], 10) || 0) * 1024,
-            executable: match[4] || "",
-            command: match[5]?.trim() || match[4] || "",
-          });
-        }
-        return rows;
-      } catch {
-        return [];
+  try {
+    if (isWindows()) {
+      const output = await psExec(
+        `Get-Process -ErrorAction SilentlyContinue | ForEach-Object { Write-Output "$($_.Id)|$([double]$_.CPU)|$($_.WorkingSet64)|$($_.ProcessName)|$($_.Path)" }`,
+        5000,
+      );
+      const rows: SystemProcessResource[] = [];
+      for (const line of output.split("\n")) {
+        const parts = line.split("|");
+        if (parts.length < 4) continue;
+        const pid = parseInt(parts[0]?.trim() || "", 10);
+        if (!Number.isInteger(pid) || pid <= 0) continue;
+        rows.push({
+          pid,
+          cpu: Number(parts[1]) || 0,
+          memory: Number(parts[2]) || 0,
+          executable: parts[3]?.trim() || "",
+          command: parts.slice(4).join("|").trim() || parts[3]?.trim() || "",
+        });
       }
-    })) ?? []
-  );
+      return rows;
+    }
+
+    const output = await $`ps -eo pid=,pcpu=,rss=,comm=,args=`
+      .nothrow()
+      .quiet()
+      .text();
+    const rows: SystemProcessResource[] = [];
+    for (const line of output.split("\n")) {
+      const match = line.match(/^\s*(\d+)\s+([0-9.]+)\s+(\d+)\s+(\S+)\s*(.*)$/);
+      if (!match) continue;
+      const pid = parseInt(match[1], 10);
+      if (!Number.isInteger(pid) || pid <= 0) continue;
+      rows.push({
+        pid,
+        cpu: parseFloat(match[2]) || 0,
+        memory: (parseInt(match[3], 10) || 0) * 1024,
+        executable: match[4] || "",
+        command: match[5]?.trim() || match[4] || "",
+      });
+    }
+    return rows;
+  } catch {
+    return [];
+  }
 }
 
 function addListeningPort(
@@ -1022,68 +1098,60 @@ function addListeningPort(
 export async function getListeningPortsByPid(
   pids?: number[],
 ): Promise<Map<number, number[]>> {
-  return (
-    (await plat.measure("Listening port snapshot", async () => {
-      const filter = pids ? new Set(pids.filter((pid) => pid > 0)) : null;
-      const result = new Map<number, Set<number>>();
+  const filter = pids ? new Set(pids.filter((pid) => pid > 0)) : null;
+  const result = new Map<number, Set<number>>();
 
-      try {
-        if (isWindows()) {
-          const output = await $`netstat -ano`.nothrow().quiet().text();
-          for (const line of output.split("\n")) {
-            const match = line.match(
-              /^\s*TCP\s+\S+:(\d+)\s+\S+\s+LISTENING\s+(\d+)\s*$/i,
-            );
-            if (!match) continue;
-            addListeningPort(
-              result,
-              parseInt(match[2], 10),
-              parseInt(match[1], 10),
-              filter,
-            );
-          }
-        } else {
-          const output = await $`ss -ltnpH`.nothrow().quiet().text();
-          for (const line of output.split("\n")) {
-            const columns = line.trim().split(/\s+/);
-            if (columns.length < 4) continue;
-            const local = columns[3] || "";
-            const portMatch = local.match(/:(\d+)$/);
-            if (!portMatch) continue;
-            const port = parseInt(portMatch[1], 10);
-            for (const pidMatch of line.matchAll(/pid=(\d+)/g)) {
-              addListeningPort(result, parseInt(pidMatch[1], 10), port, filter);
-            }
-          }
-
-          // Some ss builds hide process metadata for unprivileged callers.
-          // Fall back to one global lsof snapshot when ss cannot map any PID.
-          if (result.size === 0) {
-            const lsof = await $`lsof -nP -iTCP -sTCP:LISTEN`
-              .nothrow()
-              .quiet()
-              .text();
-            for (const line of lsof.split("\n").slice(1)) {
-              const columns = line.trim().split(/\s+/);
-              if (columns.length < 9) continue;
-              const pid = parseInt(columns[1] || "", 10);
-              const portMatch = line.match(/:(\d+)\s+\(LISTEN\)/);
-              if (!portMatch) continue;
-              addListeningPort(result, pid, parseInt(portMatch[1], 10), filter);
-            }
-          }
+  try {
+    if (isWindows()) {
+      const output = await $`netstat -ano`.nothrow().quiet().text();
+      for (const line of output.split("\n")) {
+        const match = line.match(
+          /^\s*TCP\s+\S+:(\d+)\s+\S+\s+LISTENING\s+(\d+)\s*$/i,
+        );
+        if (!match) continue;
+        addListeningPort(
+          result,
+          parseInt(match[2], 10),
+          parseInt(match[1], 10),
+          filter,
+        );
+      }
+    } else {
+      const output = await $`ss -ltnpH`.nothrow().quiet().text();
+      for (const line of output.split("\n")) {
+        const columns = line.trim().split(/\s+/);
+        if (columns.length < 4) continue;
+        const local = columns[3] || "";
+        const portMatch = local.match(/:(\d+)$/);
+        if (!portMatch) continue;
+        const port = parseInt(portMatch[1], 10);
+        for (const pidMatch of line.matchAll(/pid=(\d+)/g)) {
+          addListeningPort(result, parseInt(pidMatch[1], 10), port, filter);
         }
-      } catch {
-        // best-effort snapshot
       }
 
-      return new Map(
-        [...result.entries()].map(([pid, ports]) => [
-          pid,
-          [...ports].sort((a, b) => a - b),
-        ]),
-      );
-    })) ?? new Map()
+      if (result.size === 0) {
+        const lsof = await $`lsof -nP -iTCP -sTCP:LISTEN`
+          .nothrow()
+          .quiet()
+          .text();
+        for (const line of lsof.split("\n").slice(1)) {
+          const columns = line.trim().split(/\s+/);
+          if (columns.length < 9) continue;
+          const pid = parseInt(columns[1] || "", 10);
+          const portMatch = line.match(/:(\d+)\s+\(LISTEN\)/);
+          if (!portMatch) continue;
+          addListeningPort(result, pid, parseInt(portMatch[1], 10), filter);
+        }
+      }
+    }
+  } catch {}
+
+  return new Map(
+    [...result.entries()].map(([pid, ports]) => [
+      pid,
+      [...ports].sort((a, b) => a - b),
+    ]),
   );
 }
 

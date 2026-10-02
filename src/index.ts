@@ -5,6 +5,7 @@ import { getVersion } from "./utils";
 import { handleRun } from "./commands/run";
 import { showAll } from "./commands/list";
 import { showTop } from "./commands/top";
+import { shouldUseTop } from "./cli-routing";
 import { handleMeta } from "./commands/meta";
 import { handleDoctor } from "./commands/doctor";
 import {
@@ -28,6 +29,7 @@ import {
   getHomeDir,
   getShellCommand,
   findChildPid,
+  inspectManagedProcess,
   isProcessRunning,
   terminateProcess,
   getProcessPorts,
@@ -51,19 +53,15 @@ import dedent from "dedent";
 import chalk from "chalk";
 import { join } from "path";
 import { sleep } from "bun";
-import { configure } from "measure-fn";
+import { getProcessBirthId } from "./process-identity";
 import { startProcessWatcher } from "./watcher";
+import { configureDefaultBgrunRuntime } from "./runtime-context";
+import { resolveCliHome } from "./cli-home";
 import {
   generateAutoProcessName,
   generateCommandBasedProcessName,
   joinCommandArgs,
 } from "./cli-helpers";
-
-if (!Bun.argv.includes("--_serve")) {
-  if (!Bun.env.MEASURE_SILENT) {
-    configure({ silent: true });
-  }
-}
 
 /**
  * Redirect console.log/warn/error to log files when running detached.
@@ -140,11 +138,12 @@ async function showHelp() {
       bunx bgrun [name] [options]
 
     ${chalk.yellow("Commands:")}
-      bunx bgrun                     List all processes
+      bunx bgrun                     List processes progressively, one line each
       bunx bgrun --json              Fast JSON process list
-      bunx bgrun --json-full         Full JSON list with verified status, ports, memory
-      bunx bgrun top                 Live resource snapshot for managed processes
-      bunx bgrun top --watch         Refresh CPU/RAM/ports continuously
+      bunx bgrun --json-full         Full JSON list with verified status and ports
+      bunx bgrun top                 Continuously monitor CPU/RAM/ports
+      bunx bgrun --top               Alias for bgrun top
+      bunx bgrun top --once          Print one resource snapshot and exit
       bunx bgrun top --system        Include all system processes
       bunx bgrun --meta              Show DB/runtime metadata only
       bunx bgrun --meta --json       Machine-readable DB/runtime metadata only
@@ -171,6 +170,7 @@ async function showHelp() {
       --name <string>        Process name (required for new)
       --command <string>     Process command (required for new)
       --directory <path>     Working directory (required for new)
+      --home <path>          Process registry home (or [bgr] local_home)
       --config <path>        Config file (default: .config.toml)
       --no-config            Disable automatic .config.toml loading
       --env                  Print shell export commands from config and exit
@@ -186,7 +186,9 @@ async function showHelp() {
       --memory               Sort top by memory (default)
       --ports                Show only processes with listening TCP ports
       --system               Top: include all system processes
-      --interval <seconds>   Top watch refresh interval (default: 2)
+      --top                  Alias for the top command
+      --once                 Top: print one snapshot and exit
+      --interval <seconds>   Top refresh interval (default: 2)
       --limit <n>            Top result limit (system default: 30)
       --logs                 Show logs
       --log-stdout           Show only stdout logs
@@ -214,7 +216,9 @@ async function showHelp() {
       Invoke-Expression (bunx bgrun --env)
       eval "$(bunx bgrun --env --shell sh)"
       bunx bgrun --dashboard
-      bunx bgrun top --watch
+      bunx bgrun top
+      bunx bgrun top --once
+      bunx bgrun --top
       bunx bgrun top --system --cpu --limit 20
       bunx bgrun top --ports
       bunx bgrun --kill-port 3000
@@ -266,11 +270,14 @@ const cliArgOptions = {
   memory: { type: "boolean" as const },
   ports: { type: "boolean" as const },
   system: { type: "boolean" as const },
+  top: { type: "boolean" as const },
+  once: { type: "boolean" as const },
   interval: { type: "string" as const },
   limit: { type: "string" as const },
   version: { type: "boolean" as const, short: "v" },
   help: { type: "boolean" as const },
   db: { type: "string" as const },
+  home: { type: "string" as const },
   stdout: { type: "string" as const },
   stderr: { type: "string" as const },
   dashboard: { type: "boolean" as const },
@@ -325,6 +332,8 @@ function wantsLogFollow(
 // Re-running parseArgs logic properly
 async function run() {
   const rawArgs = Bun.argv.slice(2);
+  const cliHome = await resolveCliHome(rawArgs);
+  if (cliHome) configureDefaultBgrunRuntime({ home: cliHome });
   const isActionInvocation = (values: Record<string, unknown>) => {
     return Boolean(
       values.dashboard ||
@@ -339,6 +348,7 @@ async function run() {
       values.memory ||
       values.ports ||
       values.system ||
+      values.top ||
       values.nuke ||
       values.clean ||
       values["restart-all"] ||
@@ -597,46 +607,45 @@ async function run() {
       ? parseInt(explicitPortValue, 10)
       : null;
 
-    // Check if dashboard is already running
+    // Check if dashboard is already running. Destructive actions require
+    // registered birth identity; a PID alone is never treated as ownership.
     const existing = getProcess(dashboardName);
-    if (existing && (await isProcessRunning(existing.pid))) {
-      // The stored PID may be a shell wrapper. Resolve toward the child that
-      // actually owns the listening socket before rendering the banner.
-      const resolved = await resolvePidWithPorts(existing.pid);
-      let existingPid = resolved.pid;
-      let existingPorts = resolved.ports;
+    if (existing) {
+      const inspection = await inspectManagedProcess(
+        existing.pid,
+        existing.name,
+        existing.start_identity,
+        existing.command,
+      );
 
-      if (existingPorts.length === 0) {
-        const detachedPid = await findDetachedProcessByArg("--_serve");
-        if (detachedPid && detachedPid !== existingPid) {
-          const detachedResolved = await resolvePidWithPorts(detachedPid);
-          existingPid = detachedResolved.pid;
-          existingPorts = detachedResolved.ports;
-        }
-      }
-
-      if (existingPid !== existing.pid && existingPorts.length > 0) {
-        await retryDatabaseOperation(() =>
-          updateProcessPid(dashboardName, existingPid),
+      if (inspection === "unknown") {
+        throw new Error(
+          `Cannot prove ownership of dashboard PID ${existing.pid}. Refusing to start a duplicate or terminate it.`,
         );
       }
 
-      const portStr =
-        existingPorts.length > 0 ? `:${existingPorts[0]}` : "(detecting...)";
-      announce(
-        `Dashboard is already running (PID ${existingPid})\n\n` +
-          `  🌐  ${chalk.cyan(`http://localhost${portStr}`)}\n\n` +
-          `  Use ${chalk.yellow(`bgrun --stop ${dashboardName}`)} to stop it\n` +
-          `  Use ${chalk.yellow(`bgrun --dashboard --force`)} to restart`,
-        "BGR Dashboard",
-      );
-      return;
-    }
+      if (inspection === "alive" && !values.force) {
+        const resolved = await resolvePidWithPorts(existing.pid);
+        const existingPid = resolved.pid;
+        const existingPorts = resolved.ports;
+        const portStr =
+          existingPorts.length > 0 ? `:${existingPorts[0]}` : "(detecting...)";
+        announce(
+          `Dashboard is already running (PID ${existingPid})\n\n` +
+            `  🌐  ${chalk.cyan(`http://localhost${portStr}`)}\n\n` +
+            `  Use ${chalk.yellow(`bgrun --stop ${dashboardName}`)} to stop it\n` +
+            `  Use ${chalk.yellow(`bgrun --dashboard --force`)} to restart`,
+          "BGR Dashboard",
+        );
+        return;
+      }
 
-    // Kill existing if force
-    if (existing) {
-      if (await isProcessRunning(existing.pid, existing.command)) {
-        await terminateProcess(existing.pid);
+      if (inspection === "alive") {
+        await terminateProcess(
+          existing.pid,
+          false,
+          existing.start_identity || undefined,
+        );
       }
       await retryDatabaseOperation(() => removeProcessByName(dashboardName));
     }
@@ -727,6 +736,7 @@ async function run() {
         configPath: "",
         stdout_path: stdoutPath,
         stderr_path: stderrPath,
+        start_identity: getProcessBirthId(actualPid),
       }),
     );
 
@@ -754,9 +764,10 @@ async function run() {
     return;
   }
 
-  if (positionals[0] === "top") {
-    if (positionals.length > 1) {
-      error("bgrun top does not accept additional process names.");
+  if (shouldUseTop(positionals, values)) {
+    const allowedPositionals = positionals[0] === "top" ? 1 : 0;
+    if (positionals.length > allowedPositionals) {
+      error("bgrun top does not accept process names.");
     }
     if (values.system && values.filter) {
       error("--filter applies to managed processes only; remove --system.");
@@ -764,7 +775,7 @@ async function run() {
     const intervalSeconds = parsePositiveInt(values.interval) || 2;
     const explicitLimit = parsePositiveInt(values.limit);
     await showTop({
-      watch: Boolean(values.watch),
+      once: Boolean(values.once),
       intervalMs: intervalSeconds * 1000,
       system: Boolean(values.system),
       portsOnly: Boolean(values.ports),

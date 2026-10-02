@@ -28,6 +28,6 @@ if (!result.success) {
 }
 
 const builtFiles = result.outputs
-  .map((output) => output.path.split(/[\\/]/).pop())
+  .map((output: { path: string }) => output.path.split(/[\\/]/).pop())
   .filter(Boolean);
 console.log(`Build successful! Artifacts: ${builtFiles.join(", ")}`);

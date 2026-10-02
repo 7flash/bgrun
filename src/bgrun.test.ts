@@ -811,6 +811,7 @@ describe("SDK child process stop tree", () => {
         "    name: child.name,",
         "    directory,",
         "    command: child.command,",
+        `    parent: ${JSON.stringify(parentName)},`,
         '    env: { BGR_KEEP_ALIVE: "false" },',
         '    remoteName: "",',
         "  });",

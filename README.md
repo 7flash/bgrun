@@ -147,10 +147,16 @@ bgrun --name my-api --command "bun run server.ts"
 ### Listing processes
 
 ```bash
-bgrun                  # Pretty table
-bgrun --json           # Machine-readable JSON
+bgrun                  # Stream one compact status line per process
+bgrun --json           # Fast machine-readable JSON
+bgrun --json-full      # Verified JSON with ports and full status checks
 bgrun --filter api     # Filter by group (BGR_GROUP env)
+bgrun top              # Continuously watch managed CPU/RAM/ports
+bgrun top --once       # Print one resource snapshot and exit
+bgrun --top            # Alias for `bgrun top`
 ```
+
+The default list prints each process as soon as it is inspected. It intentionally skips CPU/RAM sampling and keeps each row compact, for example `api  running  pid 1234  :3000  2h 14m`.
 
 ### Viewing a process
 
@@ -445,82 +451,108 @@ eval "$(bgrun envit --shell sh)"
 
 ## Programmatic API
 
-bgrun exposes its internals as importable TypeScript functions:
+The SDK has two first-class usage modes: a lazy default singleton for normal applications and explicit instances for isolated stores, tests, or multi-tenant runtimes.
 
 > **Packaging note:** the CLI ships from `dist/index.js`, the Bun programmatic API resolves through `dist/api.js`, and the dashboard backend uses built `dist/*` runtime artifacts via `dashboard/lib/runtime.ts`.
-> Published packages are now `dist`-first; repository `src/` files remain the development/build source of truth and are not part of the runtime package surface.
-> **Build hooks:** `npm`/`bun` runs the package `prepare` script on local install from the repo and before packing/publishing, so `bun run build` is triggered to refresh `dist/`. `prepublishOnly` also runs `bun run build` right before `npm publish`.
+> Importing `bgrun` does not open SQLite. Storage is initialized lazily on first use.
 
 ```bash
 bun add bgrun
 ```
 
-### Process management
+### Default singleton
 
 ```typescript
-import {
-  getAllProcesses,
-  getProcess,
-  isProcessRunning,
-  terminateProcess,
-  handleRun,
-  getProcessPorts,
-  readFileTail,
-  calculateRuntime,
-} from 'bgrun'
+import bgrun from "bgrun"
 
-// List all processes
-const procs = getAllProcesses()
-
-// Start a process programmatically
-await handleRun({
-  action: 'run',
-  name: 'my-api',
-  command: 'bun run server.ts',
-  directory: '/path/to/project',
-  force: true,
-  remoteName: '',
+bgrun.configure({
+  home: ".data/bgrun",
 })
 
-// Check status
-const proc = getProcess('my-api')
-if (proc) {
-  const alive = await isProcessRunning(proc.pid)
-  const ports = await getProcessPorts(proc.pid)
-  const runtime = calculateRuntime(proc.timestamp)
-  console.log({ alive, ports, runtime })
-}
+await bgrun.start({
+  name: "api",
+  command: "bun run server.ts",
+  cwd: "./server",
+})
 
-// Read logs
-const myProc = getProcess('my-api')
-if (myProc) {
-  const stdout = await readFileTail(myProc.stdout_path, 100) // last 100 lines
-  const stderr = await readFileTail(myProc.stderr_path, 100)
-}
+await bgrun.restart("api")
+await bgrun.stop("api")
 
-// Stop a process
-await terminateProcess(proc.pid)
+const api = await bgrun.get("api")
+const processes = await bgrun.list()
+const logs = await bgrun.logs("api", { lines: 100 })
 ```
 
-### Build a custom dashboard
+`configure()` must run before the default singleton is first used. After initialization, its storage identity is immutable.
+
+### Explicit instances
+
+Use `createBgrun()` when a library or server needs isolated state instead of the process-wide default:
 
 ```typescript
-import { getAllProcesses, isProcessRunning, calculateRuntime } from 'bgrun'
+import { createBgrun } from "bgrun"
 
-// Express/Hono/Elysia endpoint
-export async function GET() {
-  const procs = getAllProcesses()
-  const enriched = await Promise.all(
-    procs.map(async (p) => ({
-      name: p.name,
-      pid: p.pid,
-      running: await isProcessRunning(p.pid),
-      runtime: calculateRuntime(p.timestamp),
-    }))
-  )
-  return Response.json(enriched)
+const local = createBgrun({
+  home: ".data/local-bgrun",
+  db: "processes.sqlite",
+})
+
+const staging = createBgrun({
+  home: ".data/staging-bgrun",
+})
+
+await local.ensure({
+  name: "api",
+  command: "bun run server.ts",
+  cwd: "./server",
+})
+
+console.log(await local.list())
+console.log(await staging.list())
+```
+
+Instances use independent runtime contexts. Database access, default log paths, lifecycle locks, watcher state, and resource queries resolve against the active instance rather than a module-global database.
+
+### Named convenience functions
+
+The default singleton is also available through named delegates:
+
+```typescript
+import { start, list, stop } from "bgrun"
+
+await start({
+  name: "worker",
+  command: "bun run worker.ts",
+  cwd: "./worker",
+})
+
+console.log(await list())
+await stop("worker")
+```
+
+### SDK surface
+
+The primary process-manager API is intentionally small:
+
+```typescript
+interface Bgrun {
+  start(options: StartOptions): Promise<ManagedProcess>
+  ensure(options: StartOptions): Promise<ManagedProcess>
+  restart(name: string, options?: RestartOptions): Promise<ManagedProcess>
+  stop(name: string): Promise<ManagedProcess>
+  remove(name: string): Promise<void>
+
+  get(name: string): Promise<ManagedProcess | null>
+  list(options?: ListOptions): Promise<ManagedProcess[]>
+
+  logs(name: string, options?: LogOptions): Promise<ProcessLogs>
+  resources(options?: ResourceSnapshotOptions): Promise<ResourceSnapshotRow[]>
 }
 ```
+
+`get()` and `list()` return live managed-process state, including verified running/stopped status, PID, and ports. Callers do not need to combine database rows with PID checks manually.
+
+Low-level database/platform exports remain available for advanced tooling and compatibility. `handleRun()` and `handleStop()` remain exported but are deprecated as SDK entry points; use `start()`, `restart()`, and `stop()` instead.
 
 ---
 
@@ -809,7 +841,16 @@ All state lives in `~/.bgr/`. To reset everything, delete this directory.
 | `--stderr <path>` | Custom stderr log path | `~/.bgr/<name>-err.txt` |
 | `--db <path>` | Custom SQLite database path | `~/.bgr/bgr.sqlite` |
 | `--json` | Output process list as JSON | `false` |
-| `--filter <group>` | Filter by `BGR_GROUP` | *(show all)* |
+| `--json-full` | Verify status and ports before JSON output | `false` |
+| `--filter <group>` | Filter list/top by `BGR_GROUP` | *(show all)* |
+| `--top` | Alias for `bgrun top` | `false` |
+| `--cpu` | Sort top by CPU | `false` |
+| `--memory` | Sort top by memory | `true` for top |
+| `--ports` | Top: only processes with listening ports | `false` |
+| `--system` | Top: include system processes | `false` |
+| `--once` | Top: print one snapshot and exit | `false` |
+| `--interval <seconds>` | Top refresh interval | `2` |
+| `--limit <n>` | Top result limit | `30` for system top |
 | `--logs` | Show process logs | `false` |
 | `--log-stdout` | Show only stdout | `false` |
 | `--log-stderr` | Show only stderr | `false` |
@@ -828,6 +869,8 @@ All state lives in `~/.bgr/`. To reset everything, delete this directory.
 
 | Variable | Description | Default |
 |----------|-------------|---------|
+| `BGRUN_HOME` | SDK/CLI state directory | `~/.bgr` |
+| `BGRUN_DB` | SQLite filename or absolute path | `bgrun.sqlite` |
 | `DB_NAME` | Custom database file name | `bgr` |
 | `BGR_GROUP` | Assign process to a group | *(none)* |
 | `BGR_KEEP_ALIVE` | Enable guard auto-restart for this process | `false` |

@@ -4,10 +4,6 @@ import {
   getProcess,
   handleRun,
 } from "../../../../lib/runtime";
-import {
-  apiMeasure as api,
-  measureRequired,
-} from "../../../../lib/observability";
 import { jsonError } from "../../../../lib/http";
 
 export async function POST(
@@ -21,17 +17,12 @@ export async function POST(
   }
 
   try {
-    await measureRequired(
-      api.measure,
-      `Restart process "${name}" pid=${proc.pid}`,
-      () =>
-        handleRun({
-          action: "run",
-          name,
-          force: true,
-          remoteName: "",
-        }),
-    );
+    await handleRun({
+      action: "run",
+      name,
+      force: true,
+      remoteName: "",
+    });
 
     addHistoryEntry(name, "restart", proc.pid);
     return Response.json({ success: true });

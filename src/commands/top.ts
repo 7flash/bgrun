@@ -1,3 +1,4 @@
+import { clearScreenDown, cursorTo } from "node:readline";
 import {
   sampleManagedResources,
   sampleSystemResources,
@@ -6,7 +7,7 @@ import {
 } from "../resource-monitor";
 
 export type TopOptions = {
-  watch?: boolean;
+  once?: boolean;
   intervalMs?: number;
   system?: boolean;
   portsOnly?: boolean;
@@ -65,7 +66,7 @@ async function sample(options: TopOptions): Promise<ResourceSnapshotRow[]> {
 }
 
 function render(rows: ResourceSnapshotRow[], options: TopOptions): string {
-  if (options.json) return JSON.stringify(rows, null, options.watch ? 0 : 2);
+  if (options.json) return JSON.stringify(rows, null, options.once ? 2 : 0);
   if (rows.length === 0) {
     return options.portsOnly
       ? "no matching listeners"
@@ -76,16 +77,49 @@ function render(rows: ResourceSnapshotRow[], options: TopOptions): string {
     .join("\n");
 }
 
-export async function showTop(options: TopOptions = {}): Promise<void> {
-  const intervalMs = Math.max(500, options.intervalMs || 2_000);
+export function isInteractiveTop(
+  options: TopOptions,
+  stdoutIsTTY: boolean | undefined,
+): boolean {
+  return Boolean(stdoutIsTTY && !options.once && !options.json);
+}
 
-  while (true) {
-    const rows = await sample(options);
-    if (options.watch && !options.json && process.stdout.isTTY) {
-      process.stdout.write("\x1b[2J\x1b[H");
+function drawFrame(frame: string): void {
+  cursorTo(process.stdout, 0, 0);
+  clearScreenDown(process.stdout);
+  process.stdout.write(frame);
+  if (!frame.endsWith("\n")) process.stdout.write("\n");
+}
+
+export async function showTop(options: TopOptions = {}): Promise<void> {
+  const interactive = isInteractiveTop(options, process.stdout.isTTY);
+
+  if (!interactive) {
+    const rows = await sample({ ...options, once: true });
+    process.stdout.write(render(rows, { ...options, once: true }));
+    process.stdout.write("\n");
+    return;
+  }
+
+  const intervalMs = Math.max(500, options.intervalMs || 2_000);
+  let stopped = false;
+  const stop = () => {
+    stopped = true;
+  };
+
+  process.once("SIGINT", stop);
+  process.once("SIGTERM", stop);
+  process.stdout.write("\x1b[?1049h\x1b[?25l");
+
+  try {
+    while (!stopped) {
+      const rows = await sample(options);
+      drawFrame(render(rows, options));
+      if (!stopped) await Bun.sleep(intervalMs);
     }
-    console.log(render(rows, options));
-    if (!options.watch) return;
-    await Bun.sleep(intervalMs);
+  } finally {
+    process.off("SIGINT", stop);
+    process.off("SIGTERM", stop);
+    process.stdout.write("\x1b[?25h\x1b[?1049l");
   }
 }

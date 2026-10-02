@@ -19,6 +19,12 @@ bgrun --name my-api --command "bun run server.ts" --directory ~/projects/api
 # List all processes
 bgrun
 
+# Watch all managed processes
+bgrun top
+
+# Print one resource snapshot
+bgrun top --once
+
 # View process details
 bgrun my-api
 
@@ -53,7 +59,8 @@ src/
 ├── server.ts          # Dashboard HTTP server (Melina.js)
 └── commands/
     ├── run.ts         # Start/restart a process
-    ├── list.ts        # List all processes (table or JSON)
+    ├── list.ts        # Stream process status lines or emit JSON
+    ├── top.ts         # Live CPU/RAM/ports monitor
     ├── logs.ts        # Show stdout/stderr logs
     ├── details.ts     # Show detailed process info
     ├── watch.ts       # Watch mode — auto-restart on file changes
@@ -194,6 +201,8 @@ npm publish
 
 | Variable | Description |
 |----------|-------------|
+| `BGRUN_HOME` | bgrun state directory (default: `~/.bgr`) |
+| `BGRUN_DB` | SQLite filename or absolute path (default: `bgrun.sqlite`) |
 | `DB_NAME` | Custom database file name (default: `bgr`) |
 | `BGR_GROUP` | Assign process to a group for `--filter` |
 | `BUN_PORT` | Explicit dashboard port (no fallback) |
@@ -205,30 +214,44 @@ npm publish
 
 ## Programmatic API
 
+Prefer the high-level SDK. The default export is a lazy singleton:
+
 ```typescript
-import {
-  // Types
-  type Process,
-  type CommandOptions,
+import bgrun from "bgrun"
 
-  // Database
-  db, getAllProcesses, getProcess, insertProcess,
-  removeProcess, removeProcessByName, removeAllProcesses,
-  retryDatabaseOperation,
+bgrun.configure({ home: ".data/bgrun" })
 
-  // Process operations
-  isProcessRunning, terminateProcess, readFileTail,
-  getProcessPorts, findChildPid, findPidByPort,
-  getShellCommand, killProcessOnPort, waitForPortFree,
-  ensureDir, getHomeDir, isWindows,
+await bgrun.start({
+  name: "api",
+  command: "bun run server.ts",
+  cwd: "./server",
+})
 
-  // High-level commands
-  handleRun,
-
-  // Utilities
-  getVersion, calculateRuntime, parseEnvString, validateDirectory,
-} from 'bgrun'
+await bgrun.restart("api")
+await bgrun.stop("api")
+console.log(await bgrun.list())
 ```
+
+For isolated stores or reusable libraries, create an explicit instance:
+
+```typescript
+import { createBgrun } from "bgrun"
+
+const manager = createBgrun({
+  home: ".data/bgrun",
+  db: "processes.sqlite",
+})
+
+await manager.ensure({
+  name: "worker",
+  command: "bun run worker.ts",
+  cwd: "./worker",
+})
+```
+
+Primary methods: `start`, `ensure`, `restart`, `stop`, `remove`, `get`, `list`, `logs`, and `resources`.
+
+Use low-level exports such as `db`, `terminateProcess`, and direct row mutation only for advanced tooling. `handleRun` and `handleStop` are compatibility exports, not the preferred SDK API.
 
 ---
 
@@ -245,8 +268,11 @@ import {
 | `--watch` | Auto-restart on file changes |
 | `--stdout <path>` | Custom stdout path |
 | `--stderr <path>` | Custom stderr path |
-| `--json` | JSON output for list |
+| `--json` | Fast JSON output for list |
+| `--json-full` | Verified JSON with status and ports |
 | `--filter <group>` | Filter by `BGR_GROUP` |
+| `--top` | Alias for `bgrun top` |
+| `--once` | Top: print one snapshot and exit |
 | `--logs` | Show logs |
 | `--log-stdout` | Stdout only |
 | `--log-stderr` | Stderr only |

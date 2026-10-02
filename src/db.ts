@@ -1,31 +1,33 @@
-import { Database, z } from "sqlite-zod-orm";
-import { getHomeDir, ensureDir } from "./platform";
-import { join } from "path";
-import { existsSync, copyFileSync } from "fs";
+import { Database, z, type AugmentedEntity } from "sqlite-zod-orm";
+import { ensureDir } from "./platform";
+import { join, dirname } from "path";
+import { getBgrHome, getDatabasePath } from "./paths";
+import { onDefaultBgrunRuntimeChange } from "./runtime-context";
+import { parseEnvString, stringifyEnvString } from "./env";
+import { existsSync } from "fs";
 import { retry } from "./async-utils";
 import { hasErrorCode } from "./error-utils";
-import { dbMeasure, measureRequired } from "./observability";
 import { selectLatestByName } from "./process-records";
-
-// =============================================================================
-// SCHEMA (inline — single table, no need for a separate file)
-// =============================================================================
-
+import { updateEnvironmentSources } from "./process-environment";
+import { migrateLegacyDatabase } from "./legacy-migration";
 export const ProcessSchema = z.object({
   pid: z.number(),
   workdir: z.string(),
   command: z.string(),
   name: z.string(),
   env: z.string(),
+  env_sources: z.string().default(""),
   configPath: z.string().default(""),
   stdout_path: z.string(),
   stderr_path: z.string(),
   timestamp: z.string().default(() => new Date().toISOString()),
   group: z.string().default(""),
+  start_identity: z.string().default(""),
+  argv: z.string().default(""),
 });
-
-export type Process = z.infer<typeof ProcessSchema> & { id: number };
-
+export type Process = z.infer<typeof ProcessSchema> & {
+  id: number;
+};
 export const TemplateSchema = z.object({
   name: z.string(),
   command: z.string(),
@@ -34,39 +36,35 @@ export const TemplateSchema = z.object({
   group: z.string().default(""),
   created_at: z.string().default(() => new Date().toISOString()),
 });
-
-export type Template = z.infer<typeof TemplateSchema> & { id: number };
-
+export type Template = z.infer<typeof TemplateSchema> & {
+  id: number;
+};
 export const HistorySchema = z.object({
   process_name: z.string(),
-  event: z.string(), // 'start', 'stop', 'restart', 'crash', 'guard_on', 'guard_off'
+  event: z.string(),
   pid: z.number().optional(),
   timestamp: z.string().default(() => new Date().toISOString()),
-  metadata: z.string().default(""), // JSON string for extra info
+  metadata: z.string().default(""),
 });
-
-export type History = z.infer<typeof HistorySchema> & { id: number };
-
+export type History = z.infer<typeof HistorySchema> & {
+  id: number;
+};
 export const DependencySchema = z.object({
-  process_name: z.string(), // the process that has the dependency
-  depends_on: z.string(), // the process it depends on
+  process_name: z.string(),
+  depends_on: z.string(),
   created_at: z.string().default(() => new Date().toISOString()),
 });
+export type Dependency = z.infer<typeof DependencySchema> & {
+  id: number;
+};
+export type ProcessDatabase = Database<{
+  process: typeof ProcessSchema;
+  template: typeof TemplateSchema;
+  history: typeof HistorySchema;
+  dependency: typeof DependencySchema;
+}>;
 
-export type Dependency = z.infer<typeof DependencySchema> & { id: number };
-
-// =============================================================================
-// DATABASE INITIALIZATION
-// =============================================================================
-
-const homePath = getHomeDir();
-const bgrDir = join(homePath, ".bgr");
-ensureDir(bgrDir);
-
-// DB filename: configurable via BGRUN_DB env, default "bgrun.sqlite"
-const dbFilename = process.env.BGRUN_DB ?? "bgrun.sqlite";
-export const dbPath = join(bgrDir, dbFilename);
-export const bgrHome = bgrDir;
+const databases = new Map<string, ProcessDatabase>();
 
 function shouldAutoMigrateLegacyDb() {
   const raw = (process.env.BGRUN_DISABLE_LEGACY_MIGRATION || "")
@@ -75,139 +73,205 @@ function shouldAutoMigrateLegacyDb() {
   return !(raw === "1" || raw === "true" || raw === "yes");
 }
 
-// Auto-migration: if new DB doesn't exist but old one does, copy it over
-const legacyDbPath = join(bgrDir, "bgr_v2.sqlite");
-if (
-  shouldAutoMigrateLegacyDb() &&
-  !existsSync(dbPath) &&
-  existsSync(legacyDbPath)
-) {
-  try {
-    copyFileSync(legacyDbPath, dbPath);
-    console.log(`[bgrun] Migrated database: ${legacyDbPath} → ${dbPath}`);
-  } catch (e) {
-    // Migration failed — start fresh
+function createDatabase(): ProcessDatabase {
+  const activeHome = getBgrHome();
+  const activeDbPath = getDatabasePath();
+  ensureDir(activeHome);
+  ensureDir(dirname(activeDbPath));
+
+  const legacyDbPath = join(activeHome, "bgr_v2.sqlite");
+  if (
+    shouldAutoMigrateLegacyDb() &&
+    !existsSync(activeDbPath) &&
+    existsSync(legacyDbPath)
+  ) {
+    const migrated = migrateLegacyDatabase(legacyDbPath, activeDbPath);
+    if (migrated)
+      console.log(
+        `[bgrun] Migrated database: ${legacyDbPath} → ${activeDbPath}`,
+      );
   }
+
+  return new Database(
+    activeDbPath,
+    {
+      process: ProcessSchema,
+      template: TemplateSchema,
+      history: HistorySchema,
+      dependency: DependencySchema,
+    },
+    {
+      indexes: {
+        process: ["name", "timestamp", "pid"],
+        template: ["name"],
+        history: ["process_name", "timestamp"],
+        dependency: ["process_name", "depends_on"],
+      },
+    },
+  );
 }
 
-export const db = new Database(
-  dbPath,
-  {
-    process: ProcessSchema,
-    template: TemplateSchema,
-    history: HistorySchema,
-    dependency: DependencySchema,
-  },
-  {
-    indexes: {
-      process: ["name", "timestamp", "pid"],
-      template: ["name"],
-      history: ["process_name", "timestamp"],
-      dependency: ["process_name", "depends_on"],
-    },
-  },
-);
+export function getDb(): ProcessDatabase {
+  const activeDbPath = getDatabasePath();
+  let database = databases.get(activeDbPath);
+  if (!database) {
+    database = createDatabase();
+    databases.set(activeDbPath, database);
+  }
+  return database;
+}
 
-// =============================================================================
-// QUERY FUNCTIONS
-// =============================================================================
+export const db = new Proxy({} as ProcessDatabase, {
+  get(_target, property) {
+    const database = getDb() as unknown as Record<PropertyKey, unknown>;
+    const value = Reflect.get(database, property);
+    return typeof value === "function" ? value.bind(database) : value;
+  },
+});
+
+export let dbPath = "";
+export let bgrHome = "";
+let dbFilename = "";
+onDefaultBgrunRuntimeChange((runtime) => {
+  dbPath = runtime.dbPath;
+  bgrHome = runtime.home;
+  dbFilename = runtime.dbPath.split(/[\\/]/).pop() || "bgrun.sqlite";
+});
 
 export function getProcess(name: string): Process | null {
   return (
-    db.process
-      .select()
+    getDb()
+      .process.select()
       .where({ name })
       .orderBy("timestamp", "desc")
+      .orderBy("id", "desc")
       .limit(1)
       .get() || null
   );
 }
-
-/** Raw process rows, including historical duplicates. Prefer getCurrentProcesses() for runtime behavior. */
 export function getAllProcesses(): Process[] {
-  return db.process.select().all();
+  return getDb().process.select().all();
 }
-
-/**
- * Return one canonical row per process name.
- *
- * Process rows are append-oriented, so callers should not each reimplement the
- * "latest row wins" rule. Keeping it here prevents list/dashboard/guard code
- * from disagreeing about which row represents a process.
- */
 export function getCurrentProcesses(): Process[] {
   return selectLatestByName(getAllProcesses());
 }
-
-// =============================================================================
-// MUTATION FUNCTIONS
-// =============================================================================
-
-export function insertProcess(data: {
+export type ProcessDefinitionInput = {
   pid: number;
   workdir: string;
   command: string;
   name: string;
   env: string;
+  env_sources?: string;
   configPath: string;
   stdout_path: string;
   stderr_path: string;
-}) {
-  return db.process.insert({
+  start_identity?: string;
+  argv?: string;
+};
+
+export function insertProcess(
+  data: ProcessDefinitionInput,
+): AugmentedEntity<typeof ProcessSchema> {
+  return getDb().process.insert({
     ...data,
+    group: parseEnvString(data.env).BGR_GROUP || "",
     timestamp: new Date().toISOString(),
   });
 }
 
+export function replaceProcess(
+  data: ProcessDefinitionInput,
+): AugmentedEntity<typeof ProcessSchema> {
+  return getDb().transaction(() => {
+    const inserted = insertProcess(data);
+    for (const row of getDb()
+      .process.select()
+      .where({ name: data.name })
+      .all()) {
+      if (row.id !== inserted.id) getDb().process.delete(row.id);
+    }
+    return inserted;
+  });
+}
+
+export function updateProcessOwnership(
+  name: string,
+  pid: number,
+  startIdentity: string,
+): boolean {
+  const proc = getProcess(name);
+  if (!proc) return false;
+  getDb().process.update(proc.id, { pid, start_identity: startIdentity });
+  return true;
+}
+
+export function clearProcessOwnership(
+  name: string,
+  expected?: { pid: number; startIdentity?: string },
+): boolean {
+  return getDb().transaction(() => {
+    const proc = getProcess(name);
+    if (!proc) return false;
+    if (expected) {
+      if (proc.pid !== expected.pid) return false;
+      if (
+        expected.startIdentity !== undefined &&
+        proc.start_identity !== expected.startIdentity
+      ) {
+        return false;
+      }
+    }
+    if (proc.pid === 0 && !proc.start_identity) return true;
+    getDb().process.update(proc.id, { pid: 0, start_identity: "" });
+    return true;
+  });
+}
+
 export function removeProcess(pid: number) {
-  const matches = db.process.select().where({ pid }).all();
+  const matches = getDb().process.select().where({ pid }).all();
   for (const p of matches) {
-    db.process.delete(p.id);
+    getDb().process.delete(p.id);
   }
 }
-
 export function removeProcessByName(name: string) {
-  const matches = db.process.select().where({ name }).all();
+  const matches = getDb().process.select().where({ name }).all();
   for (const p of matches) {
-    db.process.delete(p.id);
+    getDb().process.delete(p.id);
   }
 }
-
-/** Update the stored PID for a process (used by PID reconciliation) */
 export function updateProcessPid(name: string, newPid: number) {
   const proc = getProcess(name);
-  if (proc) {
-    proc.update({ pid: newPid });
-  }
+  if (!proc) return;
+  getDb().process.update(proc.id, {
+    pid: newPid,
+    ...(newPid === 0 ? { start_identity: "" } : {}),
+  });
 }
-
 export function removeAllProcesses() {
-  const all = db.process.select().all();
+  const all = getDb().process.select().all();
   for (const p of all) {
-    db.process.delete(p.id);
+    getDb().process.delete(p.id);
   }
 }
-
-/** Update the stored env JSON for a process (used by guard toggle) */
 export function updateProcessEnv(name: string, envJson: string) {
   const proc = getProcess(name);
   if (proc) {
-    proc.update({ env: envJson });
+    const env = parseEnvString(envJson);
+    getDb().process.update(proc.id, {
+      env: stringifyEnvString(env),
+      env_sources: updateEnvironmentSources(proc, env),
+      group: env.BGR_GROUP || "",
+    });
   }
 }
-
-// =============================================================================
-// TEMPLATE FUNCTIONS
-// =============================================================================
-
-export function getAllTemplates() {
-  return db.template.select().all();
+export function getAllTemplates(): AugmentedEntity<typeof TemplateSchema>[] {
+  return getDb().template.select().all();
 }
-
-export function getTemplate(name: string) {
-  return db.template.select().where({ name }).limit(1).get() || null;
+export function getTemplate(
+  name: string,
+): AugmentedEntity<typeof TemplateSchema> | null {
+  return getDb().template.select().where({ name }).limit(1).get() || null;
 }
-
 export function saveTemplate(data: {
   name: string;
   command: string;
@@ -215,20 +279,20 @@ export function saveTemplate(data: {
   env?: string;
   group?: string;
 }) {
-  const existing = db.template
-    .select()
+  const existing = getDb()
+    .template.select()
     .where({ name: data.name })
     .limit(1)
     .get();
   if (existing) {
-    db.template.update(existing.id, {
+    getDb().template.update(existing.id, {
       command: data.command,
       workdir: data.workdir || "",
       env: data.env || "",
       group: data.group || "",
     });
   } else {
-    db.template.insert({
+    getDb().template.insert({
       name: data.name,
       command: data.command,
       workdir: data.workdir || "",
@@ -237,167 +301,158 @@ export function saveTemplate(data: {
     });
   }
 }
-
 export function deleteTemplate(name: string) {
-  const tmpl = db.template.select().where({ name }).limit(1).get();
+  const tmpl = getDb().template.select().where({ name }).limit(1).get();
   if (tmpl) {
-    db.template.delete(tmpl.id);
+    getDb().template.delete(tmpl.id);
   }
 }
-
-// =============================================================================
-// HISTORY FUNCTIONS
-// =============================================================================
-
 export function getProcessHistory(name: string, limit = 50): History[] {
-  return db.history
-    .select()
+  return getDb()
+    .history.select()
     .where({ process_name: name })
     .orderBy("timestamp", "desc")
     .limit(limit)
     .all();
 }
-
 export function addHistoryEntry(
   processName: string,
   event: string,
   pid?: number,
   metadata: Record<string, unknown> = {},
-) {
-  return db.history.insert({
+): AugmentedEntity<typeof HistorySchema> {
+  return getDb().history.insert({
     process_name: processName,
     event,
     pid,
     metadata: JSON.stringify(metadata),
   });
 }
-
 export function getRecentHistory(limit = 100): History[] {
-  return db.history.select().orderBy("timestamp", "desc").limit(limit).all();
+  return getDb()
+    .history.select()
+    .orderBy("timestamp", "desc")
+    .limit(limit)
+    .all();
 }
-
 export function getHistoryByEvent(event: string): History[] {
-  return db.history.select().where({ event }).all();
+  return getDb().history.select().where({ event }).all();
 }
-
 export function getRecentHistoryByEvents(
   events: readonly string[],
   limit = 100,
 ): History[] {
   if (limit <= 0 || events.length === 0) return [];
-  const eventSet = new Set(events);
-
-  // The ORM does not expose an IN helper here, so keep filtering inside the DB
-  // repository rather than leaking storage details into watcher/API modules.
-  return db.history
-    .select()
-    .orderBy("timestamp", "desc")
-    .limit(Math.max(limit * 4, limit))
-    .all()
-    .filter((row) => eventSet.has(row.event))
+  const rows = [...new Set(events)].flatMap((event) =>
+    getDb()
+      .history.select()
+      .where({ event })
+      .orderBy("timestamp", "desc")
+      .orderBy("id", "desc")
+      .limit(limit)
+      .all(),
+  );
+  return rows
+    .sort((a, b) => b.timestamp.localeCompare(a.timestamp) || b.id - a.id)
     .slice(0, limit);
 }
-
 export function clearOldHistory(daysToKeep = 30) {
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - daysToKeep);
   const cutoffStr = cutoff.toISOString();
-
-  const oldEntries = db.history
-    .select()
-    .where("timestamp", "<", cutoffStr)
+  const oldEntries = getDb()
+    .history.select()
+    .where({ timestamp: { $lt: cutoffStr } })
     .all();
-
   for (const entry of oldEntries) {
-    db.history.delete(entry.id);
+    getDb().history.delete(entry.id);
   }
-
   return oldEntries.length;
 }
-
-// =============================================================================
-// DEPENDENCY FUNCTIONS
-// =============================================================================
-
-/** Get all dependencies for a process */
-export function getDependencies(processName: string): string[] {
-  return db.dependency
-    .select()
+export function getDependencies(
+  processName: string,
+  envOverride?: string,
+): string[] {
+  const stored = getDb()
+    .dependency.select()
     .where({ process_name: processName })
     .all()
-    .map((d) => d.depends_on);
+    .map((d: Dependency) => d.depends_on);
+  const env = parseEnvString(envOverride ?? getProcess(processName)?.env ?? "");
+  return [
+    ...new Set([
+      ...stored,
+      ...(env.BGR_DEPENDS_ON || "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean),
+    ]),
+  ];
 }
-
-/** Get all processes that depend on a given process */
 export function getDependents(processName: string): string[] {
-  return db.dependency
-    .select()
-    .where({ depends_on: processName })
-    .all()
-    .map((d) => d.process_name);
+  return [
+    ...new Set([
+      ...getDb()
+        .dependency.select()
+        .where({ depends_on: processName })
+        .all()
+        .map((d: Dependency) => d.process_name),
+      ...getCurrentProcesses()
+        .filter((p) => getDependencies(p.name).includes(processName))
+        .map((p) => p.name),
+    ]),
+  ];
 }
-
-/** Get the full dependency graph: { processName -> [dependsOn...] } */
 export function getDependencyGraph(): Record<string, string[]> {
-  const all = db.dependency.select().all();
-  const graph: Record<string, string[]> = {};
+  const all = getDb().dependency.select().all();
+  const graph: Record<string, string[]> = Object.create(null);
   for (const dep of all) {
     if (!graph[dep.process_name]) graph[dep.process_name] = [];
     graph[dep.process_name].push(dep.depends_on);
   }
+  for (const proc of getCurrentProcesses()) {
+    const deps = getDependencies(proc.name);
+    if (deps.length) graph[proc.name] = deps;
+  }
   return graph;
 }
-
-/** Add a dependency (process_name depends on depends_on) */
 export function addDependency(processName: string, dependsOn: string): boolean {
-  // Prevent self-dependency
   if (processName === dependsOn) return false;
-
-  // Prevent duplicates
-  const existing = db.dependency
-    .select()
+  const existing = getDb()
+    .dependency.select()
     .where({ process_name: processName, depends_on: dependsOn })
     .limit(1)
     .get();
   if (existing) return false;
-
-  // Prevent circular dependencies
   if (wouldCreateCycle(processName, dependsOn)) return false;
-
-  db.dependency.insert({ process_name: processName, depends_on: dependsOn });
+  getDb().dependency.insert({
+    process_name: processName,
+    depends_on: dependsOn,
+  });
   return true;
 }
-
-/** Remove a dependency */
 export function removeDependency(processName: string, dependsOn: string) {
-  const matches = db.dependency
-    .select()
+  const matches = getDb()
+    .dependency.select()
     .where({ process_name: processName, depends_on: dependsOn })
     .all();
   for (const dep of matches) {
-    db.dependency.delete(dep.id);
+    getDb().dependency.delete(dep.id);
   }
 }
-
-/** Remove all dependencies for a process */
 export function removeAllDependencies(processName: string) {
-  const matches = db.dependency
-    .select()
+  const matches = getDb()
+    .dependency.select()
     .where({ process_name: processName })
     .all();
   for (const dep of matches) {
-    db.dependency.delete(dep.id);
+    getDb().dependency.delete(dep.id);
   }
 }
-
-/** Check if adding processName -> dependsOn would create a cycle */
 function wouldCreateCycle(processName: string, dependsOn: string): boolean {
   const graph = getDependencyGraph();
-  // Add the proposed edge temporarily
   if (!graph[processName]) graph[processName] = [];
   graph[processName].push(dependsOn);
-
-  // DFS from dependsOn — if we can reach processName, it's a cycle
   const visited = new Set<string>();
   const stack = [dependsOn];
   while (stack.length > 0) {
@@ -411,15 +466,11 @@ function wouldCreateCycle(processName: string, dependsOn: string): boolean {
   }
   return false;
 }
-
-/** Get topological start order (processes with no deps first) */
 export function getStartOrder(): string[] {
   const graph = getDependencyGraph();
   const allProcesses = getCurrentProcesses().map((p) => p.name);
   const allNames = new Set(allProcesses);
-
-  // Build in-degree map
-  const inDegree: Record<string, number> = {};
+  const inDegree: Record<string, number> = Object.create(null);
   for (const name of allNames) inDegree[name] = 0;
   for (const [proc, deps] of Object.entries(graph)) {
     for (const dep of deps) {
@@ -428,19 +479,15 @@ export function getStartOrder(): string[] {
       }
     }
   }
-
-  // Kahn's algorithm
   const queue: string[] = [];
   for (const name of allNames) {
     if ((inDegree[name] || 0) === 0) queue.push(name);
   }
-
   const order: string[] = [];
   while (queue.length > 0) {
-    queue.sort(); // stable alphabetical within same level
+    queue.sort();
     const current = queue.shift()!;
     order.push(current);
-    // Find processes that depend on current
     for (const [proc, deps] of Object.entries(graph)) {
       if (deps.includes(current) && allNames.has(proc)) {
         inDegree[proc]--;
@@ -448,37 +495,28 @@ export function getStartOrder(): string[] {
       }
     }
   }
-
+  if (order.length !== allNames.size)
+    throw new Error("Dependency cycle prevents a complete startup order");
   return order;
 }
-
-// =============================================================================
-// DEBUG / INFO
-// =============================================================================
-
 export function getDbInfo() {
+  const activeDbPath = getDatabasePath();
+  const activeHome = getBgrHome();
   return {
-    dbPath,
-    bgrHome,
-    dbFilename,
-    exists: existsSync(dbPath),
+    dbPath: activeDbPath,
+    bgrHome: activeHome,
+    dbFilename: activeDbPath.split(/[\\/]/).pop() || "bgrun.sqlite",
+    exists: existsSync(activeDbPath),
   };
 }
-
-// =============================================================================
-// UTILITIES
-// =============================================================================
-
 export async function retryDatabaseOperation<T>(
   operation: () => T | Promise<T>,
   maxRetries = 5,
   delay = 100,
 ): Promise<T> {
-  return measureRequired(dbMeasure.measure, "Retryable database write", () =>
-    retry(operation, {
-      attempts: maxRetries,
-      delayMs: delay,
-      shouldRetry: (error) => hasErrorCode(error, "SQLITE_BUSY"),
-    }),
-  );
+  return retry(operation, {
+    attempts: maxRetries,
+    delayMs: delay,
+    shouldRetry: (error) => hasErrorCode(error, "SQLITE_BUSY"),
+  });
 }

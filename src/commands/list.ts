@@ -1,11 +1,6 @@
 import { getCurrentProcesses } from "../db";
-import {
-  isProcessRunning,
-  calculateRuntime,
-  parseEnvString,
-  isInternalProcessName,
-} from "../utils";
-import { getProcessBatchResources, resolvePidWithPorts } from "../platform";
+import { parseEnvString, isInternalProcessName } from "../utils";
+import { inspectManagedProcessSnapshot } from "../process-snapshot";
 
 type ShowAllOptions = {
   json?: boolean;
@@ -31,13 +26,6 @@ type ProcessJsonRow = {
   env: Record<string, string>;
 };
 
-function formatMemory(bytes: number): string {
-  if (bytes === 0) return "-";
-  const mb = bytes / (1024 * 1024);
-  if (mb >= 1024) return `${(mb / 1024).toFixed(1)} GB`;
-  return `${Math.round(mb)} MB`;
-}
-
 function isPidAliveFast(pid: number): boolean {
   if (!Number.isInteger(pid) || pid <= 0) return false;
   try {
@@ -61,6 +49,50 @@ function parentNameFromEnv(envVars: Record<string, string>): string {
   return String(envVars.BGR_PARENT_NAME ?? envVars.BGRUN_PARENT_NAME ?? "");
 }
 
+function formatRuntime(timestamp: string, now = Date.now()): string {
+  const startedAt = new Date(timestamp).getTime();
+  if (!Number.isFinite(startedAt)) return "?";
+  const seconds = Math.max(0, Math.floor((now - startedAt) / 1000));
+  if (seconds < 60) return "<1m";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  if (hours < 24)
+    return remainingMinutes ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+  const days = Math.floor(hours / 24);
+  const remainingHours = hours % 24;
+  return remainingHours ? `${days}d ${remainingHours}h` : `${days}d`;
+}
+
+export function formatProcessLine(
+  snapshot: {
+    name: string;
+    state: "running" | "stopped";
+    pid: number | null;
+    ports: number[];
+    startedAt: string;
+  },
+  now = Date.now(),
+): string {
+  if (snapshot.state === "stopped") {
+    return `${snapshot.name}  ○ stopped`;
+  }
+
+  const parts = [snapshot.name, "● running"];
+
+  if (snapshot.pid != null) {
+    parts.push(`pid ${snapshot.pid}`);
+  }
+
+  if (snapshot.ports.length > 0) {
+    parts.push(snapshot.ports.map((port) => `:${port}`).join(" "));
+  }
+
+  parts.push(formatRuntime(snapshot.startedAt, now));
+  return parts.join("  ");
+}
+
 function printFastJson(filtered: ReturnType<typeof getFilteredProcesses>) {
   const jsonData: ProcessJsonRow[] = filtered.map((proc) => {
     const envVars = parseEnvString(proc.env);
@@ -77,7 +109,7 @@ function printFastJson(filtered: ReturnType<typeof getFilteredProcesses>) {
       command: proc.command,
       workdir: proc.workdir,
       directory: proc.workdir,
-      runtime: calculateRuntime(proc.timestamp),
+      runtime: running ? formatRuntime(proc.timestamp) : "-",
       timestamp: proc.timestamp,
       env: envVars,
     };
@@ -89,44 +121,24 @@ function printFastJson(filtered: ReturnType<typeof getFilteredProcesses>) {
 export async function showAll(opts?: ShowAllOptions) {
   const filtered = getFilteredProcesses(opts);
 
-  // Keep `bgrun --json` fast. Scripts and guards often call it, so it must
-  // not block on command-line verification, port discovery, memory checks,
-  // or Windows PID reconciliation. Use `--json-full` for the slower rich path.
   if (opts?.json && !opts?.jsonFull) {
     printFastJson(filtered);
     return;
-  }
-
-  // Status is read-only. Never reconcile a stale PID by scanning unrelated
-  // processes; a stale row should display as stopped instead of being silently
-  // attached to another live service.
-  const aliveCache = new Map<number, boolean>();
-  for (const proc of filtered) {
-    aliveCache.set(proc.pid, await isProcessRunning(proc.pid, proc.command));
   }
 
   if (opts?.json) {
     const jsonData: ProcessJsonRow[] = [];
 
     for (const proc of filtered) {
-      const isRunning =
-        aliveCache.get(proc.pid) ??
-        (await isProcessRunning(proc.pid, proc.command));
+      const snapshot = await inspectManagedProcessSnapshot(proc);
       const envVars = parseEnvString(proc.env);
-
-      let displayPid = proc.pid;
-      let ports: number[] = [];
-      if (isRunning) {
-        const resolved = await resolvePidWithPorts(proc.pid);
-        displayPid = resolved.pid;
-        ports = resolved.ports;
-      }
+      const running = snapshot.state === "running";
 
       jsonData.push({
-        pid: displayPid,
+        pid: snapshot.pid ?? 0,
         name: proc.name,
-        ports: ports.length > 0 ? ports : undefined,
-        status: isRunning ? "running" : "stopped",
+        ports: snapshot.ports.length > 0 ? snapshot.ports : undefined,
+        status: snapshot.state,
         statusSource: "command-verified",
         healthChecked: true,
         commandVerified: true,
@@ -135,7 +147,7 @@ export async function showAll(opts?: ShowAllOptions) {
         command: proc.command,
         workdir: proc.workdir,
         directory: proc.workdir,
-        runtime: calculateRuntime(proc.timestamp),
+        runtime: running ? formatRuntime(proc.timestamp) : "-",
         timestamp: proc.timestamp,
         env: envVars,
       });
@@ -145,28 +157,13 @@ export async function showAll(opts?: ShowAllOptions) {
     return;
   }
 
-  const allPids = filtered.map((p) => p.pid);
-  const resourceMap = await getProcessBatchResources(allPids);
-  const lines: string[] = [];
-
-  for (const proc of filtered) {
-    const isRunning =
-      aliveCache.get(proc.pid) ??
-      (await isProcessRunning(proc.pid, proc.command));
-    const runtime = calculateRuntime(proc.timestamp);
-
-    const displayPid = proc.pid;
-    const mem = isRunning ? resourceMap.get(proc.pid)?.memory || 0 : 0;
-    const status = isRunning ? "running" : "stopped";
-    const pidText = isRunning ? `pid=${displayPid}` : "pid=-";
-    const memText = isRunning ? formatMemory(mem) : "-";
-    lines.push(`${proc.name}  ${status}  ${pidText}  ${memText}  ${runtime}`);
-  }
-
-  if (lines.length === 0) {
+  if (filtered.length === 0) {
     console.log(opts?.filter ? "no matching processes" : "no processes");
     return;
   }
 
-  console.log(lines.join("\n"));
+  for (const proc of filtered) {
+    const snapshot = await inspectManagedProcessSnapshot(proc);
+    console.log(formatProcessLine(snapshot));
+  }
 }

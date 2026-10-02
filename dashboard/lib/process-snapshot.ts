@@ -10,7 +10,6 @@ import {
   getProcessBatchResources,
   resolvePidWithPorts,
 } from "../../dist/api.js";
-import { apiMeasure as api, measureRequired } from "./observability";
 
 const SUBPROCESS_TIMEOUT_MS = 4_000;
 const RESOLVE_TIMEOUT_MS = 2_000;
@@ -69,6 +68,8 @@ async function withTimeout<T>(
         timer = setTimeout(() => resolve(fallback), ms);
       }),
     ]);
+  } catch {
+    return fallback;
   } finally {
     if (timer) clearTimeout(timer);
   }
@@ -234,104 +235,88 @@ function pruneHistory(activeNames: Set<string>): void {
 }
 
 export async function fetchProcessSnapshots(): Promise<ProcessSnapshot[]> {
-  return await measureRequired(api.measure, "Fetch processes", async (m) => {
-    const processes = getLatestProcesses();
-    const pids = processes.map((proc) => proc.pid).filter((pid) => pid > 0);
-    const guardRestartCounts = getGuardRestartCounts();
+  const processes = getLatestProcesses();
+  const pids = processes.map((proc) => proc.pid).filter((pid) => pid > 0);
+  const guardRestartCounts = getGuardRestartCounts();
 
-    let [runningPids, portsByPid, resourcesByPid] = await Promise.all([
-      m("Running PIDs", () =>
-        withTimeout(getRunningPids(pids), new Set<number>()),
-      ),
-      m("Listening ports", () =>
-        withTimeout(getPortsByPid(pids), new Map<number, number[]>()),
-      ),
-      m("Resources", () =>
-        withTimeout(
-          getProcessBatchResources(pids),
-          new Map<number, ResourceSample>(),
-        ),
-      ),
-    ]);
+  const [runningPids, portsByPid, resourcesByPid] = await Promise.all([
+    withTimeout(getRunningPids(pids), new Set<number>()),
+    withTimeout(getPortsByPid(pids), new Map<number, number[]>()),
+    withTimeout(
+      getProcessBatchResources(pids),
+      new Map<number, ResourceSample>(),
+    ),
+  ]);
 
-    runningPids ??= new Set<number>();
-    portsByPid ??= new Map<number, number[]>();
-    resourcesByPid ??= new Map<number, ResourceSample>();
+  const displayPidByName = new Map<string, number>();
+  await Promise.all(
+    processes.map(async (proc) => {
+      if (!runningPids.has(proc.pid)) return;
+      if ((portsByPid.get(proc.pid)?.length ?? 0) > 0) return;
 
-    // Resolve a live shell wrapper only for this response. Reads never mutate
-    // the registry, so a dashboard refresh cannot change process ownership.
-    const displayPidByName = new Map<string, number>();
-    await m("Resolve display PIDs", async () => {
-      await Promise.all(
-        processes.map(async (proc) => {
-          if (!runningPids.has(proc.pid)) return;
-          if ((portsByPid.get(proc.pid)?.length ?? 0) > 0) return;
-
-          const resolved = await withTimeout(
-            resolvePidWithPorts(proc.pid),
-            { pid: proc.pid, ports: [] },
-            RESOLVE_TIMEOUT_MS,
-          );
-          if (resolved.pid === proc.pid || resolved.ports.length === 0) return;
-
-          displayPidByName.set(proc.name, resolved.pid);
-          runningPids.add(resolved.pid);
-          portsByPid.set(resolved.pid, resolved.ports);
-
-          const refreshed = await withTimeout(
-            getProcessBatchResources([resolved.pid]),
-            new Map<number, ResourceSample>(),
-            RESOLVE_TIMEOUT_MS,
-          );
-          const resource = refreshed.get(resolved.pid);
-          if (resource) resourcesByPid.set(resolved.pid, resource);
-        }),
+      const resolved = await withTimeout(
+        resolvePidWithPorts(proc.pid),
+        { pid: proc.pid, ports: [] },
+        RESOLVE_TIMEOUT_MS,
       );
-    });
+      if (resolved.pid === proc.pid || resolved.ports.length === 0) return;
 
-    const now = Date.now();
-    const activeNames = new Set(processes.map((proc) => proc.name));
-    pruneHistory(activeNames);
+      displayPidByName.set(proc.name, resolved.pid);
+      runningPids.add(resolved.pid);
+      portsByPid.set(resolved.pid, resolved.ports);
 
-    return processes.map((proc) => {
-      const pid = displayPidByName.get(proc.name) ?? proc.pid;
-      const running = runningPids.has(proc.pid) || runningPids.has(pid);
-      const ports = running
-        ? (portsByPid.get(pid) ?? portsByPid.get(proc.pid) ?? [])
-        : [];
-      const resource = running
-        ? (resourcesByPid.get(pid) ??
-          resourcesByPid.get(proc.pid) ?? { memory: 0, cpu: 0 })
-        : { memory: 0, cpu: 0 };
-      const resourceHistory = updateResourceHistory(
-        proc.name,
-        running,
-        resource,
-        now,
+      const refreshed = await withTimeout(
+        getProcessBatchResources([resolved.pid]),
+        new Map<number, ResourceSample>(),
+        RESOLVE_TIMEOUT_MS,
       );
-      const env = parseEnvString(proc.env || "");
+      const resource = refreshed.get(resolved.pid);
+      if (resource) resourcesByPid.set(resolved.pid, resource);
+    }),
+  );
 
-      return {
-        name: proc.name,
-        command: proc.command,
-        directory: proc.workdir,
-        pid,
-        running,
-        port: ports[0] ?? null,
-        ports,
-        memory: resource.memory,
-        cpu: resourceHistory.cpuPercent,
-        memoryHistory: resourceHistory.memoryHistory,
-        cpuHistory: resourceHistory.cpuHistory,
-        group: env.BGR_GROUP ?? null,
-        runtime: calculateRuntime(proc.timestamp),
-        timestamp: proc.timestamp,
-        env: proc.env || "",
-        configPath: proc.configPath || "",
-        stdoutPath: proc.stdout_path || "",
-        stderrPath: proc.stderr_path || "",
-        guardRestarts: guardRestartCounts.get(proc.name) || 0,
-      } satisfies ProcessSnapshot;
-    });
+  const now = Date.now();
+  const activeNames = new Set(processes.map((proc) => proc.name));
+  pruneHistory(activeNames);
+
+  return processes.map((proc) => {
+    const pid = displayPidByName.get(proc.name) ?? proc.pid;
+    const running = runningPids.has(proc.pid) || runningPids.has(pid);
+    const ports = running
+      ? (portsByPid.get(pid) ?? portsByPid.get(proc.pid) ?? [])
+      : [];
+    const resource = running
+      ? (resourcesByPid.get(pid) ??
+        resourcesByPid.get(proc.pid) ?? { memory: 0, cpu: 0 })
+      : { memory: 0, cpu: 0 };
+    const resourceHistory = updateResourceHistory(
+      proc.name,
+      running,
+      resource,
+      now,
+    );
+    const env = parseEnvString(proc.env || "");
+
+    return {
+      name: proc.name,
+      command: proc.command,
+      directory: proc.workdir,
+      pid,
+      running,
+      port: ports[0] ?? null,
+      ports,
+      memory: resource.memory,
+      cpu: resourceHistory.cpuPercent,
+      memoryHistory: resourceHistory.memoryHistory,
+      cpuHistory: resourceHistory.cpuHistory,
+      group: env.BGR_GROUP ?? null,
+      runtime: calculateRuntime(proc.timestamp),
+      timestamp: proc.timestamp,
+      env: proc.env || "",
+      configPath: proc.configPath || "",
+      stdoutPath: proc.stdout_path || "",
+      stderrPath: proc.stderr_path || "",
+      guardRestarts: guardRestartCounts.get(proc.name) || 0,
+    } satisfies ProcessSnapshot;
   });
 }

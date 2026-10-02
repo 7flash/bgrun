@@ -1,6 +1,5 @@
 import { getCurrentProcesses } from "./db";
 import { parseMemoryLimitMb } from "./guard-policy";
-import { resourceMeasure, measureRequired } from "./observability";
 import {
   getListeningPortsByPid,
   getProcessBatchResources,
@@ -65,44 +64,38 @@ function finalizeRows(
 export async function sampleManagedResources(
   options: ResourceSnapshotOptions = {},
 ): Promise<ResourceSnapshotRow[]> {
-  return await measureRequired(
-    resourceMeasure.measure,
-    "Sample managed resources",
-    async () => {
-      const processes = getCurrentProcesses().filter((proc) => {
-        if (isInternalProcessName(proc.name)) return false;
-        if (!options.filter) return true;
-        return processGroup(parseEnvString(proc.env || "")) === options.filter;
-      });
-      const pids = processes
-        .map((proc) => proc.pid)
-        .filter((pid) => Number.isInteger(pid) && pid > 0);
+  const processes = getCurrentProcesses().filter((proc) => {
+    if (isInternalProcessName(proc.name)) return false;
+    if (!options.filter) return true;
+    return processGroup(parseEnvString(proc.env || "")) === options.filter;
+  });
+  const pids = processes
+    .map((proc) => proc.pid)
+    .filter((pid) => Number.isInteger(pid) && pid > 0);
 
-      const [resources, portsByPid] = await Promise.all([
-        getProcessBatchResources(pids),
-        getListeningPortsByPid(pids),
-      ]);
+  const [resources, portsByPid] = await Promise.all([
+    getProcessBatchResources(pids),
+    getListeningPortsByPid(pids),
+  ]);
 
-      const rows = processes.map<ResourceSnapshotRow>((proc) => {
-        const env = parseEnvString(proc.env || "");
-        const resource = resources.get(proc.pid);
-        return {
-          name: proc.name,
-          pid: proc.pid,
-          cpu: resource?.cpu || 0,
-          memory: resource?.memory || 0,
-          ports: portsByPid.get(proc.pid) || [],
-          running: resource !== undefined,
-          guarded: env.BGR_KEEP_ALIVE === "true",
-          memoryLimitMb: parseMemoryLimitMb(env),
-          managed: true,
-          command: proc.command,
-        };
-      });
+  const rows = processes.map<ResourceSnapshotRow>((proc) => {
+    const env = parseEnvString(proc.env || "");
+    const resource = resources.get(proc.pid);
+    return {
+      name: proc.name,
+      pid: proc.pid,
+      cpu: resource?.cpu || 0,
+      memory: resource?.memory || 0,
+      ports: portsByPid.get(proc.pid) || [],
+      running: resource !== undefined,
+      guarded: env.BGR_KEEP_ALIVE === "true",
+      memoryLimitMb: parseMemoryLimitMb(env),
+      managed: true,
+      command: proc.command,
+    };
+  });
 
-      return finalizeRows(rows, options);
-    },
-  );
+  return finalizeRows(rows, options);
 }
 
 function findManagedNameByPid(): Map<
@@ -148,19 +141,13 @@ function systemRow(
 export async function sampleSystemResources(
   options: ResourceSnapshotOptions = {},
 ): Promise<ResourceSnapshotRow[]> {
-  return await measureRequired(
-    resourceMeasure.measure,
-    "Sample system resources",
-    async () => {
-      const [processes, portsByPid] = await Promise.all([
-        getSystemProcessResources(),
-        getListeningPortsByPid(),
-      ]);
-      const managedByPid = findManagedNameByPid();
-      const rows = processes.map((proc) =>
-        systemRow(proc, portsByPid.get(proc.pid) || [], managedByPid),
-      );
-      return finalizeRows(rows, options);
-    },
+  const [processes, portsByPid] = await Promise.all([
+    getSystemProcessResources(),
+    getListeningPortsByPid(),
+  ]);
+  const managedByPid = findManagedNameByPid();
+  const rows = processes.map((proc) =>
+    systemRow(proc, portsByPid.get(proc.pid) || [], managedByPid),
   );
+  return finalizeRows(rows, options);
 }

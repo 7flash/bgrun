@@ -88,4 +88,3 @@ if ($dashboard -and $dashboard.status -eq "running") {
 }
 Write-Host "`n✅ Done. Dashboard's bgr-guard handles individual services."
 Write-Host "   💡 Run with -Install to persist across terminal closures"
-

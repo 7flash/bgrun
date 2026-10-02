@@ -47,8 +47,8 @@ async function getAllProcesses(): Promise<ProcessInfo[]> {
       ) {
         const parts = line
           .split("│")
-          .map((part) => part.trim())
-          .filter((part) => part);
+          .map((part: string) => part.trim())
+          .filter((part: string) => part);
         if (parts.length >= 3) {
           const name = parts[2]; // Name is the 3rd column (index 2)
           if (name && !processNames.includes(name)) {

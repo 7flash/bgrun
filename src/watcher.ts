@@ -1,4 +1,5 @@
 import { join } from "path";
+import { getBgrHome, getDatabasePath } from "./paths";
 import {
   addHistoryEntry,
   getHistoryByEvent,
@@ -14,13 +15,15 @@ import {
   getHomeDir,
   getProcessMemory,
   getShellCommand,
+  inspectManagedProcess,
+  isManagedProcessRunning,
   isProcessRunning,
   psExec,
   terminateProcess,
 } from "./platform";
-import { handleRun } from "./commands/run";
+import { runProcess } from "./commands/run";
+import { getProcessBirthId } from "./process-identity";
 import { shellQuoteArg } from "./cli-helpers";
-import { measureRequired, watcherMeasure as watcher } from "./observability";
 import { getErrorMessage } from "./error-utils";
 import {
   historyRowToGuardEvent,
@@ -57,10 +60,10 @@ type GuardInspection = {
 };
 
 function getWatcherLogPaths(watcherName: string) {
-  const homePath = getHomeDir();
+  const homePath = getBgrHome();
   return {
-    stdoutPath: join(homePath, ".bgr", `${watcherName}-out.txt`),
-    stderrPath: join(homePath, ".bgr", `${watcherName}-err.txt`),
+    stdoutPath: join(homePath, `${watcherName}-out.txt`),
+    stderrPath: join(homePath, `${watcherName}-err.txt`),
   };
 }
 
@@ -98,6 +101,8 @@ async function spawnWatcherProcess(
   const newProcess = Bun.spawn(getShellCommand(spawnCommand), {
     env: {
       ...Bun.env,
+      BGRUN_HOME: getBgrHome(),
+      BGRUN_DB: getDatabasePath(),
       BGR_STDOUT: stdoutPath,
       BGR_STDERR: stderrPath,
     },
@@ -119,6 +124,7 @@ async function spawnWatcherProcess(
     throw new Error(`Guard for "${targetName}" failed to stay running`);
   }
 
+  const startIdentity = getProcessBirthId(actualPid);
   await retryDatabaseOperation(() =>
     insertProcess({
       pid: actualPid,
@@ -132,6 +138,7 @@ async function spawnWatcherProcess(
       configPath: "",
       stdout_path: stdoutPath,
       stderr_path: stderrPath,
+      start_identity: startIdentity,
     }),
   );
 
@@ -154,7 +161,12 @@ export async function ensureProcessWatcher(targetName: string): Promise<void> {
   const existingWatcher = getProcess(watcherName);
   if (
     existingWatcher &&
-    (await isProcessRunning(existingWatcher.pid, existingWatcher.command))
+    (await isManagedProcessRunning(
+      existingWatcher.pid,
+      existingWatcher.name,
+      existingWatcher.command,
+      existingWatcher.start_identity,
+    ))
   ) {
     return;
   }
@@ -163,9 +175,7 @@ export async function ensureProcessWatcher(targetName: string): Promise<void> {
     await retryDatabaseOperation(() => removeProcessByName(watcherName));
   }
 
-  await measureRequired(watcher.measure, `Start guard "${targetName}"`, () =>
-    spawnWatcherProcess(targetName, watcherName),
-  );
+  await spawnWatcherProcess(targetName, watcherName);
 }
 
 export async function stopProcessWatcher(targetName: string): Promise<void> {
@@ -173,11 +183,21 @@ export async function stopProcessWatcher(targetName: string): Promise<void> {
   const watcherProc = getProcess(watcherName);
   if (!watcherProc) return;
 
-  if (await isProcessRunning(watcherProc.pid, watcherProc.command)) {
-    await measureRequired(
-      watcher.measure,
-      `Stop guard "${targetName}" pid=${watcherProc.pid}`,
-      () => terminateProcess(watcherProc.pid, true),
+  const inspection = await inspectManagedProcess(
+    watcherProc.pid,
+    watcherProc.name,
+    watcherProc.start_identity,
+    watcherProc.command,
+  );
+  if (inspection === "alive") {
+    await terminateProcess(
+      watcherProc.pid,
+      true,
+      watcherProc.start_identity || undefined,
+    );
+  } else if (inspection === "unknown") {
+    throw new Error(
+      `Cannot prove ownership of watcher PID ${watcherProc.pid} for '${targetName}'`,
     );
   }
 
@@ -226,7 +246,12 @@ async function inspectTarget(
   env: Record<string, string>,
   state: WatcherState,
 ): Promise<GuardInspection> {
-  const alive = await isProcessRunning(proc.pid, proc.command);
+  const alive = await isManagedProcessRunning(
+    proc.pid,
+    proc.name,
+    proc.command,
+    proc.start_identity,
+  );
   if (!alive) {
     state.memoryLimitHits = 0;
     return { alive: false, reason: "crash", memoryBytes: 0, memoryLimitMb: 0 };
@@ -272,17 +297,12 @@ async function restartTarget(
   state.nextRestartAt = backoffMs > 0 ? now + backoffMs : 0;
 
   try {
-    await measureRequired(
-      watcher.measure,
-      `Restart target "${targetName}" reason=${inspection.reason} attempt=${state.restartCount}`,
-      () =>
-        handleRun({
-          action: "run",
-          name: targetName,
-          force: true,
-          remoteName: "",
-        }),
-    );
+    await runProcess({
+      action: "run",
+      name: targetName,
+      force: true,
+      remoteName: "",
+    });
 
     state.memoryLimitHits = 0;
     state.lastSeenAliveAt = 0;

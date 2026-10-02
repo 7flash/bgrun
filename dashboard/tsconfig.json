@@ -1,0 +1,41 @@
+{
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "jsxImportSource": "tradjs/client",
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@client/*": [
+        "./client/*"
+      ],
+      "@server/*": [
+        "./server/*"
+      ],
+      "@shared/*": [
+        "./shared/*"
+      ],
+      "@strategies/*": [
+        "./strategies/*"
+      ]
+    },
+    "types": [
+      "node",
+      "bun"
+    ],
+    "skipLibCheck": true
+  },
+  "include": [
+    "app/**/*",
+    "client/**/*",
+    "server/**/*",
+    "shared/**/*",
+    "workers/**/*",
+    "strategies/**/*",
+    "scripts/**/*",
+    "tests/**/*"
+  ]
+}

@@ -9,7 +9,6 @@
 import path from "path";
 import { getAllProcesses } from "./db";
 import { isPortFree } from "./platform";
-import { measureRequired, serverMeasure as server } from "./observability";
 
 export const guardRestartCounts: Map<string, number> = new Map();
 export const guardEvents: {
@@ -47,10 +46,7 @@ function startStickyPortChecker(): void {
   setInterval(async () => {
     if (currentPort === originalPort) return;
 
-    const free = await server.measure(
-      `Check preferred port ${originalPort}`,
-      () => isPortFree(originalPort),
-    );
+    const free = await isPortFree(originalPort);
 
     if (free) {
       currentPort = originalPort;
@@ -71,23 +67,19 @@ export async function startServer(): Promise<void> {
 
   const resolvedPort =
     explicitPort !== null
-      ? await server.measure(`Resolve dashboard port ${requestedPort}`, () =>
-          resolveDashboardPort(requestedPort),
-        )
+      ? await resolveDashboardPort(requestedPort)
       : requestedPort;
 
-  currentPort = resolvedPort ?? requestedPort;
+  currentPort = resolvedPort;
   const needsExplicitPort =
     explicitPort !== null || currentPort !== requestedPort;
 
-  await measureRequired(server.measure, "Start dashboard", () =>
-    start({
-      appDir,
-      defaultTitle: "bgrun Dashboard - Process Manager",
-      globalCss: path.join(appDir, "globals.css"),
-      ...(needsExplicitPort && { port: currentPort }),
-    }),
-  );
+  await start({
+    appDir,
+    defaultTitle: "bgrun Dashboard - Process Manager",
+    globalCss: path.join(appDir, "globals.css"),
+    ...(needsExplicitPort && { port: currentPort }),
+  });
 
   const { startLogRotation } = await import("./log-rotation");
   startLogRotation(() => getAllProcesses());

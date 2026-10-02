@@ -12,7 +12,7 @@
  */
 
 import { getAllProcesses, getProcess } from "./db";
-import { isProcessRunning } from "./platform";
+import { isManagedProcessRunning } from "./platform";
 import { parseEnvString } from "./utils";
 
 export interface DepNode {
@@ -48,7 +48,12 @@ export async function buildDepGraph(): Promise<DepGraph> {
   // Phase 1: Create all nodes
   for (const proc of processes) {
     const deps = getDependencies(proc.env);
-    const alive = await isProcessRunning(proc.pid, proc.command);
+    const alive = await isManagedProcessRunning(
+      proc.pid,
+      proc.name,
+      proc.command,
+      proc.start_identity,
+    );
     nodeMap.set(proc.name, {
       name: proc.name,
       dependsOn: deps,
@@ -122,11 +127,44 @@ export async function getUnmetDeps(name: string): Promise<string[]> {
       unmet.push(depName); // dependency not even registered
       continue;
     }
-    const alive = await isProcessRunning(depProc.pid, depProc.command);
+    const alive = await isManagedProcessRunning(
+      depProc.pid,
+      depProc.name,
+      depProc.command,
+      depProc.start_identity,
+    );
     if (!alive) {
       unmet.push(depName);
     }
   }
 
   return unmet;
+}
+
+export function getDependencyStartPlan(
+  name: string,
+  envOverride?: string,
+): string[] {
+  const visiting = new Set<string>();
+  const visited = new Set<string>();
+  const order: string[] = [];
+
+  const visit = (current: string, currentEnv?: string) => {
+    if (visited.has(current)) return;
+    if (visiting.has(current)) {
+      throw new Error(`Dependency cycle detected at '${current}'`);
+    }
+    visiting.add(current);
+    const proc = getProcess(current);
+    const env = currentEnv ?? proc?.env ?? "";
+    for (const dependency of getDependencies(env)) {
+      visit(dependency);
+      if (!order.includes(dependency)) order.push(dependency);
+    }
+    visiting.delete(current);
+    visited.add(current);
+  };
+
+  visit(name, envOverride);
+  return order.filter((dependency) => dependency !== name);
 }

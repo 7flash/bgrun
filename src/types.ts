@@ -12,4 +12,7 @@ export interface CommandOptions {
   stdout?: string;
   stderr?: string;
   dbPath?: string;
+  argv?: string[];
+  parent?: string | null;
+  detached?: boolean;
 }

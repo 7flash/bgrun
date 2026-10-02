@@ -2,9 +2,31 @@
  * bgrun Dashboard — Page Client Interactivity
  *
  * NOT a React component. A mount function that adds interactivity
- * to the server-rendered HTML. JSX creates real DOM elements via
- * Melina's jsx-dom runtime (mapped from react/jsx-runtime).
+ * to the server-rendered HTML. Client JSX produces Melina VNodes;
+ * VNodes must be rendered before they are passed to DOM APIs.
  */
+
+import { render } from "melina/client";
+
+function materialize<T extends Node = Node>(vnode: unknown): T {
+  if (vnode instanceof Node) return vnode as T;
+
+  const host = document.createElement("div");
+  render(vnode as any, host);
+  const node = host.firstChild;
+  if (!node) throw new Error("Melina render produced no DOM node");
+  return node as unknown as T;
+}
+
+function replaceRenderedChildren(
+  container: Element,
+  ...children: unknown[]
+): void {
+  const nodes = children
+    .filter((child) => child !== null && child !== undefined && child !== false)
+    .map((child) => materialize<Node>(child));
+  container.replaceChildren(...nodes);
+}
 
 interface ProcessData {
   name: string;
@@ -666,12 +688,12 @@ function showToast(
 
   const icons: Record<string, string> = { success: "✓", error: "✕", info: "i" };
 
-  const toast = (
+  const toast = materialize<HTMLElement>(
     <div className={`toast ${type}`}>
       <div className="toast-icon">{icons[type]}</div>
       <span>{message}</span>
-    </div>
-  ) as unknown as HTMLElement;
+    </div>,
+  );
 
   container.appendChild(toast);
 
@@ -943,7 +965,8 @@ export default function mount(): () => void {
         return;
       }
       if (emptyEl) emptyEl.style.display = "none";
-      listEl.replaceChildren(
+      replaceRenderedChildren(
+        listEl,
         ...events.slice(0, 10).map((ev) => {
           const date = new Date(ev.time);
           const timeStr = date.toLocaleTimeString([], {
@@ -966,7 +989,7 @@ export default function mount(): () => void {
               <span className="guard-event-name">{ev.name}</span>
               <span className="guard-event-action">{actionText}</span>
             </div>
-          ) as unknown as Node;
+          );
         }),
       );
     } catch {
@@ -1016,22 +1039,18 @@ export default function mount(): () => void {
       return;
     }
 
-    scopesEl.replaceChildren(
-      ...visibleScopes.map(
-        (scope) =>
-          (
-            <button
-              className={`deploy-preset-scope ${scope === groupQuery ? "active" : ""}`}
-              data-action="switch-preset-scope"
-              data-scope={scope}
-              title={
-                scope ? `Switch to group ${scope}` : "Switch to All Groups"
-              }
-            >
-              {scope || "All"}
-            </button>
-          ) as unknown as Node,
-      ),
+    replaceRenderedChildren(
+      scopesEl,
+      ...visibleScopes.map((scope) => (
+        <button
+          className={`deploy-preset-scope ${scope === groupQuery ? "active" : ""}`}
+          data-action="switch-preset-scope"
+          data-scope={scope}
+          title={scope ? `Switch to group ${scope}` : "Switch to All Groups"}
+        >
+          {scope || "All"}
+        </button>
+      )),
     );
   }
 
@@ -1043,11 +1062,12 @@ export default function mount(): () => void {
       if (p.group) groups.add(p.group);
     }
     const currentValue = groupFilter.value;
-    groupFilter.replaceChildren(
-      (<option value="">All Groups</option>) as unknown as Node,
+    replaceRenderedChildren(
+      groupFilter,
+      <option value="">All Groups</option>,
       ...Array.from(groups)
         .sort()
-        .map((g) => (<option value={g}>{g}</option>) as unknown as Node),
+        .map((g) => <option value={g}>{g}</option>),
     );
     // Preserve selection if still valid
     if (currentValue && groups.has(currentValue)) {
@@ -1210,16 +1230,15 @@ export default function mount(): () => void {
     if (!tbody) return;
 
     if (processes.length === 0) {
-      tbody.replaceChildren((<EmptyState />) as unknown as Node);
+      replaceRenderedChildren(tbody, <EmptyState />);
       if (cardsEl)
-        cardsEl.replaceChildren(
-          (
-            <div className="empty-state">
-              <div className="empty-icon">📦</div>
-              <h3>No processes found</h3>
-              <p>Start a new process to see it here</p>
-            </div>
-          ) as unknown as Node,
+        replaceRenderedChildren(
+          cardsEl,
+          <div className="empty-state">
+            <div className="empty-icon">📦</div>
+            <h3>No processes found</h3>
+            <p>Start a new process to see it here</p>
+          </div>,
         );
       return;
     }
@@ -1237,32 +1256,28 @@ export default function mount(): () => void {
     const sortedGroupKeys = Object.keys(groups).sort();
 
     // Build DOM nodes for table rows
-    const rows: Node[] = [];
+    const rows: unknown[] = [];
     sortedGroupKeys.forEach((groupDir) => {
       const procs = groups[groupDir];
       const running = procs.filter((p) => p.running).length;
       const collapsed = collapsedGroups.has(groupDir);
       rows.push(
-        (
-          <GroupHeader
-            name={groupDir}
-            running={running}
-            total={procs.length}
-            collapsed={collapsed}
-          />
-        ) as unknown as Node,
+        <GroupHeader
+          name={groupDir}
+          running={running}
+          total={procs.length}
+          collapsed={collapsed}
+        />,
       );
       if (!collapsed) {
         procs.forEach((p) => {
-          rows.push(
-            (<ProcessRow p={p} animate={animate} />) as unknown as Node,
-          );
+          rows.push(<ProcessRow p={p} animate={animate} />);
         });
       }
     });
 
     // Replace tbody contents with new DOM nodes
-    tbody.replaceChildren(...rows);
+    replaceRenderedChildren(tbody, ...rows);
 
     // Add click handlers for group headers (toggle collapse)
     tbody.querySelectorAll(".group-header").forEach((header) => {
@@ -1276,8 +1291,9 @@ export default function mount(): () => void {
 
     // Render mobile cards
     if (cardsEl) {
-      cardsEl.replaceChildren(
-        ...processes.map((p) => (<ProcessCard p={p} />) as unknown as Node),
+      replaceRenderedChildren(
+        cardsEl,
+        ...processes.map((p) => <ProcessCard p={p} />),
       );
     }
 
@@ -1572,7 +1588,7 @@ export default function mount(): () => void {
     if (!proc) return;
 
     const guarded = isGuarded(proc);
-    const menu = (
+    const menu = materialize<HTMLElement>(
       <div className="context-menu" style={{ left: `${x}px`, top: `${y}px` }}>
         <button className="context-item" data-action="logs" data-name={name}>
           <LogsIcon /> View Logs
@@ -1622,8 +1638,8 @@ export default function mount(): () => void {
         >
           <TrashIcon /> Delete
         </button>
-      </div>
-    ) as unknown as HTMLElement;
+      </div>,
+    );
 
     // Handle clicks inside the menu
     menu.addEventListener("click", (e: Event) => {
@@ -1881,29 +1897,26 @@ export default function mount(): () => void {
         { label: "Group", value: proc.group || "–" },
       ];
 
-      const items = metaItems.map(
-        (m: any) =>
-          (
-            <div className="meta-item">
-              <span className="meta-label">{m.label}</span>
-              {m.href ? (
-                <a
-                  className="meta-value port-link"
-                  href={m.href}
-                  target="_blank"
-                  rel="noopener"
-                >
-                  {m.value}
-                </a>
-              ) : (
-                <span className="meta-value">{m.value}</span>
-              )}
-            </div>
-          ) as unknown as Node,
-      );
+      const items = metaItems.map((m: any) => (
+        <div className="meta-item">
+          <span className="meta-label">{m.label}</span>
+          {m.href ? (
+            <a
+              className="meta-value port-link"
+              href={m.href}
+              target="_blank"
+              rel="noopener"
+            >
+              {m.value}
+            </a>
+          ) : (
+            <span className="meta-value">{m.value}</span>
+          )}
+        </div>
+      ));
 
       // Guard toggle row with inline switch
-      const guardRow = (
+      const guardRow = materialize<HTMLElement>(
         <div className={`meta-item meta-guard ${guarded ? "guarded" : ""}`}>
           <span className="meta-label">
             <ShieldIcon /> Guard
@@ -1928,8 +1941,8 @@ export default function mount(): () => void {
               {guarded ? "Protected" : "Off"}
             </span>
           </label>
-        </div>
-      ) as unknown as HTMLElement;
+        </div>,
+      );
 
       // Wire toggle click
       const checkbox = guardRow.querySelector(
@@ -1971,28 +1984,24 @@ export default function mount(): () => void {
       });
 
       // Guard restart counter (only shown when > 0)
-      const extraRows: Node[] = [];
+      const extraRows: unknown[] = [];
       if (proc.guardRestarts > 0) {
         extraRows.push(
-          (
-            <div className="meta-item meta-restarts">
-              <span className="meta-label">Guard Restarts</span>
-              <span className="meta-value">
-                <span className="restart-count-badge">
-                  {proc.guardRestarts}
-                </span>
-                <span className="restart-count-text">
-                  {proc.guardRestarts === 1
-                    ? "auto-restart this session"
-                    : "auto-restarts this session"}
-                </span>
+          <div className="meta-item meta-restarts">
+            <span className="meta-label">Guard Restarts</span>
+            <span className="meta-value">
+              <span className="restart-count-badge">{proc.guardRestarts}</span>
+              <span className="restart-count-text">
+                {proc.guardRestarts === 1
+                  ? "auto-restart this session"
+                  : "auto-restarts this session"}
               </span>
-            </div>
-          ) as unknown as Node,
+            </span>
+          </div>,
         );
       }
 
-      meta.replaceChildren(...items, guardRow, ...extraRows);
+      replaceRenderedChildren(meta, ...items, guardRow, ...extraRows);
     }
 
     // Reset log subtab to stdout (skip auto-refresh, we call it once below)
@@ -3021,37 +3030,33 @@ export default function mount(): () => void {
       return;
     }
 
-    list.replaceChildren(
-      ...templates.map(
-        (t) =>
-          (
-            <div className="template-item">
-              <div className="template-item-info">
-                <div className="template-item-name">{t.name}</div>
-                <div className="template-item-command">{t.command}</div>
-              </div>
-              {t.group && (
-                <span className="template-item-group">{t.group}</span>
-              )}
-              <div className="template-item-actions">
-                <button
-                  className="use-btn"
-                  data-use={t.name}
-                  title="Use this template"
-                >
-                  Use
-                </button>
-                <button
-                  className="delete-btn"
-                  data-delete={t.name}
-                  title="Delete template"
-                >
-                  ✕
-                </button>
-              </div>
-            </div>
-          ) as unknown as Node,
-      ),
+    replaceRenderedChildren(
+      list,
+      ...templates.map((t) => (
+        <div className="template-item">
+          <div className="template-item-info">
+            <div className="template-item-name">{t.name}</div>
+            <div className="template-item-command">{t.command}</div>
+          </div>
+          {t.group && <span className="template-item-group">{t.group}</span>}
+          <div className="template-item-actions">
+            <button
+              className="use-btn"
+              data-use={t.name}
+              title="Use this template"
+            >
+              Use
+            </button>
+            <button
+              className="delete-btn"
+              data-delete={t.name}
+              title="Delete template"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )),
     );
 
     // Add click handlers
@@ -3259,11 +3264,12 @@ export default function mount(): () => void {
     }
 
     const currentValue = processFilter.value;
-    processFilter.replaceChildren(
-      (<option value="">All Processes</option>) as unknown as Node,
+    replaceRenderedChildren(
+      processFilter,
+      <option value="">All Processes</option>,
       ...Array.from(processNames)
         .sort()
-        .map((n) => (<option value={n}>{n}</option>) as unknown as Node),
+        .map((n) => <option value={n}>{n}</option>),
     );
     if (currentValue && processNames.has(currentValue)) {
       processFilter.value = currentValue;
@@ -3614,7 +3620,8 @@ export default function mount(): () => void {
       return;
     }
 
-    list.replaceChildren(
+    replaceRenderedChildren(
+      list,
       ...filtered.map((h, index) => {
         const time = new Date(h.timestamp);
         const timeStr =
@@ -3716,43 +3723,40 @@ export default function mount(): () => void {
                     </span>
                   </summary>
                   <div className="history-item-details">
-                    {details.map(
-                      (detail) =>
-                        (
-                          <span className="history-item-detail">
-                            {historyShortcutsEnabled ? (
-                              <button
-                                className="history-item-detail-text history-item-filter-chip"
-                                data-action="filter-history-detail"
-                                data-filter={detail.value}
-                                title={`Filter history by ${detail.label}: ${detail.value}`}
-                              >
-                                {detail.label}: {detail.value}
-                              </button>
-                            ) : (
-                              <span className="history-item-detail-text history-static-label">
-                                {detail.label}: {detail.value}
-                              </span>
-                            )}
-                            {detail.copyable && (
-                              <button
-                                className="history-item-copy"
-                                data-action="copy-history-detail"
-                                data-copy={detail.value}
-                                title={`Copy ${detail.label}`}
-                              >
-                                Copy
-                              </button>
-                            )}
+                    {details.map((detail) => (
+                      <span className="history-item-detail">
+                        {historyShortcutsEnabled ? (
+                          <button
+                            className="history-item-detail-text history-item-filter-chip"
+                            data-action="filter-history-detail"
+                            data-filter={detail.value}
+                            title={`Filter history by ${detail.label}: ${detail.value}`}
+                          >
+                            {detail.label}: {detail.value}
+                          </button>
+                        ) : (
+                          <span className="history-item-detail-text history-static-label">
+                            {detail.label}: {detail.value}
                           </span>
-                        ) as unknown as Node,
-                    )}
+                        )}
+                        {detail.copyable && (
+                          <button
+                            className="history-item-copy"
+                            data-action="copy-history-detail"
+                            data-copy={detail.value}
+                            title={`Copy ${detail.label}`}
+                          >
+                            Copy
+                          </button>
+                        )}
+                      </span>
+                    ))}
                   </div>
                 </details>
               )}
             </div>
           </div>
-        ) as unknown as Node;
+        );
       }),
     );
 
@@ -4098,7 +4102,8 @@ export default function mount(): () => void {
       return;
     }
 
-    listEl.replaceChildren(
+    replaceRenderedChildren(
+      listEl,
       ...latestDeployResults.map((result) => {
         const statusClass =
           result.phase === "running"
@@ -4176,7 +4181,7 @@ export default function mount(): () => void {
               </details>
             )}
           </div>
-        ) as unknown as Node;
+        );
       }),
     );
   }

@@ -1,6 +1,5 @@
 /** POST /api/start — create or start a process. */
 import { addHistoryEntry, handleRun } from "../../../lib/runtime";
-import { apiMeasure as api, measureRequired } from "../../../lib/observability";
 import {
   jsonError,
   readJsonObject,
@@ -15,17 +14,15 @@ export async function POST(req: Request) {
     const name = readRequiredString(body.name, "name");
     const env = readStringRecord(body.env, "env");
 
-    await measureRequired(api.measure, `Start process "${name}"`, () =>
-      handleRun({
-        action: "run",
-        name,
-        command: readOptionalString(body.command),
-        directory: readOptionalString(body.directory),
-        force: body.force === true,
-        env,
-        remoteName: "",
-      }),
-    );
+    await handleRun({
+      action: "run",
+      name,
+      command: readOptionalString(body.command),
+      directory: readOptionalString(body.directory),
+      force: body.force === true,
+      env,
+      remoteName: "",
+    });
 
     addHistoryEntry(name, "start");
     return Response.json({ success: true });
