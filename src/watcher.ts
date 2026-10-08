@@ -110,6 +110,7 @@ async function spawnWatcherProcess(
     stdout: "ignore",
     stderr: "ignore",
     detached: true,
+    windowsHide: true,
   } as any);
 
   newProcess.unref();

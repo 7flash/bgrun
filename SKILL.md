@@ -19,11 +19,14 @@ bgrun --name my-api --command "bun run server.ts" --directory ~/projects/api
 # List all processes
 bgrun
 
-# Watch all managed processes
+# Watch all managed processes in an interactive screen
 bgrun top
 
 # Print one resource snapshot
 bgrun top --once
+
+# Resource flags implicitly enter top
+bgrun --cpu --system
 
 # View process details
 bgrun my-api
@@ -95,6 +98,15 @@ tests/
 ```
 
 ---
+
+## Lifecycle invariants
+
+- Never terminate a PID unless the registered process birth identity proves ownership.
+- Serialize lifecycle mutation with a per-process filesystem lock.
+- Persist process intent and ownership evidence; derive running state from live inspection.
+- Keep a spawned child locally owned until startup verification and registry replacement succeed, and clean it up on failure.
+- Restart recomputes configuration from the stored config path plus environment intent metadata.
+- The lifecycle intentionally does not use revision tokens, desired-state records, launch tokens, or pending-launch transaction state.
 
 ## Key Concepts
 
@@ -273,6 +285,10 @@ Use low-level exports such as `db`, `terminateProcess`, and direct row mutation 
 | `--filter <group>` | Filter by `BGR_GROUP` |
 | `--top` | Alias for `bgrun top` |
 | `--once` | Top: print one snapshot and exit |
+| `--cpu` | Enter top and sort by CPU |
+| `--memory` | Enter top and sort by memory |
+| `--ports` | Enter top and show listeners only |
+| `--system` | Enter top and include system processes |
 | `--logs` | Show logs |
 | `--log-stdout` | Stdout only |
 | `--log-stderr` | Stderr only |

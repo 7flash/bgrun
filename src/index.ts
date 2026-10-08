@@ -689,6 +689,7 @@ async function run() {
       stdout: "ignore",
       stderr: "ignore",
       detached: true, // Windows: new process group outside parent's Job Object — survives terminal close
+      windowsHide: true,
     } as any);
 
     newProcess.unref();

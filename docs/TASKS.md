@@ -1,6 +1,12 @@
 # bgrun — Tasks & Ideas
 
 ## 🔴 Priority: Fix
+- [x] ~~**Windows console-window flashing**~~ — ✅ DONE. PowerShell probes and detached managed, watcher, and dashboard spawns now set `windowsHide: true`.
+- [x] ~~**Duplicate Windows Path/PATH environment keys**~~ — ✅ DONE. Managed environment construction normalizes the inherited Windows path variable to one `PATH` key before prepending Bun.
+- [ ] **Windows inherited listening sockets** — Bun does not expose `bInheritHandles = FALSE`; add a reliable native/runtime spawn path that remains re-entrant when a managed server starts more managed workers.
+- [x] ~~**Explicit SDK detachment**~~ — ✅ DONE. Existing implicit parent links remain the default; `detached: true` opts workers out of cascade-stop behavior, and structured SDK results expose the parent.
+- [x] ~~**Registered descendants killed during stop/restart**~~ — ✅ DONE. Tree termination now protects other registered PIDs and, on Windows, their complete descendant subtrees.
+- [x] ~~**Project-local CLI home discovery**~~ — ✅ DONE. Added `--home` and automatic `[bgr] local_home` discovery with explicit CLI/environment precedence.
 - [x] ~~**Port 3000 env leakage and dashboard reclamation**~~ — ✅ DONE. `handleRun()` now strips dashboard-only env (`BUN_PORT`, `BGR_STDOUT`, `BGR_STDERR`) before spawning managed apps, rejects explicit `PORT` collisions unless forced, dashboard startup only reclaims explicitly requested ports, and detached dashboard PID detection no longer assumes port 3000.
 - [x] ~~**Stale internal restart path on dashboard/guard**~~ — ✅ DONE. Internal commands stored with `bunx bgrun` (and legacy `bgrun` entries) now resolve through the package runtime, so CLI/guard/API restarts no longer pick up a stale `bgrun.exe` from PATH and reclaim the wrong port.
 - [x] ~~**Live wrapper PID port reconciliation**~~ — ✅ DONE. When a running Windows process has no detected ports, bgrun now probes its child PID, updates the DB if the child owns listening ports, and re-fetches resources so dashboard/CLI show the real port.
@@ -10,6 +16,7 @@
 - [x] ~~**Silence stray Windows `del` noise in tests**~~ — ✅ DONE. `psExec()` now uses `Bun.sleep()` and `fs.rmSync()` instead of shelling out to `sleep`/`del`, so guard/test output no longer emits shell-command-not-found noise on Windows.
 
 ## 🟡 Priority: Improve
+- [ ] **Batch Windows process inspection** — Replace per-record PowerShell identity/child probes with a shared or short-lived `Win32_Process` snapshot; ensure SDK status filters avoid expensive inspection of known-stopped records.
 - [x] ~~**Dashboard detachment on Windows**~~ — ✅ DONE. Dashboard spawn now uses `detached: true` + `stdio: "ignore"` to break out of the parent terminal's Job Object. PID detection via `findPidByPort` since cmd.exe wrapper exits immediately in detached mode. Guard spawn also detached with command-line PID fallback.
 - [x] ~~**Dashboard log viewing when detached**~~ — ✅ DONE. Detached processes (dashboard, guard) now redirect `console.log`/`console.error` to their log files via `redirectConsoleToFiles()`. Parent passes paths via `BGR_STDOUT`/`BGR_STDERR` env vars. Output is timestamped with ANSI codes stripped. `bgrun bgr-dashboard --logs` now shows real output.
 

@@ -212,6 +212,7 @@ export async function psExec(
       {
         stdout: "pipe",
         stderr: "pipe",
+        windowsHide: true,
       },
     );
 

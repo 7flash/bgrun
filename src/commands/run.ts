@@ -351,6 +351,7 @@ export async function runProcess(
         stdout: outFd,
         stderr: errFd,
         detached: true,
+        windowsHide: true,
       }) as OwnedChild;
       child = spawnedChild;
       spawnedPid = spawnedChild.pid;

@@ -151,12 +151,13 @@ bgrun                  # Stream one compact status line per process
 bgrun --json           # Fast machine-readable JSON
 bgrun --json-full      # Verified JSON with ports and full status checks
 bgrun --filter api     # Filter by group (BGR_GROUP env)
-bgrun top              # Continuously watch managed CPU/RAM/ports
+bgrun top              # Interactive CPU/RAM/ports monitor
 bgrun top --once       # Print one resource snapshot and exit
+bgrun --cpu --system   # System monitor sorted by CPU (implicitly enters top)
 bgrun --top            # Alias for `bgrun top`
 ```
 
-The default list prints each process as soon as it is inspected. It intentionally skips CPU/RAM sampling and keeps each row compact, for example `api  running  pid 1234  :3000  2h 14m`.
+The default list prints each process as soon as it is inspected. It intentionally skips CPU/RAM sampling and keeps each row compact, for example `api  ● running  pid 1234  :3000  2h 14m`. Interactive `top` uses an alternate terminal screen and redraws in place; when stdout is not a TTY it automatically prints one snapshot and exits. Resource flags such as `--cpu`, `--memory`, `--ports`, and `--system` implicitly select the top view.
 
 ### Viewing a process
 
@@ -446,6 +447,18 @@ Invoke-Expression (bgrun envit)
 ```bash
 eval "$(bgrun envit --shell sh)"
 ```
+
+---
+
+## Lifecycle safety model
+
+bgrun keeps lifecycle state deliberately small. The registry stores durable process intent plus the last known ownership proof (`pid` + process birth identity). Running/stopped state is derived from the operating system rather than persisted as a second source of truth.
+
+Every start, restart, stop, and delete is serialized by a per-process filesystem lock. Before bgrun terminates a registered PID, it verifies the recorded birth identity still matches. If ownership cannot be proven, bgrun refuses the destructive action instead of risking an unrelated process.
+
+Start and restart own the spawned child until startup verification and registry replacement succeed. If verification or registration fails, bgrun cleans up that locally-owned child. Configuration restarts rebuild the effective environment from the persisted config path and environment intent metadata.
+
+The core lifecycle does not use revisions, launch tokens, desired-state fields, or pending-launch transaction records. bgrun is a local process manager: locks serialize normal mutations, ownership identity protects destructive operations, and live inspection reconciles stale registrations.
 
 ---
 

@@ -196,6 +196,21 @@ describe("buildManagedProcessEnv", () => {
     ).toBe(1);
     expect(parts).toContain("C:\\project\\node_modules\\.bin");
   });
+
+  test("normalizes the Windows Path key without losing inherited entries", () => {
+    if (process.platform !== "win32") return;
+
+    const inheritedPath = "C:\\Windows\\System32;C:\\Program Files\\Git\\cmd";
+    const env = buildManagedProcessEnv({ Path: inheritedPath }, {});
+
+    expect(env.Path).toBeUndefined();
+    expect(env.PATH).toBe(
+      `${require("path").dirname(process.execPath)};${inheritedPath}`,
+    );
+    expect(Object.keys(env).filter((key) => key.toUpperCase() === "PATH")).toEqual([
+      "PATH",
+    ]);
+  });
 });
 
 describe("config env loading", () => {

@@ -88,7 +88,11 @@ export function buildManagedProcessEnv(
       )
     )
       continue;
-    sanitizedParentEnv[key] = value;
+    sanitizedParentEnv[
+      process.platform === "win32" && key.toUpperCase() === "PATH"
+        ? "PATH"
+        : key
+    ] = value;
   }
   const bunDir = dirname(process.execPath);
   sanitizedParentEnv.PATH = prependPathEntry(sanitizedParentEnv.PATH, bunDir);
