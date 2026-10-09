@@ -3,7 +3,7 @@
 ## 🔴 Priority: Fix
 - [x] ~~**Windows console-window flashing**~~ — ✅ DONE. PowerShell probes and detached managed, watcher, and dashboard spawns now set `windowsHide: true`.
 - [x] ~~**Duplicate Windows Path/PATH environment keys**~~ — ✅ DONE. Managed environment construction normalizes the inherited Windows path variable to one `PATH` key before prepending Bun.
-- [ ] **Windows inherited listening sockets** — Bun does not expose `bInheritHandles = FALSE`; add a reliable native/runtime spawn path that remains re-entrant when a managed server starts more managed workers.
+- [x] ~~**Windows inherited listening sockets**~~ — ✅ DONE. Direct CreateProcessW through Bun FFI whitelists only stdin/stdout/stderr for worker, watcher, dashboard, and helper launches. IPv4/IPv6 same-port restart tests preserve three worker PIDs and both log streams through three restarts; inheritable-handle positive control confirms isolation. See [verification](windows-handle-inheritance.md).
 - [x] ~~**Explicit SDK detachment**~~ — ✅ DONE. Existing implicit parent links remain the default; `detached: true` opts workers out of cascade-stop behavior, and structured SDK results expose the parent.
 - [x] ~~**Registered descendants killed during stop/restart**~~ — ✅ DONE. Tree termination now protects other registered PIDs and, on Windows, their complete descendant subtrees.
 - [x] ~~**Project-local CLI home discovery**~~ — ✅ DONE. Added `--home` and automatic `[bgr] local_home` discovery with explicit CLI/environment precedence.
@@ -14,6 +14,9 @@
 - [x] ~~**Inline command env port discovery**~~ — ✅ DONE. bgrun now parses `set PORT=...&&` / `set BUN_PORT=...&&` style command prefixes (plus simple Unix env prefixes) for pre-spawn port conflict checks and next-port suggestions.
 - [ ] **CLI/server-side port reservation for non-PORT apps** — Add optional deeper port declaration/locking for processes whose listening port comes from command flags or config files instead of `env.PORT`.
 - [x] ~~**Silence stray Windows `del` noise in tests**~~ — ✅ DONE. `psExec()` now uses `Bun.sleep()` and `fs.rmSync()` instead of shelling out to `sleep`/`del`, so guard/test output no longer emits shell-command-not-found noise on Windows.
+
+- [ ] **Publish Windows handle-isolation patch** — Native fix committed and pushed as prepared 4.1.2; npm whoami returned E401 and publish returned E404. Restore registry authentication/access and release the patch.
+- [ ] **Restore clean repository-wide checks** — Existing type errors and test isolation/SQLite-cleanup failures still block a clean broad verification run; focused native acceptance and production build pass.
 
 ## 🟡 Priority: Improve
 - [ ] **Batch Windows process inspection** — Replace per-record PowerShell identity/child probes with a shared or short-lived `Win32_Process` snapshot; ensure SDK status filters avoid expensive inspection of known-stopped records.
@@ -92,6 +95,9 @@
 - [ ] **Process resource alerts** — Notify when CPU/memory exceeds configurable thresholds
 - [ ] **Config hot-reload** — Watch `.config.toml` for changes and auto-restart the process
 - [ ] **Deploy rollback** — Store previous git commit hash before deploy, add one-click rollback
+
+- [ ] **Publish Windows handle-isolation patch** — Native fix committed and pushed as prepared 4.1.2; npm whoami returned E401 and publish returned E404. Restore registry authentication/access and release the patch.
+- [ ] **Restore clean repository-wide checks** — Existing type errors and test isolation/SQLite-cleanup failures still block a clean broad verification run; focused native acceptance and production build pass.
 
 ## 🟡 Priority: Improve
 - [ ] **Light theme refinement** — Audit all UI components for contrast/readability in light mode

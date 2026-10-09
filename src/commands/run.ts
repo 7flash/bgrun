@@ -1,3 +1,4 @@
+import { spawnProcess } from "../process-spawn";
 import type { CommandOptions } from "../types";
 import {
   addHistoryEntry,
@@ -88,7 +89,7 @@ function startupFailure(name: string, stdout: string, stderr: string): Error {
 }
 
 async function runGit(directory: string, args: string[]): Promise<string> {
-  const proc = Bun.spawn(["git", ...args], {
+  const proc = await spawnProcess(["git", ...args], {
     cwd: directory,
     stdout: "pipe",
     stderr: "pipe",
@@ -344,15 +345,20 @@ export async function runProcess(
         }
       }
 
-      const spawnedChild = Bun.spawn(spawnArgs ?? getShellCommand(command), {
-        cwd: directory,
-        env: buildManagedProcessEnv(Bun.env, env, sources.removed),
-        stdin: "ignore",
-        stdout: outFd,
-        stderr: errFd,
-        detached: true,
-        windowsHide: true,
-      }) as OwnedChild;
+      const spawnedChild = (await spawnProcess(
+        spawnArgs ?? getShellCommand(command),
+        {
+          cwd: directory,
+          env: buildManagedProcessEnv(Bun.env, env, sources.removed),
+          stdin: "ignore",
+          stdout: outFd,
+          stderr: errFd,
+          stdoutPath,
+          stderrPath,
+          detached: true,
+          windowsHide: true,
+        },
+      )) as OwnedChild;
       child = spawnedChild;
       spawnedPid = spawnedChild.pid;
       birth = getProcessBirthId(spawnedPid);

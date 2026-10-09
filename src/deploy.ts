@@ -1,7 +1,27 @@
 import { getProcess, getAllProcesses, addHistoryEntry } from "./db";
 import { handleRun } from "./commands/run";
-import { $ } from "bun";
+import { spawnProcess } from "./process-spawn";
 import { isInternalProcessName } from "./utils";
+
+async function deployOutput(argv: string[], cwd: string): Promise<string> {
+  const proc = await spawnProcess(argv, {
+    cwd,
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "pipe",
+    windowsHide: true,
+  });
+  const [code, stdout, stderr] = await Promise.all([
+    proc.exited,
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+  ]);
+  if (code !== 0)
+    throw new Error(
+      stderr.trim() || stdout.trim() || argv.join(" ") + " failed",
+    );
+  return stdout;
+}
 
 export interface DeployResult {
   name: string;
@@ -91,8 +111,6 @@ async function installDependencies(
 ): Promise<{ manager: PackageManager; output: string; command: string }> {
   const manager = await detectPackageManager(dir);
   if (!manager) return { manager: null, output: "", command: "" };
-
-  $.cwd(dir);
   const command = getInstallCommand(manager);
 
   try {
@@ -101,22 +119,30 @@ async function installDependencies(
         return {
           manager,
           command,
-          output: (await $`bun install`.text()).trim(),
+          output: (await deployOutput(["bun", "install"], dir)).trim(),
         };
       case "pnpm":
         return {
           manager,
           command,
-          output: (await $`pnpm install --frozen-lockfile`.text()).trim(),
+          output: (
+            await deployOutput(["pnpm", "install", "--frozen-lockfile"], dir)
+          ).trim(),
         };
       case "yarn":
         return {
           manager,
           command,
-          output: (await $`yarn install --frozen-lockfile`.text()).trim(),
+          output: (
+            await deployOutput(["yarn", "install", "--frozen-lockfile"], dir)
+          ).trim(),
         };
       case "npm":
-        return { manager, command, output: (await $`npm ci`.text()).trim() };
+        return {
+          manager,
+          command,
+          output: (await deployOutput(["npm", "ci"], dir)).trim(),
+        };
       default:
         return { manager: null, output: "", command: "" };
     }
@@ -151,9 +177,7 @@ export async function deployProcess(name: string): Promise<DeployResult> {
   }
 
   try {
-    $.cwd(dir);
-
-    const pullOutput = (await $`git pull`.text()).trim();
+    const pullOutput = (await deployOutput(["git", "pull"], dir)).trim();
 
     const install = await installDependencies(dir);
     const installOutput = install.output;

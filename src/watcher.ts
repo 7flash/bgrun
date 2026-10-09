@@ -1,3 +1,4 @@
+import { spawnProcess } from "./process-spawn";
 import { join } from "path";
 import { getBgrHome, getDatabasePath } from "./paths";
 import {
@@ -98,7 +99,7 @@ async function spawnWatcherProcess(
   await Promise.all([Bun.write(stdoutPath, ""), Bun.write(stderrPath, "")]);
 
   const { storedCommand, spawnCommand } = getInternalWatcherCommand(targetName);
-  const newProcess = Bun.spawn(getShellCommand(spawnCommand), {
+  const newProcess = await spawnProcess(getShellCommand(spawnCommand), {
     env: {
       ...Bun.env,
       BGRUN_HOME: getBgrHome(),

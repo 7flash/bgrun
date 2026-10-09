@@ -1,3 +1,4 @@
+import { spawnProcess } from "./process-spawn";
 /**
  * Cross-platform utility functions for BGR
  * Provides Windows and Unix compatible process management
@@ -8,6 +9,21 @@ import * as os from "os";
 import { join } from "path";
 import { $ } from "bun";
 import { getProcessBirthId } from "./process-identity";
+
+async function processOutput(argv: string[]): Promise<string> {
+  const proc = await spawnProcess(argv, {
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "pipe",
+    windowsHide: true,
+  });
+  const [stdout] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
+  return stdout;
+}
 
 // Simple LRU cache for process liveness checks to avoid repeated PowerShell queries
 const isRunningCache = new Map<string, { alive: boolean; checkedAt: number }>();
@@ -199,7 +215,7 @@ export async function psExec(
 ): Promise<string> {
   try {
     // Use -Command instead of -File to avoid temp file overhead
-    const proc = Bun.spawn(
+    const proc = await spawnProcess(
       [
         "powershell",
         "-NoProfile",
@@ -413,10 +429,13 @@ async function isDockerContainerRunning(command: string): Promise<boolean> {
     const nameMatch = command.match(/--name\s+["']?(\S+?)["']?(?:\s|$)/);
     if (nameMatch) {
       const containerName = nameMatch[1];
-      const result =
-        await $`docker inspect -f "{{.State.Running}}" ${containerName}`
-          .nothrow()
-          .text();
+      const result = await processOutput([
+        "docker",
+        "inspect",
+        "-f",
+        "{{.State.Running}}",
+        containerName,
+      ]);
       return result.trim() === "true";
     }
 
@@ -425,10 +444,14 @@ async function isDockerContainerRunning(command: string): Promise<boolean> {
     const imageMatch = command.match(/docker\s+run\s+.*?(?:-d\s+)?(\S+)\s*$/);
     if (imageMatch) {
       const imageName = imageMatch[1];
-      const result =
-        await $`docker ps --filter ancestor=${imageName} --format "{{.ID}}"`
-          .nothrow()
-          .text();
+      const result = await processOutput([
+        "docker",
+        "ps",
+        "--filter",
+        `ancestor=${imageName}`,
+        "--format",
+        "{{.ID}}",
+      ]);
       return result.trim().length > 0;
     }
 
@@ -516,7 +539,9 @@ async function getWindowsProcessTree(): Promise<Map<number, number>> {
   const rows = Array.isArray(parsed) ? parsed : [parsed];
   return new Map(
     rows
-      .map((row) => [Number(row.ProcessId), Number(row.ParentProcessId)] as const)
+      .map(
+        (row) => [Number(row.ProcessId), Number(row.ParentProcessId)] as const,
+      )
       .filter(([child, parent]) => child > 0 && parent >= 0),
   );
 }
@@ -552,9 +577,9 @@ export async function terminateProcess(
       // registered process. Killing only the requested PID is the safe fallback.
     }
     for (const childPid of descendants) {
-      await $`taskkill /F /PID ${childPid}`.nothrow().quiet();
+      await processOutput(["taskkill", "/F", "/PID", String(childPid)]);
     }
-    await $`taskkill /F /PID ${pid}`.nothrow().quiet();
+    await processOutput(["taskkill", "/F", "/PID", String(pid)]);
   } else {
     const children = (await getChildPids(pid)).filter(
       (childPid) => !protectedPids.has(childPid),
@@ -588,10 +613,7 @@ export async function isPortFree(port: number): Promise<boolean> {
   try {
     if (isWindows()) {
       // On Windows, check netstat for anything LISTENING on this port
-      const result = await $`netstat -ano | findstr :${port}`
-        .nothrow()
-        .quiet()
-        .text();
+      const result = await processOutput(["netstat", "-ano"]);
       for (const line of result.split("\n")) {
         // Only match exact port (avoid :35560 matching :3556)
         const match = line.match(
@@ -632,10 +654,7 @@ export async function getPortInfo(
 ): Promise<{ inUse: boolean; pid?: number; processName?: string }> {
   try {
     if (isWindows()) {
-      const result = await $`netstat -ano | findstr :${port}`
-        .nothrow()
-        .quiet()
-        .text();
+      const result = await processOutput(["netstat", "-ano"]);
       for (const line of result.split("\n")) {
         const match = line.match(
           new RegExp(`:(${port})\\s+.*LISTENING\\s+(\\d+)`),
@@ -644,11 +663,9 @@ export async function getPortInfo(
           const pid = parseInt(match[2]);
           if (pid > 0 && (await isProcessRunning(pid))) {
             // Get process name
-            const nameResult =
-              await $`powershell -NoProfile -Command "(Get-Process -Id ${pid} -ErrorAction SilentlyContinue).ProcessName"`
-                .nothrow()
-                .quiet()
-                .text();
+            const nameResult = await psExec(
+              `(Get-Process -Id ${pid} -ErrorAction SilentlyContinue).ProcessName`,
+            );
             return {
               inUse: true,
               pid,
@@ -710,7 +727,7 @@ export async function killProcessOnPort(port: number): Promise<void> {
       // Only kill PIDs that are LISTENING on the exact local port.
       // Never match ESTABLISHED/remote connections: doing so can kill reverse
       // proxies such as Caddy that merely connect to the managed app port.
-      const result = await $`netstat -ano`.nothrow().quiet().text();
+      const result = await processOutput(["netstat", "-ano"]);
       for (const line of result.split("\n")) {
         const match = line.match(
           /^\s*TCP\s+\S+:(\d+)\s+\S+\s+LISTENING\s+(\d+)\s*$/,
@@ -735,7 +752,7 @@ export async function killProcessOnPort(port: number): Promise<void> {
     for (const pid of pids) {
       if (!(await isProcessRunning(pid))) continue;
       if (isWindows()) {
-        await $`taskkill /F /T /PID ${pid}`.nothrow().quiet();
+        await processOutput(["taskkill", "/F", "/T", "/PID", String(pid)]);
       } else {
         await $`kill -KILL ${pid}`.nothrow().quiet();
       }
@@ -905,7 +922,7 @@ export async function findPidByPort(
   while (Date.now() - start < maxWaitMs) {
     try {
       if (isWindows()) {
-        const result = await $`netstat -ano`.nothrow().quiet().text();
+        const result = await processOutput(["netstat", "-ano"]);
         for (const line of result.split("\n")) {
           const match = line.match(
             /^\s*TCP\s+\S+:(\d+)\s+\S+\s+LISTENING\s+(\d+)\s*$/,
@@ -1104,7 +1121,7 @@ export async function getListeningPortsByPid(
 
   try {
     if (isWindows()) {
-      const output = await $`netstat -ano`.nothrow().quiet().text();
+      const output = await processOutput(["netstat", "-ano"]);
       for (const line of output.split("\n")) {
         const match = line.match(
           /^\s*TCP\s+\S+:(\d+)\s+\S+\s+LISTENING\s+(\d+)\s*$/i,
@@ -1178,7 +1195,7 @@ export async function getProcessPorts(pid: number): Promise<number[]> {
   try {
     if (isWindows()) {
       // netstat -ano lists all connections with PIDs
-      const result = await $`netstat -ano`.nothrow().quiet().text();
+      const result = await processOutput(["netstat", "-ano"]);
       const ports = new Set<number>();
       for (const line of result.split("\n")) {
         // Match lines like: TCP    0.0.0.0:3556    0.0.0.0:0    LISTENING    8608

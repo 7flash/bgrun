@@ -1,7 +1,7 @@
 {
   "name": "bgrun",
-  "version": "4.1.1",
-  "description": "bgrun \u2014 A lightweight process manager for Bun",
+  "version": "4.1.2",
+  "description": "bgrun — A lightweight process manager for Bun",
   "type": "module",
   "main": "./dist/api.js",
   "exports": {

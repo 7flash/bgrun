@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { spawnProcess } from "./process-spawn";
 
 import { parseArgs } from "util";
 import { getVersion } from "./utils";
@@ -683,7 +684,7 @@ async function run() {
       }
     }
 
-    const newProcess = Bun.spawn(getShellCommand(spawnCommand), {
+    const newProcess = await spawnProcess(getShellCommand(spawnCommand), {
       env: spawnEnv,
       cwd: bgrDir,
       stdout: "ignore",

@@ -1,3 +1,4 @@
+import { windowsCaptureSync } from "./windows-spawn";
 import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 
@@ -20,10 +21,9 @@ function linuxBirthId(pid: number): string {
 function windowsBirthId(pid: number): string {
   try {
     const script = `(Get-CimInstance Win32_Process -Filter \"ProcessId=${pid}\" -ErrorAction SilentlyContinue).CreationDate`;
-    const output = execFileSync(
-      "powershell.exe",
-      ["-NoProfile", "-NonInteractive", "-Command", script],
-      { encoding: "utf8", windowsHide: true, timeout: 3000 },
+    const output = windowsCaptureSync(
+      ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script],
+      3000,
     ).trim();
     return output ? `windows:${output}` : "";
   } catch {

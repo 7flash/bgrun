@@ -1,3 +1,4 @@
+import { spawnProcess } from "../process-spawn";
 import { buildManagedProcessEnv } from "../utils";
 import { loadConfigEnv } from "../config";
 import { error } from "../logger";
@@ -86,7 +87,7 @@ export async function handleInline(options: InlineOptions): Promise<never> {
     );
   }
 
-  const proc = Bun.spawn(options.commandArgs, {
+  const proc = await spawnProcess(options.commandArgs, {
     cwd,
     env: buildManagedProcessEnv(
       Bun.env as Record<string, string | undefined>,

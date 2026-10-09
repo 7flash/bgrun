@@ -1,4 +1,10 @@
 # bgrun — Tasks & Ideas
+## Windows handle isolation — 2026-10-09
+
+- [x] ~~**Prevent inherited web listening sockets**~~ — ✅ DONE. Native CreateProcessW standard-handle whitelist covers Windows workers/watchers/dashboard/helpers. IPv4/IPv6 immediate same-port restarts preserve worker PIDs and stdout/stderr; focused checks pass 13 tests / 140 assertions. [Verification](../docs/windows-handle-inheritance.md).
+- [ ] **Publish bgrun 4.1.2** — Repository fix pushed; npm whoami returned E401 and publish returned E404. Restore registry authentication/access and release the prepared patch.
+- [ ] **Restore clean broad checks** — Existing typecheck errors and test isolation/SQLite cleanup failures remain; production build and focused tests pass.
+
 
 ## 🟢 Priority: Features
 - [x] ~~**Process dependency graph**~~ — ✅ DONE. Added `dependency` table to SQLite schema with cycle detection (DFS), topological start-order (Kahn's algorithm), and full CRUD API at `/api/dependencies`. Dashboard modal with interactive SVG DAG visualization (layered layout, hover-highlighting, running status dots), dependency list with inline remove, and recommended start order badges. 7 new tests (39 total, 68 expect() calls).

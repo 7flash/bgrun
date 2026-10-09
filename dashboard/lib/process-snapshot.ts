@@ -1,3 +1,4 @@
+import { spawnProcess } from "../../dist/process-spawn.js";
 import { $ } from "bun";
 import {
   calculateRuntime,
@@ -10,6 +11,21 @@ import {
   getProcessBatchResources,
   resolvePidWithPorts,
 } from "../../dist/api.js";
+
+async function processOutput(argv: string[]): Promise<string> {
+  const proc = await spawnProcess(argv, {
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "pipe",
+    windowsHide: true,
+  });
+  const [stdout] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
+  return stdout;
+}
 
 const SUBPROCESS_TIMEOUT_MS = 4_000;
 const RESOLVE_TIMEOUT_MS = 2_000;
@@ -92,7 +108,7 @@ async function getRunningPids(pids: number[]): Promise<Set<number>> {
 
     if (unresolved.length === 0) return running;
     const unresolvedSet = new Set(unresolved);
-    const result = await $`tasklist /FO CSV /NH`.nothrow().quiet().text();
+    const result = await processOutput(["tasklist", "/FO", "CSV", "/NH"]);
     for (const line of result.split("\n")) {
       const match = line.match(/"[^"]*","(\d+)"/);
       if (!match) continue;
@@ -119,7 +135,7 @@ async function getPortsByPid(pids: number[]): Promise<Map<number, number[]>> {
   const pidSet = new Set(pids);
 
   if (process.platform === "win32") {
-    const result = await $`netstat -ano`.nothrow().quiet().text();
+    const result = await processOutput(["netstat", "-ano"]);
     for (const line of result.split("\n")) {
       const match = line.match(
         /^\s*TCP\s+\S+:(\d+)\s+\S+\s+LISTENING\s+(\d+)\s*$/,

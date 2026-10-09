@@ -3,6 +3,7 @@ console.log("Starting build process for bgrun...");
 const entrypoints = [
   "./src/index.ts",
   "./src/api.ts",
+  "./src/process-spawn.ts",
   "./src/server.ts",
   "./src/deploy.ts",
   "./src/deps.ts",
